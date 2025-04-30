@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bytemuck = { version = "1.23.0", features = ["bytemuck_derive", "derive", "zeroable_maybe_uninit", "min_const_generics"] }
+byteorder = "1.5.0"
