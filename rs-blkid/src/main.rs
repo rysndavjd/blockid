@@ -1,10 +1,10 @@
 use rs_libblkid::mbr::*;
 use uuid::Uuid;
-use std::str::from_utf8;
+use std::{ptr::read, str::from_utf8};
 
 fn ext4_into() -> Result<(), Box<dyn std::error::Error>> {
-    let device = check_mbr("/dev/sdb")?;
-
+    let device = read_generic_mbr("/dev/sdb")?;
+    println!("{}", device.partition_entry_4.number_of_sectors);
     return Ok(());
 }
 
