@@ -2,7 +2,6 @@ use std::u16;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Cursor};
 use byteorder::{LittleEndian, ReadBytesExt};
-use uuid::Uuid;
 
 /*
 Info from https://en.wikipedia.org/wiki/Master_boot_record
