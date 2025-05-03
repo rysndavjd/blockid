@@ -7,7 +7,8 @@ use byteorder::{LittleEndian, ReadBytesExt};
 Info from https://en.wikipedia.org/wiki/Master_boot_record
 */
 
-#[derive(Debug)]
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
 pub struct PartitionEntry {
     pub status: u8,
     pub first_chs_address: [u8; 3],
@@ -17,7 +18,8 @@ pub struct PartitionEntry {
     pub number_of_sectors: u32,
 }
 
-#[derive(Debug)]
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
 pub struct GenericMBR {
     pub bootstrap_code_area: [u8; 446],
     pub partition_entry_1: PartitionEntry,
@@ -27,7 +29,8 @@ pub struct GenericMBR {
     pub boot_signature: [u8; 2],
 }
 
-#[derive(Debug)]
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
 pub struct DiskTimestamp {
     pub empty_bytes: [u8; 2],
     pub physical_drive: u8,
@@ -36,13 +39,15 @@ pub struct DiskTimestamp {
     pub hours: u8,
 }
 
-#[derive(Debug)]
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
 pub struct DiskSignature {
     pub signature: u32,
     pub status: u16,
 }
 
-#[derive(Debug)]
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
 pub struct ModernMBR {
     pub bootstrap_code_area_1: [u8; 218],
     pub disk_timestamp: DiskTimestamp,

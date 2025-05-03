@@ -9,7 +9,7 @@ Used this linux kernel documentation to figure out the structure of ext4
 https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 */
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SuperState {
     CleanlyUnmounted ,  
     ErrorsDetected,      
@@ -17,7 +17,7 @@ pub enum SuperState {
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SuperErrors {
     Continue, 
     RemountRO, 
@@ -25,7 +25,7 @@ pub enum SuperErrors {
     Unknown, 
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SuperCreator {
     Linux,
     Hurd,
@@ -35,14 +35,15 @@ pub enum SuperCreator {
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SuperRevision {
     OriginalFormat,
     V2Format,
     Unknown,
 }
 
-#[derive(Debug)]
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ext4SuperBlock {
     pub s_inodes_count: u32,
     pub s_blocks_count_lo: u32, 
