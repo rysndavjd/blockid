@@ -1,15 +1,17 @@
-use rs_libblkid::mbr::*;
+use rs_libblkid::fat::*;
 use uuid::Uuid;
-use std::{ptr::read, str::from_utf8};
 
-fn ext4_into() -> Result<(), Box<dyn std::error::Error>> {
-    let device = read_generic_mbr("/dev/sdb")?;
-    println!("{}", device.partition_entry_4.number_of_sectors);
+fn test() -> Result<(), Box<dyn std::error::Error>> {
+    
+    let device = read_raw_fat32_ext_bs("/dev/sdb3")?;
+    let id = device.volume_id;
+
+    println!("{:?}", format!("{:X}", id));
     return Ok(());
 }
 
 fn main() {
-    match ext4_into() {
+    match test() {
         Ok(t) => t,
         Err(e) => eprintln!("{}", e),
     };
