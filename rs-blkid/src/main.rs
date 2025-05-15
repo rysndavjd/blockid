@@ -1,12 +1,15 @@
-use rs_libblkid::fat::*;
+use std::str::from_utf8;
+
+use byteorder::BigEndian;
+use rs_libblkid::*;
 use uuid::Uuid;
+use byteorder::LittleEndian;
+use byteorder::ByteOrder;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
 
-    let device = testss("/dev/sdb4")?;
-    //let id = device.volume_label;
+    let device = read_raw("/dev/sdb6")?;
 
-    //println!("{:?}", format!("{:X?}", id));
     return Ok(());
 }
 
@@ -15,4 +18,8 @@ fn main() {
         Ok(t) => t,
         Err(e) => eprintln!("{}", e),
     };
+
+
+    
+    
 }

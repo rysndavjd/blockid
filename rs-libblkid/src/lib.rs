@@ -4,7 +4,13 @@ pub mod gpt;
 
 // Filesystems
 pub mod ext4;
-pub mod fat;
+pub mod vfat;
+
+use uuid::Uuid;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::prelude::{AsRawFd, RawFd};
+use nix::sys::stat::dev_t;
 
 /*
 ideas
@@ -31,14 +37,159 @@ struct partitions
     disk maj:min
 */
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Usage {
+    Filesystem,
+    Raid,
+    Crypto,
+    Lvm,
+    Swap,
+    Loop,
+    PartTable,
+    Part,
+    Container,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartTableType {
+    Mbr,
+    Gpt,
+    BsdLabel,
+    Unknown
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FsUuid {
+    Standard(Uuid),
+    VolumeId32(u32),
+    VolumeId64(u64),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FsType {
+    Fat32,
+    Fat16,
+    Fat12,
+    Fat,
+    Exfat,  
+    Ntfs,  
+    Ext2,  
+    Ext3,  
+    Ext4,
+    Xfs,  
+    Btrfs,  
+    Zfs,  
+    F2fs,  
+    Hfs,
+    HfsPlus,
+    Apfs,
+}   
+/* 
+    need to think of better way of storing magic sigs
+impl FsType {
+    pub fn magic(&self) -> Option<Vec<u8>> {
+        match self {
+            FsType::Fat32 => None,
+            FsType::Fat16 => None,
+            FsType::Fat12 => None,
+            FsType::Fat => None,
+            FsType::Exfat => None,
+            FsType::Ntfs => None,
+            FsType::Ext2 => Some(vec![0x53, 0xEF]),
+            FsType::Ext3 => Some(vec![0x53, 0xEF]), 
+            FsType::Ext4 => Some(vec![0x53, 0xEF]), 
+            FsType::Xfs => Some(vec![0]),
+            FsType::Btrfs => Some(vec![0x5F, 0x42, 0x48, 0x52, 0x66, 0x53, 0x5F, 0x4D]),
+            FsType::Zfs => Some(vec![0]),
+            FsType::F2fs => Some(vec![0]),
+            FsType::Hfs => Some(vec![0]),
+            FsType::HfsPlus => Some(vec![0]),
+            FsType::Apfs => Some(vec![0]),
+        }
+    }
+}
+
+*/
+
+#[derive(Debug, Clone)]
+pub struct Partition {
+}
+
+#[derive(Debug, Clone)]
+struct ProbeResults {
+    filesystem: Option<FsType>,
+    uuid: Option<FsUuid>,
+    uuid_sub: Option<FsUuid>,
+    label: Option<String>,
+    fs_version: Option<String>,
+    usage: Option<Usage>,
+    part_uuid: Option<FsUuid>,
+    part_name: Option<String>,
+    part_number: Option<u64>,
+    part_scheme: Option<PartTableType>
+}
+
+struct BlockProbe {
+    fd: RawFd,
+    begin: u64,
+    end: u64,
+    devno: dev_t,
+    disk_devno: dev_t,
+    //probe_flags: ProbeFlags,
+    values: ProbeResults,
+}
+
+struct BlockMagicInfo {
+    magic: &'static [u8],
+    len: u64,
+//    kb_offset: u64,
+    b_offset: Option<u64>,
+}
+
+struct BlockIdInfo {
+    name: &'static str,
+    usage: Usage,
+    //probe: &'static str,
+    magics: &'static [BlockMagicInfo],
+}
+
+fn is_power_2(num: i64) -> bool {
+    return num != 0 && (num & (num - 1)) == 0;
+}
+
+fn probe_get_magic(device: &str, ) {
+
+}
 
 
-//pub fn test(device: &str) -> Result<(), Box<dyn std::error::Error>> {
-//    let mut superblock = File::open(device)?;
-//    let mut buffer = [0; 512];
-//    superblock.read_exact(&mut buffer)?;
-//
-//    println!("{:X?}", buffer);
-//    return Ok(());
-//
-//}
+fn probe_type() {
+    
+}
+
+pub fn probe_from_filename(filename: &str) -> Result<BlockProbe, Box<dyn std::error::Error>> {
+    let block_file = File::open(filename)?;
+    let fd = block_file.as_raw_fd();
+
+
+
+    return Ok(BlockProbe { 
+        fd: fd, 
+        begin: (), 
+        end: (), 
+        devno: (), 
+        disk_devno: (), 
+        values: () 
+    });
+}
+
+pub fn read_raw(device: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut superblock = File::open(device)?;
+    //superblock.seek(SeekFrom::Start(65536))?;
+    let mut buffer = [0; 512];
+    superblock.read_exact(&mut buffer)?;
+
+    println!("{:X?}", buffer);
+    return Ok(());
+
+}
