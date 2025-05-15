@@ -53,6 +53,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "libblockid"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "bytemuck",
+ "byteorder",
+ "nix",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.172"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -86,27 +98,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
-]
-
-[[package]]
-name = "rs-libblkid"
-version = "0.1.0"
-dependencies = [
- "arrayref",
- "bytemuck",
- "byteorder",
- "nix",
- "thiserror",
- "uuid",
-]
-
-[[package]]
-name = "rs_blkid"
-version = "0.1.0"
-dependencies = [
- "byteorder",
- "rs-libblkid",
- "uuid",
 ]
 
 [[package]]
