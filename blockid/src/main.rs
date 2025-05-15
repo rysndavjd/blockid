@@ -1,7 +1,7 @@
 use std::str::from_utf8;
 
 use byteorder::BigEndian;
-use rs_libblkid::*;
+use libblockid::*;
 use uuid::Uuid;
 use byteorder::LittleEndian;
 use byteorder::ByteOrder;
@@ -18,8 +18,5 @@ fn main() {
         Ok(t) => t,
         Err(e) => eprintln!("{}", e),
     };
-
-
-    
     
 }
