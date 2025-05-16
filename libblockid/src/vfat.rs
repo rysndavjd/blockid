@@ -1,3 +1,4 @@
+use std::intrinsics::simd::simd_eq;
 use std::{result, u16};
 use std::fs::File;
 use std::io::Read;
@@ -291,13 +292,7 @@ fn probe_vfat(device: &str,
         
     } else if vfat.vs_fat32_length != 0 {
         
-        /*
-        uint32_t buf_size = vs->vs_cluster_size * sector_size;
-		uint32_t start_data_sect = reserved + fat_size;
-		uint32_t entries = ((uint64_t) le32_to_cpu(vs->vs_fat32_length)
-					* sector_size) / sizeof(uint32_t);
-		uint32_t next = le32_to_cpu(vs->vs_root_cluster);
-        */
+        /* Fat32 label extraction stuff
         let mut maxloop = 100;
         let buf_size: u32 = vfat.vs_cluster_size as u32 * sector_size;
         let start_data_sect = reserved + valid.fat_size;
@@ -305,8 +300,26 @@ fn probe_vfat(device: &str,
         let next = vfat.vs_root_cluster;
 
         while next != 0 && next < entries && { maxloop -= 1; maxloop != 0 } {
-            todo!()
+            let next_sect_off: u32 = (next - 2) * vfat.vs_cluster_size as u32;
+            let next_off: u64 = (start_data_sect as u64 + next_sect_off as u64) * sector_size as u64;
+
+            let count = buf_size / size_of::<VfatDirEntry>() as u32;
         }
+
+        */
+        version = "Fat32".to_string();
+
+        //if (vs->vs_ext_boot_sign == 0x29)
+		//	boot_label = vs->vs_label;
+        if vfat.vs_ext_boot_sign == 0x29 {
+            boot_label = vfat.vs_label;
+        } else {
+            boot_label = [0u8; 11];
+        }
+
+        vol_serno = vfat.vs_serno;
+
+        
     }
 
     return Ok(());
