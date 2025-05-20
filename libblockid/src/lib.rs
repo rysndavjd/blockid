@@ -10,6 +10,7 @@ use uuid::Uuid;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::unix::prelude::{AsRawFd, RawFd};
+use std::result;
 use nix::sys::stat::dev_t;
 
 /*
@@ -117,7 +118,17 @@ pub struct Partition {
 }
 
 #[derive(Debug, Clone)]
-struct ProbeResults {
+pub struct FilesystemResults {
+    filesystem: Option<FsType>,
+    uuid: Option<FsUuid>,
+    uuid_sub: Option<FsUuid>,
+    label: Option<String>,
+    fs_version: Option<String>,
+    usage: Option<Usage>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProbeResults {
     filesystem: Option<FsType>,
     uuid: Option<FsUuid>,
     uuid_sub: Option<FsUuid>,
@@ -130,6 +141,7 @@ struct ProbeResults {
     part_scheme: Option<PartTableType>
 }
 
+#[derive(Debug, Clone)]
 struct BlockProbe {
     fd: RawFd,
     begin: u64,
@@ -140,33 +152,48 @@ struct BlockProbe {
     values: ProbeResults,
 }
 
-struct BlockMagicInfo {
-    magic: &'static [u8],
-    len: u64,
-//    kb_offset: u64,
-    b_offset: Option<u64>,
+#[derive(Debug, Clone)]
+pub struct BlockMagic {
+    pub magic: &'static [u8],
+    pub len: u64,
+    pub b_offset: u64,
 }
 
-struct BlockIdInfo {
-    name: &'static str,
-    usage: Usage,
-    //probe: &'static str,
-    magics: &'static [BlockMagicInfo],
+#[derive(Debug, Clone)]
+pub struct BlockId {
+    pub name: &'static str,
+    pub usage: Usage,
+    pub magics: &'static [BlockMagic],
 }
 
-fn is_power_2(num: i64) -> bool {
-    return num != 0 && (num & (num - 1)) == 0;
+
+pub fn probe_get_magic(raw: File, id_info: BlockId) -> Result<BlockMagic, Box<dyn std::error::Error>>
+{
+    for magic in id_info.magics {
+        let b_offset: u64 = magic.b_offset;
+        let magic_len: usize = magic.len.try_into().unwrap(); // FIX
+
+        let mut raw_clone = raw.try_clone()?;
+        raw_clone.seek(SeekFrom::Start(b_offset))?;
+
+        let mut buffer = vec![0; magic_len];
+
+        raw_clone.read_exact(&mut buffer)?;
+
+        //println!("Buffer: {:X?}", buffer);
+
+        if buffer == magic.magic {
+            return Ok(magic.clone());
+        }
+    }
+    return Err("Unable to find any magic".into());
 }
-
-fn probe_get_magic(device: &str, ) {
-
-}
-
 
 fn probe_type() {
-    
+    todo!()
 }
 
+/* 
 pub fn probe_from_filename(filename: &str) -> Result<BlockProbe, Box<dyn std::error::Error>> {
     let block_file = File::open(filename)?;
     let fd = block_file.as_raw_fd();
@@ -182,6 +209,7 @@ pub fn probe_from_filename(filename: &str) -> Result<BlockProbe, Box<dyn std::er
         values: () 
     });
 }
+*/
 
 pub fn read_raw(device: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut superblock = File::open(device)?;
