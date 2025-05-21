@@ -166,8 +166,14 @@ pub struct BlockId {
     pub magics: &'static [BlockMagic],
 }
 
+fn is_power_2(num: u64) -> bool {
+    return num != 0 && ((num & (num - 1)) == 0); 
+}
 
-pub fn probe_get_magic(raw: File, id_info: BlockId) -> Result<BlockMagic, Box<dyn std::error::Error>>
+pub fn probe_get_magic(
+        raw: &File, 
+        id_info: &BlockId
+    ) -> Result<BlockMagic, Box<dyn std::error::Error>>
 {
     for magic in id_info.magics {
         let b_offset: u64 = magic.b_offset;
@@ -177,10 +183,8 @@ pub fn probe_get_magic(raw: File, id_info: BlockId) -> Result<BlockMagic, Box<dy
         raw_clone.seek(SeekFrom::Start(b_offset))?;
 
         let mut buffer = vec![0; magic_len];
-
+        
         raw_clone.read_exact(&mut buffer)?;
-
-        //println!("Buffer: {:X?}", buffer);
 
         if buffer == magic.magic {
             return Ok(magic.clone());
