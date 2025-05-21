@@ -156,34 +156,87 @@ struct VfatDirEntry {
     size: u32,
 }
 
+const FAT12_MAX: u32 = 0xFF4;
+const FAT16_MAX: u32 = 0xFFF4;
+const FAT32_MAX: u32 = 0x0FFFFFF6;
+
 const FAT_ATTR_VOLUME_ID: u32 = 0x08;
 const FAT_ATTR_DIR: u32 = 0x10;
 const FAT_ATTR_LONG_NAME: u32 = 0x0f;
 const FAT_ATTR_MASK: u32 = 0x3f;
 const FAT_ENTRY_FREE: u32 = 0xe5;
 
-pub fn read_as_vfat(device: &str) -> Result<VFatSuperBlock, Box<dyn std::error::Error>> {
-    let mut super_block = File::open(device)?;
+pub fn read_as_vfat(
+        raw_block: &File
+    ) -> Result<VFatSuperBlock, Box<dyn std::error::Error>> 
+{
+    let mut block = raw_block.try_clone()?;
     let mut buffer = [0u8; 512];
     
-    super_block.read_exact(&mut buffer)?;
+    // Make sure to read file from start 
+    block.seek(SeekFrom::Start(0))?;
+    block.read_exact(&mut buffer)?;
 
     return Ok(*from_bytes::<VFatSuperBlock>(&buffer));
 }
 
-pub fn read_as_msdos(device: &str) -> Result<MsDosSuperBlock, Box<dyn std::error::Error>> {
-    let mut super_block = File::open(device)?;
+pub fn read_as_msdos(
+        raw_block: &File
+    ) -> Result<MsDosSuperBlock, Box<dyn std::error::Error>> 
+{
+    let mut block = raw_block.try_clone()?;
     let mut buffer = [0u8; 512];
     
-    super_block.read_exact(&mut buffer)?;
+    // Make sure to read file from start 
+    block.seek(SeekFrom::Start(0))?;
+    block.read_exact(&mut buffer)?;
 
     return Ok(*from_bytes::<MsDosSuperBlock>(&buffer));
 }
 
-pub fn fat_type(vs: VFatSuperBlock,
-                ms: MsDosSuperBlock,
-            ) -> Result<FatType ,Box<dyn std::error::Error>>
-{
+struct ValidFatResult {
+    fat_size: u32,
+    cluster_count: u32,
+    sect_count: u32,
+}
+
+fn valid_fat (
+        ms: MsDosSuperBlock,
+        vs: VFatSuperBlock,
+        mag: BlockMagic,
+    ) -> Result<ValidFatResult ,Box<dyn std::error::Error>> 
+{    
+    if mag.len <= 2 {
+        if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
+            return Err("Given block is not Fat likely MBR".into());
+        }
+
+        /*
+		 * OS/2 and apparently DFSee will place a FAT12/16-like
+		 * pseudo-superblock in the first 512 bytes of non-FAT
+		 * filesystems --- at least JFS and HPFS, and possibly others.
+		 * So we explicitly check for those filesystems at the
+		 * FAT12/16 filesystem magic field identifier, and if they are
+		 * present, we rule this out as a FAT filesystem, despite the
+		 * FAT-like pseudo-header.
+		 */
+
+        if &ms.ms_magic == b"JFS     " || &ms.ms_magic == b"HPFS    " {
+            return Err("JFS/HPFS found".into());
+        }
+    }
+
+    if ms.ms_fats == 0 {
+        return Err("Should be atleast one fat table".into());
+    }
+    if ms.ms_reserved == 0 {
+        return Err("ms_reserved should not be 0".into());
+    }
+
+    if !is_power_2(ms.ms_cluster_size.into()) {
+        return Err("cluster_size is not ^2".into());
+    }
+
     let sector_size: u32 = ms.ms_sector_size.into();
     let dir_entries: u32 = ms.ms_dir_entries.into();
     let reserved: u32 = ms.ms_reserved.into();
@@ -207,259 +260,75 @@ pub fn fat_type(vs: VFatSuperBlock,
 
     let cluster_count: u32 = (sect_count - (reserved + fat_size + dir_size)) / cluster_size;
 
+    let max_count = if ms.ms_fat_length == 0 && vs.vs_fat32_length > 0 {
+        println!("Fat32");
+        FAT32_MAX
+    } else if cluster_count > FAT12_MAX {
+        println!("Fat16");
+        FAT16_MAX
+    } else {
+        println!("Fat12");
+        FAT12_MAX
+    };
 
-    // TODO - Add extra checks after checking cluster counts
-    if cluster_count < 4085 {
-        return Ok(FatType::Fat12);
-    } else if cluster_count < 65525 {
-        return Ok(FatType::Fat16);
-    } else if cluster_count < 2^28 {
-        return Ok(FatType::Fat32);
+    if cluster_count > max_count {
+        return Err("Too many clusters".into());
+    }
+    
+    if cluster_count < FAT12_MAX || cluster_count < FAT16_MAX || cluster_count < FAT32_MAX {
+        return Ok(ValidFatResult {
+            fat_size: fat_size, 
+            cluster_count: cluster_count,
+            sect_count: sect_count, 
+        });
     } else {
         return Err("Unknown fat type".into());
     }
 
 }
 
- 
-fn probe_is_vfat(raw: File) -> Result< ,Box<dyn std::error::Error>> 
+pub fn probe_is_vfat(
+        raw_block: &File,
+    ) -> Result<(), Box<dyn std::error::Error>>
 {
+    let ms: MsDosSuperBlock = read_as_msdos(&raw_block)?;
+    let vs: VFatSuperBlock = read_as_vfat(&raw_block)?;
 
-}
-
-
-/* 
-fn fat_valid_superblock(vfat: VFatSuperBlock, 
-                        msdos: MsDosSuperBlock, 
-                        magic: &BlockMagicInfo ) -> Result<FatValidResult, Box<dyn std::error::Error>>
-{
-    if magic.len <= 2 {
-        if msdos.ms_pmagic[0] != 0x55 || msdos.ms_pmagic[1] != 0xAA {
-            return Err("TODO ERRORS 189".into());
-        }
-
-        if &msdos.ms_magic == b"JFS     " || &msdos.ms_magic == b"HPFS    " {
-            eprintln!("JFS/HPFS detected //Eventully proper errors/warnings will be done.");
-            return Err("TODO ERRORS 194".into());
-        }
-    }
-
-    if msdos.ms_fats < 1  {
-        println!("{}", msdos.ms_fats);
-        return Err("TODO ERRORS 199 ".into());
-    }
-
-    //if msdos.ms_media != 0xf8 || msdos.ms_media != 0xf0 {
-    //    println!("{}", msdos.ms_media);
-    //    return Err("TODO ERRORS 203".into());
-    //}
-
-    if !is_power_2(msdos.ms_sector_size.into()) {
-        return Err("TODO ERRORS 207".into());
-    }
-
-    let sector_size = u16::from_le(msdos.ms_sector_size);
-    if !is_power_2(sector_size.into()) || sector_size < 512 || sector_size > 4096 {
-        return Err("TODO ERRORS 212".into());
-    }
-
-    let dir_entries: u32 = msdos.ms_dir_entries.into();
-    let reserved: u32 = msdos.ms_reserved.into();
-    let sectors: u32 = msdos.ms_sectors.into();
-    let clustor_size: u32 = msdos.ms_sectors.into();
-    //let mut fat_length = msdos.ms_fat_length;
-
-    let fat_length = if msdos.ms_fat_length == 0 {
-        msdos.ms_fat32_length
-    } else {
-        msdos.ms_fat_length.into()
-    };
-
-    let fat_size: u32 = fat_length * msdos.ms_fats as u32;
-    let dir_size: u32 = (dir_entries * size_of::<VfatDirEntry>() as u32) + ((sector_size-1) / sector_size) as u32;
+    let mag: BlockMagic = probe_get_magic(&raw_block, &VFAT_ID_INFO)?;
     
-    println!("{}", sectors);
-    println!("{}", reserved);
-    println!("{}", fat_size);
-    println!("{}", dir_size); 
-    println!("{}", clustor_size); 
-    let cluster_count: i64 = (sectors as i64 - (reserved + fat_size + dir_size) as i64 ) / clustor_size as i64;
+    valid_fat(ms, vs, mag)?;
 
-
-    
-
-    let sect_count = if msdos.ms_sectors == 0 {
-        msdos.ms_total_sect
-    } else {
-        msdos.ms_sectors.into()
-    };
-
-    let max_count = if msdos.ms_fat_length == 0 && vfat.vs_fat32_length != 0 {
-        FAT32_MAX
-    } else {
-        if cluster_count > FAT12_MAX.into() {
-            FAT16_MAX
-        } else {
-            FAT12_MAX
-        }
-    };
-
-    if cluster_count > max_count.into() {
-        return Err("ERROR Will make custom errors eventually".into());
-    }
-
-    return Ok(FatValidResult {
-        cluster_count: cluster_count as u32,
-        fat_size: fat_size,
-        sect_count: sect_count
-    });
+    return Ok(());
 }
-*/
 
-/* 
-pub fn probe_vfat(device: &str,
-            magic: &BlockMagicInfo) -> Result<FilesystemResults, Box<dyn std::error::Error>> 
+fn search_fat_label(
+        raw_block: &File,
+        root_start: u32,
+        root_dir_entries: u32,
+    ) -> Result<[u8; 11], Box<dyn std::error::Error>> 
 {
-    let vfat = read_as_vfat(device)?;
-    let msdos = read_as_msdos(device)?;
+    
+    Ok(*b"Test       ")
+}
 
-    let sector_size: u32 = msdos.ms_sector_size.into();
-    let reserved: u32 = msdos.ms_reserved.into();
-    //let fat_size: u32 = 0;
+fn probe_vfat(
+        raw_block: &File,
+        mag: BlockMagic,
+    ) -> Result<() ,Box<dyn std::error::Error>> 
+{
+    let ms = read_as_msdos(&raw_block)?;
+    let vs = read_as_vfat(&raw_block)?;
 
-    let version: String;
-    let boot_label: [u8; 11];
-    let vol_serno: Option<u32>;
+    let valid_info = valid_fat(ms, vs, mag)?;
 
-    let valid = fat_valid_superblock(vfat, msdos, magic)?;
+    let sector_size: u32 = ms.ms_sector_size.into();
+    let reserved: u32 = ms.ms_reserved.into();
 
-    if msdos.ms_fat_length != 0 {
-        let root_start = (reserved + valid.fat_size) * sector_size;
-        let root_dir_entries = vfat.vs_dir_entries;
+    if ms.ms_fat_length != 0 {
+        let root_start: u32 = (reserved + valid_info.fat_size) * sector_size;
+        let root_dir_entries: u32 = vs.vs_dir_entries.into();
 
-        if msdos.ms_ext_boot_sign == 0x29 {
-            boot_label = msdos.ms_label;
-        } else {
-            boot_label = *b"Eh         ";
-        }
-
-        if msdos.ms_ext_boot_sign == 0x28 || msdos.ms_ext_boot_sign == 0x29 {
-            vol_serno = Some(msdos.ms_serno);
-        } else {
-            vol_serno = None
-        }
-
-        if valid.cluster_count < FAT12_MAX {
-            version = "FAT12".to_string();
-        } else if valid.cluster_count < FAT16_MAX {
-            version = "FAT16".to_string();
-        } else {
-            version = "Fat".to_string();
-        }
-        
-        return Ok(FilesystemResults {
-            filesystem: Some(FsType::Fat),
-            uuid: Some(FsUuid::VolumeId32(vol_serno.expect("error 301"))),
-            uuid_sub: None,
-            label: Some(String::from_utf8_lossy(&boot_label).to_string()),
-            fs_version: Some(version),
-            usage: Some(Usage::Filesystem),
-        });
-
-    } else if vfat.vs_fat32_length != 0 {
-        
-        /* Fat32 label extraction stuff
-        let mut maxloop = 100;
-        let buf_size: u32 = vfat.vs_cluster_size as u32 * sector_size;
-        let start_data_sect = reserved + valid.fat_size;
-        let entries = (vfat.vs_fat32_length * sector_size) / size_of::<u32>() as u32;
-        let next = vfat.vs_root_cluster;
-
-        while next != 0 && next < entries && { maxloop -= 1; maxloop != 0 } {
-            let next_sect_off: u32 = (next - 2) * vfat.vs_cluster_size as u32;
-            let next_off: u64 = (start_data_sect as u64 + next_sect_off as u64) * sector_size as u64;
-
-            let count = buf_size / size_of::<VfatDirEntry>() as u32;
-        }
-
-        */
-        version = "Fat32".to_string();
-
-        if vfat.vs_ext_boot_sign == 0x29 {
-            boot_label = vfat.vs_label;
-        } else {
-            boot_label = [0u8; 11];
-        }
-
-        return Ok(FilesystemResults {
-            filesystem: Some(FsType::Fat32),
-            uuid: Some(FsUuid::VolumeId32(vfat.vs_serno)),
-            uuid_sub: None,
-            label: Some(String::from_utf8_lossy(&boot_label).to_string()),
-            fs_version: Some(version),
-            usage: Some(Usage::Filesystem),
-        });
     }
 
-    return Err("Error".into());
+    return Ok(());
 }
-*/
-
-
-
-//impl From<RawFatBS> for RawFatExtBs16 {
-//    fn from(raw: RawFatBS) -> Self {
-//        RawFatExtBs16 {
-//            bootjmp: raw.bootjmp,
-//            oem_name: raw.oem_name,
-//            bytes_per_sector: raw.bytes_per_sector,
-//            sectors_per_cluster: raw.sectors_per_cluster,
-//            reserved_sector_count: raw.reserved_sector_count,
-//            table_count: raw.table_count,
-//            root_entry_count: raw.root_entry_count,
-//            total_sectors_16: raw.total_sectors_16,
-//            media_type: raw.media_type,
-//            table_size_16: raw.table_size_16,
-//            sectors_per_track: raw.sectors_per_track,
-//            head_side_count: raw.head_side_count,
-//            hidden_sector_count: raw.hidden_sector_count,
-//            total_sectors_32: raw.total_sectors_32,
-//            bios_drive_num: raw.extended_section[0],
-//            windows_nt_flags: raw.extended_section[1],
-//            boot_signature: raw.extended_section[2],
-//            volume_id: LittleEndian::read_u32(&raw.extended_section[2..6]),
-//            volume_label: *array_ref![raw.extended_section, 8, 11],
-//            fat_type_label: *array_ref![raw.extended_section, 19, 8],
-//            executable_code: *array_ref![raw.extended_section, 27, 448],
-//            boot_flag: LittleEndian::read_u16(&raw.extended_section[475..476]),
-//        }
-//    }
-//}
-
-
-//pub fn read_raw_fat_bs(device: &str) -> Result<RawFatBS, Box<dyn std::error::Error>> {
-//    let mut raw = File::open(device)?;
-//    let mut buffer = [0u8; 512];
-//    
-//    raw.read_exact(&mut buffer)?;
-//    
-//    return Ok(*from_bytes::<RawFatBS>(&buffer));
-//}
-//
-//pub fn read_raw_fat16_bs(device: &str) -> Result<RawFatExtBs16, Box<dyn std::error::Error>> {
-//    let mut raw = File::open(device)?;
-//    let mut buffer = [0u8; 512];
-//    
-//    raw.read_exact(&mut buffer)?;
-//    
-//    return Ok(*from_bytes::<RawFatExtBs16>(&buffer));
-//}
-//
-//pub fn read_raw_fat32_bs(device: &str) -> Result<RawFatExtBs32, Box<dyn std::error::Error>> {
-//    let mut raw = File::open(device)?;
-//    let mut buffer = [0u8; 512];
-//    
-//    raw.read_exact(&mut buffer)?;
-//    
-//    return Ok(*from_bytes::<RawFatExtBs32>(&buffer));
-//}

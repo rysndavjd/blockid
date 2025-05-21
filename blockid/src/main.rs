@@ -14,8 +14,8 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
     //let ms = read_as_msdos("/home/rysndavjd/github/blockid/sample-headers/fat12.bin")?;
     //
     //let device = fat_type(vs, ms)?;
-    let device = probe_get_magic(File::open("/home/rysndavjd/github/blockid/sample-headers/fat32.bin")?, VFAT_ID_INFO)?;
-    println!("{:X?}", device);
+    let device = probe_is_vfat(&File::open("/home/rysndavjd/github/blockid/sample-headers/fat16.bin")?)?;
+    println!("{:?}", device);
 
     return Ok(());
 }
