@@ -4,7 +4,7 @@ use std::io::Read;
 use byteorder::{ByteOrder, LittleEndian, BigEndian};
 use bytemuck::checked::from_bytes;
 use bytemuck::{Contiguous, Pod, Zeroable};
-use arrayref::array_ref;
+
 
 use crate::*;
 
@@ -160,21 +160,20 @@ const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
 
-const FAT_ATTR_VOLUME_ID: u32 = 0x08;
-const FAT_ATTR_DIR: u32 = 0x10;
-const FAT_ATTR_LONG_NAME: u32 = 0x0f;
-const FAT_ATTR_MASK: u32 = 0x3f;
-const FAT_ENTRY_FREE: u32 = 0xe5;
+const FAT_ATTR_VOLUME_ID: u8 = 0x08;
+const FAT_ATTR_DIR: u8 = 0x10;
+const FAT_ATTR_LONG_NAME: u8 = 0x0f;
+const FAT_ATTR_MASK: u8 = 0x3f;
+const FAT_ENTRY_FREE: u8 = 0xe5;
 
 pub fn read_as_vfat(
         raw_block: &File
     ) -> Result<VFatSuperBlock, Box<dyn std::error::Error>> 
 {
     let mut block = raw_block.try_clone()?;
-    let mut buffer = [0u8; 512];
-    
-    // Make sure to read file from start 
     block.seek(SeekFrom::Start(0))?;
+
+    let mut buffer = [0u8; 512];
     block.read_exact(&mut buffer)?;
 
     return Ok(*from_bytes::<VFatSuperBlock>(&buffer));
@@ -185,13 +184,27 @@ pub fn read_as_msdos(
     ) -> Result<MsDosSuperBlock, Box<dyn std::error::Error>> 
 {
     let mut block = raw_block.try_clone()?;
-    let mut buffer = [0u8; 512];
-    
-    // Make sure to read file from start 
     block.seek(SeekFrom::Start(0))?;
+
+    let mut buffer = [0u8; 512];
     block.read_exact(&mut buffer)?;
 
     return Ok(*from_bytes::<MsDosSuperBlock>(&buffer));
+}
+
+fn read_vfat_dir_entry(
+        raw_block: &File,
+        offset: u32,
+    ) -> Result<VfatDirEntry, Box<dyn std::error::Error>> 
+{
+    let mut block = raw_block.try_clone()?;
+    block.seek(SeekFrom::Start(0))?;
+
+    let mut buffer = [0u8; 32];
+    block.seek(SeekFrom::Start(offset.into()))?;
+    block.read_exact(&mut buffer)?;
+
+    return Ok(*from_bytes::<VfatDirEntry>(&buffer));
 }
 
 struct ValidFatResult {
@@ -211,7 +224,7 @@ fn valid_fat (
             return Err("Given block is not Fat likely MBR".into());
         }
 
-        /*
+        /* Straight From libblkid
 		 * OS/2 and apparently DFSee will place a FAT12/16-like
 		 * pseudo-superblock in the first 512 bytes of non-FAT
 		 * filesystems --- at least JFS and HPFS, and possibly others.
@@ -288,13 +301,13 @@ fn valid_fat (
 }
 
 pub fn probe_is_vfat(
-        raw_block: &File,
+        probe: &mut BlockProbe,
     ) -> Result<(), Box<dyn std::error::Error>>
 {
-    let ms: MsDosSuperBlock = read_as_msdos(&raw_block)?;
-    let vs: VFatSuperBlock = read_as_vfat(&raw_block)?;
+    let ms: MsDosSuperBlock = read_as_msdos(&probe.file)?;
+    let vs: VFatSuperBlock = read_as_vfat(&probe.file)?;
 
-    let mag: BlockMagic = probe_get_magic(&raw_block, &VFAT_ID_INFO)?;
+    let mag: BlockMagic = probe_get_magic(probe, &VFAT_ID_INFO)?;
     
     valid_fat(ms, vs, mag)?;
 
@@ -302,32 +315,88 @@ pub fn probe_is_vfat(
 }
 
 fn search_fat_label(
-        raw_block: &File,
+        probe: &mut BlockProbe,
         root_start: u32,
         root_dir_entries: u32,
     ) -> Result<[u8; 11], Box<dyn std::error::Error>> 
 {
-    
-    Ok(*b"Test       ")
+    let vfat_dir_entry: Option<VfatDirEntry> = if !probe.is_tiny() {
+        Some(read_vfat_dir_entry(&probe.file, root_start)?)
+    } else {
+        None
+    };
+
+    for i in 0..root_dir_entries {
+        let entry = if vfat_dir_entry.is_none() {
+            read_vfat_dir_entry(&probe.file, root_start + (i * 32))?
+        } else {
+            vfat_dir_entry.expect("Should have a value")
+        };
+
+        if entry.name[0] == 0x00 {
+            break;
+        }
+
+        if entry.name[0] == FAT_ENTRY_FREE || 
+            (entry.cluster_high != 0 || entry.cluster_low != 0) || 
+            (entry.attr & FAT_ATTR_MASK) == FAT_ATTR_LONG_NAME 
+        {
+            continue;
+        }
+
+        if (entry.attr & (FAT_ATTR_VOLUME_ID | FAT_ATTR_DIR)) == FAT_ATTR_VOLUME_ID {
+            let mut label = entry.name;
+            if label[0] == 0x05 {
+                label[0] = 0xE5;
+            }
+            return Ok(label);
+        }
+    }
+
+    return Err("Unable to get fat label".into());
 }
 
 fn probe_vfat(
-        raw_block: &File,
+        probe: &mut BlockProbe,
         mag: BlockMagic,
     ) -> Result<() ,Box<dyn std::error::Error>> 
 {
-    let ms = read_as_msdos(&raw_block)?;
-    let vs = read_as_vfat(&raw_block)?;
+    let ms = read_as_msdos(&probe.file)?;
+    let vs = read_as_vfat(&probe.file)?;
 
     let valid_info = valid_fat(ms, vs, mag)?;
 
     let sector_size: u32 = ms.ms_sector_size.into();
     let reserved: u32 = ms.ms_reserved.into();
 
+    let vol_label: [u8; 11];
+    let boot_label: [u8; 11];
+    let vol_serno: FsUuid;
+    let version: String;
+
     if ms.ms_fat_length != 0 {
         let root_start: u32 = (reserved + valid_info.fat_size) * sector_size;
         let root_dir_entries: u32 = vs.vs_dir_entries.into();
 
+        vol_label = search_fat_label(probe, root_start, root_dir_entries)?;
+
+        if ms.ms_ext_boot_sign == 0x29 {
+            boot_label = ms.ms_label;
+        }
+
+        if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
+            vol_serno = FsUuid::VolumeId32(ms.ms_serno);
+        }
+
+        if valid_info.cluster_count < FAT12_MAX {
+            version = "FAT12".to_string();
+        } else if valid_info.cluster_count < FAT16_MAX {
+            version = "FAT16".to_string();
+        }
+
+    } else if vs.vs_fat32_length != 0 {
+        let mut buffer: [u8; 11];
+        
     }
 
     return Ok(());
