@@ -117,18 +117,18 @@ pub struct FilesystemResults {
 
 #[derive(Debug, Clone)]
 pub struct ProbeResults {
-    fs_type: Option<FsType>,
-    sec_type: Option<FsType>,
-    uuid: Option<FsUuid>,
-    uuid_sub: Option<FsUuid>,
-    label: Option<String>,
-    label_raw: Option<Vec<u8>>,
-    fs_version: Option<String>,
-    usage: Option<Usage>,
-    part_uuid: Option<FsUuid>,
-    part_name: Option<String>,
-    part_number: Option<u64>,
-    part_scheme: Option<PartTableType>
+    pub fs_type: Option<FsType>,
+    pub sec_type: Option<FsType>,
+    pub uuid: Option<FsUuid>,
+    pub uuid_sub: Option<FsUuid>,
+    pub label: Option<String>,
+    pub label_raw: Option<Vec<u8>>,
+    pub fs_version: Option<String>,
+    pub usage: Option<Usage>,
+    pub part_uuid: Option<FsUuid>,
+    pub part_name: Option<String>,
+    pub part_number: Option<u64>,
+    pub part_scheme: Option<PartTableType>
 }
 
 #[derive(Debug)]
@@ -184,6 +184,23 @@ impl BlockProbe {
 
 fn is_power_2(num: u64) -> bool {
     return num != 0 && ((num & (num - 1)) == 0); 
+}
+
+
+fn get_buffer(
+        probe: &mut BlockProbe,
+        offset: u64,
+        buffer_size: usize,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> 
+{
+    let mut block = probe.file.try_clone()?;
+    block.seek(SeekFrom::Start(0))?;
+
+    let mut buffer = vec![0u8; buffer_size];
+    block.seek(SeekFrom::Start(offset))?;
+    block.read_exact(&mut buffer)?;
+    
+    return Ok(buffer);
 }
 
 pub fn probe_get_magic(
