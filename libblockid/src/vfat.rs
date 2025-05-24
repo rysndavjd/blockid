@@ -156,6 +156,17 @@ struct VfatDirEntry {
     size: u32,
 }
 
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+struct Fat32FsInfo {
+    signature1: [u8; 4],
+    reserved1: [u8; 120],
+    signature2: [u8; 4],
+    free_clusters: u32,
+    next_cluster: u32,
+    reserved2: [u8; 4],
+}
+
 const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
@@ -356,7 +367,7 @@ fn search_fat_label(
     return Err("Unable to get fat label".into());
 }
 
-fn probe_vfat(
+pub fn probe_vfat(
         probe: &mut BlockProbe,
         mag: BlockMagic,
     ) -> Result<() ,Box<dyn std::error::Error>> 
@@ -369,10 +380,10 @@ fn probe_vfat(
     let sector_size: u32 = ms.ms_sector_size.into();
     let reserved: u32 = ms.ms_reserved.into();
 
-    let vol_label: [u8; 11];
-    let boot_label: [u8; 11];
-    let vol_serno: FsUuid;
-    let version: String;
+    let mut vol_label: [u8; 11] = *b"NO NAME    ";
+    let mut boot_label: [u8; 11] = *b"NO NAME    ";
+    let mut vol_serno: FsUuid = FsUuid::VolumeId32(0);
+    let mut version: String = "Eh".to_string();
 
     if ms.ms_fat_length != 0 {
         let root_start: u32 = (reserved + valid_info.fat_size) * sector_size;
@@ -395,9 +406,78 @@ fn probe_vfat(
         }
 
     } else if vs.vs_fat32_length != 0 {
-        let mut buffer: [u8; 11];
+        let mut buffer: Vec<u8>;
+        let mut maxloop = 100;
         
+        let cluster_size: u32 = vs.vs_cluster_size.into(); 
+        let buf_size: u32 = cluster_size * sector_size;
+        let start_data_sect: u32 = reserved + valid_info.fat_size;
+        let entries: u32 = vs.vs_fat32_length * sector_size / 4;
+        let mut next: u32 = vs.vs_root_cluster;
+
+        while next != 0 && next < entries && maxloop > 0 {
+            maxloop -= 1;
+
+            let next_sect_off = (next - 2) * cluster_size;
+            let next_off: u32 = (start_data_sect + next_sect_off) * sector_size;
+
+            let count = buf_size / 32; 
+
+            match search_fat_label(probe, next_off, count) {
+                Ok(label) => {
+                    vol_label = label;
+                    break;
+                }
+                Err(_) => {
+                    let fat_entry_off = (reserved * sector_size) + (next * 4);
+                    buffer = get_buffer(probe, fat_entry_off as u64, buf_size as usize)?;
+                    if buffer.is_empty() {
+                        break;
+                    }
+
+                    next = u32::from_le_bytes(buffer[0..4].try_into().unwrap()) & 0x0FFFFFFF;
+
+                },
+            }
+
+            version = "FAT32".to_string();
+            
+            println!("bootsign: {:X?}", vs.vs_ext_boot_sign);
+            if vs.vs_ext_boot_sign == 0x29 {
+                boot_label = vs.vs_label;
+            }
+
+            vol_serno = FsUuid::VolumeId32(vs.vs_serno);
+
+            let fsinfo_sect = vs.vs_fsinfo_sector;
+
+            if fsinfo_sect != 0 {
+                let buf = get_buffer(probe, fsinfo_sect as u64 * sector_size as u64, size_of::<Fat32FsInfo>())?;
+                let fsinfo = *from_bytes::<Fat32FsInfo>(&buf);
+                
+                if &fsinfo.signature1 != b"\x52\x52\x61\x41" && 
+                    &fsinfo.signature1 != b"\x52\x52\x64\x41" &&
+                    &fsinfo.signature1 != b"\x00\x00\x00\x00"
+                {
+                    return Err("Some reason i dont know".into());
+                };
+
+                if &fsinfo.signature2 != b"\x72\x72\x41\x61" && 
+                    &fsinfo.signature2 != b"\x00\x00\x00\x00"
+                {   
+                    return Err("Some reason i dont know".into());
+                };
+            }
+        }
     }
+
+    println!("boot_label: {:X?}", boot_label);
+    println!("vol_label: {:X?}", vol_label);
+    println!("vol_serno: {:?}", vol_serno);
+    println!("version: {:?}", version);
+    println!("fsblocksize: {:?}", vs.vs_cluster_size as u32 * sector_size);
+    println!("block_size: {:?}", sector_size);
+    println!("fssize: {:?}", sector_size as u64 * valid_info.sect_count as u64);
 
     return Ok(());
 }
