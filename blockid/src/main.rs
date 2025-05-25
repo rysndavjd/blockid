@@ -2,40 +2,32 @@ use std::fs::File;
 use std::str::from_utf8;
 
 use byteorder::BigEndian;
+use libblockid::probe::BlockProbe;
 use libblockid::vfat::*;
 use libblockid::*;
+use libblockid::probe::*;
 
 use uuid::Uuid;
 use byteorder::LittleEndian;
 use byteorder::ByteOrder;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
-    //let vs = read_as_vfat("/home/rysndavjd/github/blockid/sample-headers/fat12.bin")?;
-    //let ms = read_as_msdos("/home/rysndavjd/github/blockid/sample-headers/fat12.bin")?;
-    //
-    //let device = fat_type(vs, ms)?;
+    
+    let file = File::open("/dev/sdb8")?;
 
-    let ProbeResults: ProbeResults = ProbeResults{
-        fs_type: None,
-        sec_type: None,
-        uuid: None,
-        uuid_sub: None,
-        label: None,
-        label_raw: None,
-        fs_version: None,
-        usage: None,
-        part_uuid: None,
-        part_name: None,
-        part_number: None,
-        part_scheme: None
-    };
-
-    let mut probe: BlockProbe = BlockProbe { file: File::open("/dev/sdb3")?,
-                                        begin: 0, end: 0, devno: 0, disk_devno: 0, probe_flags: BlkidFlags::empty(), values: ProbeResults};
-
+    let mut probe = BlockProbe::new(file, 0, 0, 0, 0);
     let magic = probe_get_magic(&mut probe, &VFAT_ID_INFO)?;
+    
+    //let fat_size: u32 = get_fat_size(ms, vs);
+    //let sector_size: u32 = ms.ms_sector_size.into();
+    //let reserved: u32 = ms.ms_reserved.into();
+
+    //let root_start: u32 = (reserved + fat_size) * sector_size;
+    //let root_dir_entries: u32 = vs.vs_dir_entries.into();
+
+    //let device = search_fat_label(&mut probe, root_start, root_dir_entries)?;
     let device = probe_vfat(&mut probe, magic)?;
-    //println!("{:?}", device);
+    println!("Probe: {:?}", probe);
 
     return Ok(());
 }
