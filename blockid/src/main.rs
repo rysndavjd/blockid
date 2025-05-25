@@ -4,6 +4,7 @@ use std::str::from_utf8;
 use byteorder::BigEndian;
 use libblockid::probe::BlockProbe;
 use libblockid::vfat::*;
+use libblockid::volume_id::VolumeId64;
 use libblockid::*;
 use libblockid::probe::*;
 
@@ -26,8 +27,15 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
     //let root_dir_entries: u32 = vs.vs_dir_entries.into();
 
     //let device = search_fat_label(&mut probe, root_start, root_dir_entries)?;
-    let device = probe_vfat(&mut probe, magic)?;
-    println!("Probe: {:?}", probe);
+    let id = VolumeId64::from_u64_le(2013176438932066366);
+
+    println!("{}", id);
+    println!("{:X}", id);
+    println!("{:x}", id);
+    println!("{:o}", id);
+    println!("{:b}", id);
+    //let device = probe_vfat(&mut probe, magic)?;
+    //println!("Probe: {:?}", probe);
 
     return Ok(());
 }
