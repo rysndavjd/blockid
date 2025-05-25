@@ -11,6 +11,13 @@ use crate::*;
 use crate::probe::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VfatVersion {
+    Fat12,
+    Fat16,
+    Fat32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VfatExtras {
     oem_name: Option<String>,
     boot_label: Option<String>
@@ -301,8 +308,8 @@ pub fn probe_is_vfat(
         probe: &mut BlockProbe,
     ) -> Result<(), Box<dyn std::error::Error>>
 {
-    let ms: MsDosSuperBlock = read_as(&probe.file)?;
-    let vs: VFatSuperBlock = read_as(&probe.file)?;
+    let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
+    let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
 
     let mag: BlockMagic = probe_get_magic(probe, &VFAT_ID_INFO)?;
     
@@ -355,8 +362,8 @@ pub fn probe_vfat(
     mag: BlockMagic,
 ) -> Result<() ,Box<dyn std::error::Error>> 
 {
-    let ms: MsDosSuperBlock = read_as(&probe.file)?;
-    let vs: VFatSuperBlock = read_as(&probe.file)?;
+    let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
+    let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
 
     let cluster_count: u32 = get_cluster_count(ms, vs);
     let fat_size: u32 = get_fat_size(ms, vs);
@@ -382,25 +389,100 @@ pub fn probe_vfat(
         };
 
         let fat_version = if cluster_count < FAT12_MAX {
-            FsType::Fat12
+            VfatVersion::Fat12
         } else if cluster_count < FAT16_MAX {
-            FsType::Fat16
+            VfatVersion::Fat16
         } else {
-            FsType::Other("Unknown".to_string()) // maybe should error out, will think about it
+            return Err("Unknown Fat version".into());
         };
         
         let oem_name = String::from_utf8_lossy(&ms.ms_sysid).to_string();
 
-        probe.set_label_utf8_lossy(&vol_label);
-        probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
-        probe.set_fs_type(fat_version);
+        probe.set_fs_type(FsType::Vfat);
+        probe.set_fs_version(FsVersion::Vfat(fat_version));
         probe.set_uuid(BlkUuid::VolumeId32(vol_serno));
+        probe.set_label_utf8_lossy(&vol_label);
+        probe.set_usage(Usage::Filesystem);
+        probe.set_fs_block_size(vs.vs_cluster_size as u64 * sector_size as u64);
+        probe.set_block_size(sector_size as u64);
+        probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
+        probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
+        probe.set_sec_type(FsSecType::Msdos);
 
+        return Ok(());
+    } else if vs.vs_fat32_length != 0 {
+        let mut maxloop = 100;
+        
+        let cluster_size: u32 = vs.vs_cluster_size.into(); 
+        let buf_size: u32 = cluster_size * sector_size;
+        let start_data_sect: u32 = reserved + fat_size;
+        let entries: u32 = vs.vs_fat32_length * sector_size / 4;
+        let mut next: u32 = vs.vs_root_cluster;
 
+        let mut vol_label: Option<[u8; 11]> = None;
+
+        while next != 0 && next < entries && maxloop > 0 {
+            maxloop -= 1;
+
+            let next_sect_off: u32 = (next - 2) * cluster_size;
+            let next_off: u32 = (start_data_sect + next_sect_off) * sector_size;
+            let count: u32 = buf_size / 32; 
+
+            match search_fat_label(probe, next_off, count) {
+                Ok(label) => {
+                    vol_label = Some(label);
+                    break;
+                }
+                Err(_) => {
+                    let fat_entry_offset: u32 = (reserved * sector_size) + (next * 4);
+                    let buffer: Vec<u8> = get_buffer(probe, fat_entry_offset as u64, buf_size as usize)?;
+                    if buffer.len() < 4 {
+                        break;
+                    }
+                    next = LittleEndian::read_u32(&buffer[0..4]) & 0x0FFFFFFF;
+                }
+            }
+        };
+        let fsinfo_sect = vs.vs_fsinfo_sector;
+        
+        if fsinfo_sect != 0 {
+            let fsinfo = read_as::<Fat32FsInfo>(&probe.file, fsinfo_sect as u64 * sector_size as u64)?;
+
+            if &fsinfo.signature1 != b"\x52\x52\x61\x41" &&
+               &fsinfo.signature1 != b"\x52\x52\x64\x41" &&
+               &fsinfo.signature1 != b"\x00\x00\x00\x00" 
+            {
+                return Err("Error".into());
+            }
+
+            if &fsinfo.signature2 != b"\x72\x72\x41\x61" &&
+               &fsinfo.signature2 != b"\x00\x00\x00\x00" 
+            {
+                return Err("Error".into());
+            }
+        }
+        let oem_name = String::from_utf8_lossy(&ms.ms_sysid).to_string();
+
+        let boot_label: Option<String> = if ms.ms_ext_boot_sign == 0x29 {
+            Some(String::from_utf8_lossy(&ms.ms_label).to_string())
+        } else {
+            None
+        };
+
+        probe.set_fs_type(FsType::Vfat);
+        probe.set_fs_version(FsVersion::Vfat(VfatVersion::Fat32));
+        probe.set_uuid(BlkUuid::VolumeId32(VolumeId32::new(vs.vs_serno)));
+        probe.set_label_utf8_lossy(&vol_label.expect("vol_label should be valid"));
+        probe.set_usage(Usage::Filesystem);
+        probe.set_fs_block_size(vs.vs_cluster_size as u64 * sector_size as u64);
+        probe.set_block_size(sector_size as u64);
+        probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
+        probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
+        
         return Ok(());
     }
 
-    return Ok(());
+    return Err("Unable to probe fat stuff".into());
 }
 
 /* Redoing it 

@@ -1,5 +1,5 @@
 use crate::volume_id;
-use crate::vfat::VfatExtras;
+use crate::vfat::{VfatExtras, VfatVersion};
 
 use uuid::Uuid;
 use std::fs::File;
@@ -52,10 +52,7 @@ pub enum BlkUuid {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FsType {
-    Fat32,
-    Fat16,
-    Fat12,
-    Fat,
+    Vfat,
     Exfat,  
     Ntfs,  
     Ext2,  
@@ -72,6 +69,16 @@ pub enum FsType {
 }   
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FsSecType {
+    Msdos,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FsVersion {
+    Vfat(VfatVersion)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FsExtras {
     Vfat(VfatExtras)
 }
@@ -79,18 +86,21 @@ pub enum FsExtras {
 #[derive(Debug, Clone)]
 pub struct FsMetadata {
     pub fs_type: Option<FsType>,
+    pub fs_version: Option<FsVersion>,
     pub uuid: Option<BlkUuid>,
     pub uuid_sub: Option<BlkUuid>,
     pub label: Option<String>,
-    pub fs_version: Option<String>,
     pub usage: Option<Usage>,
+    pub fs_block_size: Option<u64>,
+    pub block_size: Option<u64>,
+    pub fs_size: Option<u64>,
     pub fs_extras: Option<FsExtras>
 }
 
 #[derive(Debug, Clone)]
 pub struct ProbeResults {
     pub fs: FsMetadata,                    
-    pub sec_type: Option<FsType>,
+    pub sec_type: Option<FsSecType>,
     pub part_uuid: Option<BlkUuid>,
     pub part_name: Option<String>,
     pub part_number: Option<u64>,
@@ -126,11 +136,14 @@ impl FsMetadata {
     pub fn empty() -> Self {
         FsMetadata { 
             fs_type: None,
+            fs_version: None,
             uuid: None,
             uuid_sub: None, 
             label: None, 
-            fs_version: None, 
             usage: None,
+            fs_block_size: None,
+            block_size: None,
+            fs_size: None,
             fs_extras: None,
         }
     }
@@ -184,6 +197,14 @@ impl BlockProbe {
         self.values.fs.fs_type = Some(fs_type)
     }
 
+    pub fn set_fs_version(
+            &mut self, 
+            fs_version: FsVersion
+        ) 
+    {
+        self.values.fs.fs_version = Some(fs_version)
+    }
+
     pub fn set_uuid(
             &mut self, 
             uuid: BlkUuid
@@ -206,14 +227,6 @@ impl BlockProbe {
         self.values.fs.label = Some(String::from_utf8_lossy(label).to_string())
     }
 
-    pub fn set_fs_version(
-            &mut self, 
-            version: String
-        )
-    {
-        self.values.fs.fs_version = Some(version)
-    }
-
     pub fn set_usage(
             &mut self, 
             usage: Usage
@@ -229,9 +242,41 @@ impl BlockProbe {
     {
         self.values.fs.fs_extras = Some(extra)
     }
+
+    pub fn set_fs_block_size (
+            &mut self,
+            fs_block_size: u64,
+        )
+    {
+        self.values.fs.fs_block_size = Some(fs_block_size)
+    }
+
+    pub fn set_block_size (
+            &mut self,
+            block_size: u64,
+        )
+    {
+        self.values.fs.block_size = Some(block_size)
+    }
+
+    pub fn set_fs_size (
+            &mut self,
+            fs_size: u64,
+        )
+    {
+        self.values.fs.fs_size = Some(fs_size)
+    }
+
+    pub fn set_sec_type (
+            &mut self,
+            sec_type: FsSecType,
+        )
+    {
+        self.values.sec_type = Some(sec_type)
+    }
 }
 
-fn get_buffer(
+pub fn get_buffer(
         probe: &mut BlockProbe,
         offset: u64,
         buffer_size: usize,
@@ -271,13 +316,15 @@ pub fn probe_get_magic(
 }
 
 pub fn read_as<T: Pod>(
-        raw_block: &File
+        raw_block: &File,
+        offset: u64,
     ) -> Result<T, Box<dyn std::error::Error>> 
 {
     let mut block = raw_block.try_clone()?;
     block.seek(SeekFrom::Start(0))?;
 
     let mut buffer = vec![0u8; std::mem::size_of::<T>()];
+    block.seek(SeekFrom::Start(offset))?;
     block.read_exact(&mut buffer)?;
 
     let ptr = from_bytes::<T>(&buffer);
