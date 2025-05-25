@@ -363,6 +363,8 @@ pub fn probe_vfat(
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
 
+    valid_fat(ms, vs, mag)?;
+
     let cluster_count: u32 = get_cluster_count(ms, vs);
     let fat_size: u32 = get_fat_size(ms, vs);
     let sector_size: u32 = ms.ms_sector_size.into();
