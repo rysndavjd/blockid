@@ -13,7 +13,7 @@ use byteorder::ByteOrder;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
     
-    let file = File::open("/dev/sdb8")?;
+    let file = File::open("/dev/sdb3")?;
 
     let mut probe = BlockProbe::new(file, 0, 0, 0, 0);
     let magic = probe_get_magic(&mut probe, &VFAT_ID_INFO)?;
