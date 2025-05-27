@@ -6,4 +6,5 @@ edition = "2024"
 [dependencies]
 byteorder = "1.5.0"
 libblockid = { path = "../libblockid" }
+rustix = { version = "1.0.7", features = ["fs"] }
 uuid = "1.16.0"

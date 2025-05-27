@@ -1,11 +1,12 @@
 use uuid::Uuid;
 use std::fs::File;
-use nix::sys::stat::dev_t;
+use std::path::Path;
 use bitflags::bitflags;
 use bytemuck::{from_bytes, Pod};
 use std::io::{Read, Seek, SeekFrom};
+use rustix::fs::{stat, Stat};
 
-use crate::filesystems::vfat::{VfatExtras, VfatVersion};
+use crate::filesystems::vfat::{VfatExtras, VfatVersion, probe_vfat, VFAT_ID_INFO};
 use crate::filesystems::volume_id::{self, VolumeId32, VolumeId64};
 
 bitflags! {
@@ -19,6 +20,31 @@ bitflags! {
         const OPAL_LOCKED    = 1 << 6; // OPAL self-encrypting drive is locked
         const OPAL_CHECKED   = 1 << 7; // OPAL lock status was checked
     }
+}
+
+// Macros are cool mate
+macro_rules! set_probe_values_fs {
+    ($name:ident, $field:ident, $typ:ty) => {
+        pub fn $name(&mut self, value: $typ) {
+            self.values.fs.$field = Some(value);
+        }
+    };
+}
+
+macro_rules! set_probe_values {
+    ($name:ident, $field:ident, $typ:ty) => {
+        pub fn $name(&mut self, value: $typ) {
+            self.values.$field = Some(value);
+        }
+    };
+}
+
+macro_rules! is_flags {
+    ($name:ident, $flag:expr) => {
+        pub fn $name(&mut self) -> bool {
+            self.probe_flags.contains($flag)
+        }
+    };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,9 +138,10 @@ pub struct BlockProbe {
     pub file: File,
     pub begin: u64,
     pub end: u64,
-    pub devno: dev_t,
-    pub disk_devno: dev_t,
+    pub devno: Stat,
+    pub disk_devno: Stat,
     pub probe_flags: ProbeFlags,
+    //pub part_table_values: Option<>
     pub values: ProbeResults,
 }
 
@@ -169,8 +196,8 @@ impl BlockProbe {
             file: File, 
             begin: u64, 
             end: u64, 
-            devno: dev_t, 
-            disk_devno: dev_t,
+            devno: Stat, 
+            disk_devno: Stat,
         ) -> Self 
     {
         BlockProbe { 
@@ -184,99 +211,40 @@ impl BlockProbe {
             }
     }
 
-    pub fn is_tiny(
-            &self
-        ) -> bool 
-    {
-        self.probe_flags.contains(ProbeFlags::TINY_DEV)
-    }
+    is_flags!(is_tiny, ProbeFlags::TINY_DEV);
 
-    pub fn set_fs_type(
-            &mut self, 
-            fs_type: FsType
-        ) 
-    {
-        self.values.fs.fs_type = Some(fs_type)
-    }
+    set_probe_values_fs!(set_fs_type, fs_type, FsType);
+    set_probe_values_fs!(set_fs_version, fs_version, FsVersion);
+    set_probe_values_fs!(set_uuid, uuid, BlkUuid);
+    set_probe_values_fs!(set_uuid_sub, uuid_sub, BlkUuid);
 
-    pub fn set_fs_version(
-            &mut self, 
-            fs_version: FsVersion
-        ) 
-    {
-        self.values.fs.fs_version = Some(fs_version)
-    }
-
-    pub fn set_uuid(
-            &mut self, 
-            uuid: BlkUuid
-        ) 
-    {
-        self.values.fs.uuid = Some(uuid)
-    }
-
-    pub fn set_uuid_sub(&mut self, 
-            uuid_sub: BlkUuid
-        ) 
-    {
-        self.values.fs.uuid_sub = Some(uuid_sub)
-    }
-
-    pub fn set_label_utf8_lossy(&mut self, 
-            label: &[u8]
-        ) 
+    pub fn set_label_utf8_lossy(&mut self, label: &[u8]) 
     {
         self.values.fs.label = Some(String::from_utf8_lossy(label).to_string())
     }
 
-    pub fn set_usage(
-            &mut self, 
-            usage: Usage
-        ) 
-    {
-        self.values.fs.usage = Some(usage)
-    }
+    set_probe_values_fs!(set_usage, usage, Usage);
+    set_probe_values_fs!(set_fs_extras, fs_extras, FsExtras);
+    set_probe_values_fs!(set_fs_block_size, fs_block_size, u64);
+    set_probe_values_fs!(set_block_size, block_size, u64);
+    set_probe_values_fs!(set_fs_size, fs_size, u64);
+    set_probe_values!(set_sec_type, sec_type, FsSecType);
 
-    pub fn set_fs_extras(
-            &mut self,
-            extra: FsExtras
-        )
-    {
-        self.values.fs.fs_extras = Some(extra)
-    }
-
-    pub fn set_fs_block_size (
-            &mut self,
-            fs_block_size: u64,
-        )
-    {
-        self.values.fs.fs_block_size = Some(fs_block_size)
-    }
-
-    pub fn set_block_size (
-            &mut self,
-            block_size: u64,
-        )
-    {
-        self.values.fs.block_size = Some(block_size)
-    }
-
-    pub fn set_fs_size (
-            &mut self,
-            fs_size: u64,
-        )
-    {
-        self.values.fs.fs_size = Some(fs_size)
-    }
-
-    pub fn set_sec_type (
-            &mut self,
-            sec_type: FsSecType,
-        )
-    {
-        self.values.sec_type = Some(sec_type)
-    }
 }
+
+pub type FsProbeFn = fn(&mut BlockProbe, BlockMagic) -> Result<(), Box<dyn std::error::Error>>;
+
+pub struct FsProbeEntry {
+    pub id: &'static BlockId,
+    pub probe_fn: FsProbeFn,
+}
+
+pub static FS_PROBE_CHAIN: &[FsProbeEntry] = &[
+    FsProbeEntry {
+        id: &VFAT_ID_INFO,
+        probe_fn: probe_vfat,
+    },
+];
 
 pub fn get_buffer(
         probe: &mut BlockProbe,
@@ -341,3 +309,20 @@ pub fn read_as<T: Pod>(
     Ok(*ptr)
 }
 
+pub fn get_dev_t<P: AsRef<Path>>(path: P) -> Option<u64> {
+    let stat: Stat = stat(path.as_ref()).ok()?;
+    Some(stat.st_rdev) 
+}
+
+pub fn get_disk_devno<P: AsRef<Path>>(path: P) -> Option<u64> {
+    let stat: Stat = stat(path.as_ref()).ok()?;
+    Some(stat.st_dev) 
+}
+
+fn probe_from_filename(filename: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let file = File::open(filename)?;
+    
+    //let probe = BlockProbe::new(file, 0, 0, Stat::from(2), disk_devno)
+
+    return Ok(());
+}
