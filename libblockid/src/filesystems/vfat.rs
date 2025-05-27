@@ -1,14 +1,16 @@
 use std::u16;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use byteorder::{ByteOrder, LittleEndian};
 use bytemuck::checked::from_bytes;
 use bytemuck::{Pod, Zeroable};
 
 
-use crate::volume_id::VolumeId32;
-use crate::*;
-use crate::probe::*;
+use crate::filesystems::volume_id::VolumeId32;
+use crate::is_power_2;
+use crate::probe::{BlockProbe, BlockId, BlockMagic, Usage, 
+                    FsType, FsVersion, FsExtras, FsSecType, 
+                    BlkUuid, read_as, probe_get_magic, get_buffer};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VfatVersion {
@@ -25,8 +27,8 @@ pub struct VfatExtras {
 
 pub const VFAT_ID_INFO: BlockId = BlockId {
     name: "vfat",
-    usage: Usage::Filesystem,
-    //probe: "String",
+    usage: Some(Usage::Filesystem),
+    minsz: None,
     magics: &[
         BlockMagic {
             magic: b"MSWIN",
@@ -382,7 +384,7 @@ pub fn probe_vfat(
             None
         };
 
-        let vol_serno: volume_id::VolumeId32 = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
+        let vol_serno: VolumeId32 = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
             VolumeId32::new(ms.ms_serno)
         } else { 
             VolumeId32::empty() // maybe should error out, will think about it
