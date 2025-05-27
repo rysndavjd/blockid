@@ -190,25 +190,23 @@ pub struct ModernMBR {
 
 pub struct DosSubType {
     type_code: u8,
-    id: &'static [BlockId]
-}
-
-struct DosSubtype {
-    type_code: u8,
     id: &'static BlockId,
 }
 
-const DOS_NESTED: &[DosSubtype] = &[
-    DosSubtype { type_code: MbrPartitionType::MBR_FREEBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
-    DosSubtype { type_code: MbrPartitionType::MBR_NETBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
-    DosSubtype { type_code: MbrPartitionType::MBR_OPENBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
-    DosSubtype { type_code: MbrPartitionType::MBR_UNIXWARE_PARTITION.as_byte(), id: &UNIXWARE_PT_IDINFO },
-    DosSubtype { type_code: MbrPartitionType::MBR_SOLARIS_X86_PARTITION.as_byte(), id: &SOLARIS_X86_PT_IDINFO },
-    DosSubtype { type_code: MbrPartitionType::MBR_MINIX_PARTITION.as_byte(), id: &MINIX_PT_IDINFO },
+const DOS_NESTED: &[DosSubType] = &[
+    DosSubType { type_code: MbrPartitionType::MBR_FREEBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
+    DosSubType { type_code: MbrPartitionType::MBR_NETBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
+    DosSubType { type_code: MbrPartitionType::MBR_OPENBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
+    DosSubType { type_code: MbrPartitionType::MBR_UNIXWARE_PARTITION.as_byte(), id: &UNIXWARE_PT_IDINFO },
+    DosSubType { type_code: MbrPartitionType::MBR_SOLARIS_X86_PARTITION.as_byte(), id: &SOLARIS_X86_PT_IDINFO },
+    DosSubType { type_code: MbrPartitionType::MBR_MINIX_PARTITION.as_byte(), id: &MINIX_PT_IDINFO },
 ];
 
 const MBR_PT_OFFSET: u32 = 0x1be;
 const MBR_PT_BOOTBITS_SIZE: u32 = 440;
+
+
+
 
 pub const DOS_PT_ID_INFO: BlockId = BlockId {
     name: "dos",
@@ -230,7 +228,3 @@ pub const DOS_PT_ID_INFO: BlockId = BlockId {
         },
     ]
 };
-
-fn test() {
-
-}
