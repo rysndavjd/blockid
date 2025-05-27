@@ -1,18 +1,9 @@
-// Partition Tables
-pub mod mbr;
-pub mod gpt;
-
-// Filesystems
-pub mod ext4;
-pub mod vfat;
+pub mod partitions;
+pub mod filesystems;
 
 // Library code
 pub mod probe;
-pub mod volume_id;
 
-use crate::probe::*;
-
-use uuid::Uuid;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 

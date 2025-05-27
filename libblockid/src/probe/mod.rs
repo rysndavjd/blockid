@@ -1,12 +1,12 @@
-use crate::volume_id;
-use crate::vfat::{VfatExtras, VfatVersion};
-
 use uuid::Uuid;
 use std::fs::File;
 use nix::sys::stat::dev_t;
 use bitflags::bitflags;
 use bytemuck::{from_bytes, Pod};
 use std::io::{Read, Seek, SeekFrom};
+
+use crate::filesystems::vfat::{VfatExtras, VfatVersion};
+use crate::filesystems::volume_id::{self, VolumeId32, VolumeId64};
 
 bitflags! {
     #[derive(Debug, Clone)]
@@ -47,7 +47,7 @@ pub enum PartTableType {
 pub enum BlkUuid {
     Standard(Uuid),
     VolumeId32(volume_id::VolumeId32),
-    //VolumeId64([u8; 8]),
+    VolumeId64(volume_id::VolumeId64),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,7 +128,9 @@ pub struct BlockMagic {
 #[derive(Debug, Clone)]
 pub struct BlockId {
     pub name: &'static str,
-    pub usage: Usage,
+    pub usage: Option<Usage>,
+    //pub flags: Option<>,
+    pub minsz: Option<u64>,
     pub magics: &'static [BlockMagic],
 }
 
@@ -290,6 +292,14 @@ pub fn get_buffer(
     block.read_exact(&mut buffer)?;
 
     return Ok(buffer);
+}
+
+pub fn get_sector(
+        probe: &mut BlockProbe,
+        sector: u64,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> 
+{
+    get_buffer(probe, sector << 9, 0x200)
 }
 
 pub fn probe_get_magic(
