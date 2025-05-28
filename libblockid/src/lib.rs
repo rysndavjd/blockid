@@ -1,48 +1,68 @@
 pub mod partitions;
 pub mod filesystems;
-
-// Library code
 pub mod probe;
 
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use bitflags::bitflags;
+use rustix::fs::{Dev, Mode};
 
-/*
-ideas
-
-make a probe function with a struct
-that has basic info for filesystems and partitions eg like
-struct filesystems
-    file system uuid
-    partition uuid 
-    label
-    filesystem type
-    filesystem version 
-    filesystem magic signature
-    size of filesystem in bytes
-    
-struct partitions
-    partition type
-    partition table uuid/id
-    partition name
-    partition uuid
-    partition number
-    partition offset
-    partition size
-    disk maj:min
-*/
-
-fn is_power_2(num: u64) -> bool {
-    return num != 0 && ((num & (num - 1)) == 0); 
+bitflags! {
+    struct BlockidFlags: u32 {
+        const BLKID_FL_PRIVATE_FD = 1 << 1;
+        const BLKID_FL_TINY_DEV = 1 << 2;
+        const BLKID_FL_CDROM_DEV = 1 << 3;
+        const BLKID_FL_NOSCAN_DEV = 1 << 4;
+        const BLKID_FL_MODIF_BUFF = 1 << 5;
+        const BLKID_FL_OPAL_LOCKED = 1 << 6;
+        const BLKID_FL_OPAL_CHECKED = 1 << 7;
+    }
 }
 
-pub fn read_raw(device: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut superblock = File::open(device)?;
-    //superblock.seek(SeekFrom::Start(65536))?;
-    let mut buffer = [0; 512];
-    superblock.read_exact(&mut buffer)?;
+bitflags! {
+    struct BlockidProbFlags: u32 {
+        const BLKID_PROBE_FL_IGNORE_PT = 1 << 1;
+    }
+}
 
-    println!("{:X?}", buffer);
-    return Ok(());
+struct BlockidProbe {
+    file: File,
+    begin: u64,
+    end: u64,
+    io_size: u64,
+
+    devno: Dev,
+    disk_devno: Dev,
+    sector_size: u64,
+    mode: Mode,
+    zone_size: u64,
+
+    flags: BlockidFlags,
+    prob_flags: BlockidProbFlags
+}
+
+
+
+bitflags! {
+    struct UsageFlags: u32 {
+        const FILESYSTEM    = 1 << 1;
+        const RAID          = 1 << 2;
+        const CRYPTO        = 1 << 3;
+        const OTHER         = 1 << 4;
+    }
+}
+
+bitflags! {
+    struct IdInfoFlags: u32 {
+        const BLKID_IDINFO_TOLERANT    = 1 << 1;
+    }
+}
+
+pub type FsProbeFn = fn(&mut BlockProbe, BlockMagic) -> Result<(), Box<dyn std::error::Error>>;
+
+struct BlockidIdinfo {
+    name: String,
+    usage: UsageFlags,
+    flags: IdInfoFlags,
+    minsz: u64,
 
 }
