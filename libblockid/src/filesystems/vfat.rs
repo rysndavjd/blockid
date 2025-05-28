@@ -7,7 +7,6 @@ use bytemuck::{Pod, Zeroable};
 
 
 use crate::filesystems::volume_id::VolumeId32;
-use crate::is_power_2;
 use crate::probe::{BlockProbe, BlockId, BlockMagic, Usage, 
                     FsType, FsVersion, FsExtras, FsSecType, 
                     BlkUuid, read_as, probe_get_magic, get_buffer};
@@ -184,6 +183,10 @@ const FAT_ATTR_DIR: u8 = 0x10;
 const FAT_ATTR_LONG_NAME: u8 = 0x0f;
 const FAT_ATTR_MASK: u8 = 0x3f;
 const FAT_ENTRY_FREE: u8 = 0xe5;
+
+fn is_power_2(num: u64) -> bool {
+    return num != 0 && ((num & (num - 1)) == 0); 
+}
 
 fn read_vfat_dir_entry(
         raw_block: &File,
