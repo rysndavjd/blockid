@@ -7,9 +7,8 @@ use bytemuck::{Pod, Zeroable};
 
 
 use crate::filesystems::volume_id::VolumeId32;
-use crate::probe::{BlockProbe, BlockId, BlockMagic, Usage, 
-                    FsType, FsVersion, FsExtras, FsSecType, 
-                    BlkUuid, read_as, probe_get_magic, get_buffer};
+use crate::probe::{read_as, probe_get_magic, get_buffer};
+use crate::{BlockMagic, BlockidIdinfo, UsageFlags, BlockidProbe};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VfatVersion {
@@ -24,9 +23,11 @@ pub struct VfatExtras {
     boot_label: Option<String>
 }
 
-pub const VFAT_ID_INFO: BlockId = BlockId {
-    name: "vfat",
-    usage: Some(Usage::Filesystem),
+pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+    name: Some("vfat"),
+    usage: Some(UsageFlags::FILESYSTEM),
+    flags: None,
+    probe_fn: probe_vfat,
     minsz: None,
     magics: &[
         BlockMagic {
@@ -308,7 +309,7 @@ fn valid_fat (
 }
 
 pub fn probe_is_vfat(
-        probe: &mut BlockProbe,
+        probe: &mut BlockidProbe,
     ) -> Result<(), Box<dyn std::error::Error>>
 {
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
@@ -322,7 +323,7 @@ pub fn probe_is_vfat(
 }
 
 pub fn search_fat_label(
-        probe: &mut BlockProbe,
+        probe: &mut BlockidProbe,
         root_start: u32,
         root_dir_entries: u32,
     ) -> Result<[u8; 11], Box<dyn std::error::Error>> 
@@ -361,7 +362,7 @@ pub fn search_fat_label(
 }
 
 pub fn probe_vfat(
-    probe: &mut BlockProbe,
+    probe: &mut BlockidProbe,
     mag: BlockMagic,
 ) -> Result<() ,Box<dyn std::error::Error>> 
 {
@@ -403,16 +404,16 @@ pub fn probe_vfat(
         
         let oem_name = String::from_utf8_lossy(&ms.ms_sysid).to_string();
 
-        probe.set_fs_type(FsType::Vfat);
-        probe.set_fs_version(FsVersion::Vfat(fat_version));
-        probe.set_uuid(BlkUuid::VolumeId32(vol_serno));
-        probe.set_label_utf8_lossy(&vol_label);
-        probe.set_usage(Usage::Filesystem);
-        probe.set_fs_block_size(vs.vs_cluster_size as u64 * sector_size as u64);
-        probe.set_block_size(sector_size as u64);
-        probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
-        probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
-        probe.set_sec_type(FsSecType::Msdos);
+        //probe.set_fs_type(FsType::Vfat);
+        //probe.set_fs_version(FsVersion::Vfat(fat_version));
+        //probe.set_uuid(BlkUuid::VolumeId32(vol_serno));
+        //probe.set_label_utf8_lossy(&vol_label);
+        //probe.set_usage(Usage::Filesystem);
+        //probe.set_fs_block_size(vs.vs_cluster_size as u64 * sector_size as u64);
+        //probe.set_block_size(sector_size as u64);
+        //probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
+        //probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
+        //probe.set_sec_type(FsSecType::Msdos);
 
         return Ok(());
     } else if vs.vs_fat32_length != 0 {
@@ -474,15 +475,15 @@ pub fn probe_vfat(
             None
         };
 
-        probe.set_fs_type(FsType::Vfat);
-        probe.set_fs_version(FsVersion::Vfat(VfatVersion::Fat32));
-        probe.set_uuid(BlkUuid::VolumeId32(VolumeId32::new(vs.vs_serno)));
-        probe.set_label_utf8_lossy(&vol_label.expect("vol_label should be valid"));
-        probe.set_usage(Usage::Filesystem);
-        probe.set_fs_block_size(vs.vs_cluster_size as u64 * sector_size as u64);
-        probe.set_block_size(sector_size as u64);
-        probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
-        probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
+        //probe.set_fs_type(FsType::Vfat);
+        //probe.set_fs_version(FsVersion::Vfat(VfatVersion::Fat32));
+        //probe.set_uuid(BlkUuid::VolumeId32(VolumeId32::new(vs.vs_serno)));
+        //probe.set_label_utf8_lossy(&vol_label.expect("vol_label should be valid"));
+        //probe.set_usage(Usage::Filesystem);
+        //probe.set_fs_block_size(vs.vs_cluster_size as u64 * sector_size as u64);
+        //probe.set_block_size(sector_size as u64);
+        //probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
+        //probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
         
         return Ok(());
     }

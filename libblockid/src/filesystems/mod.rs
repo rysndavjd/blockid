@@ -9,10 +9,10 @@ SEC_TYPE:       Secondary filesystem type
 LABEL:          fs label
 LABEL_RAW:      Raw fs label
 UUID:           fs uuid
+UUID_RAW:       raw uuid
 UUID_SUB:       Sub uuid
 LOG_UUID:       external log uuid
-UUID_RAW:       raw uuid
-UUID_SUB_RAW:   raw sub uuid
+LOG_UUID_RAW:       external log uuid
 EXT_JOURNAL:    external journal uuid
 USAGE:          usage string 
 VERSION:        fs version
