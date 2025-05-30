@@ -8,7 +8,7 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::filesystems::volume_id::VolumeId32;
 use crate::probe::{read_as, probe_get_magic, get_buffer};
-use crate::{BlockMagic, BlockidIdinfo, UsageFlags, BlockidProbe};
+use crate::{BlockidMagic, BlockidIdinfo, Usage, BlockidProbe, BlockidFlags};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VfatVersion {
@@ -25,37 +25,36 @@ pub struct VfatExtras {
 
 pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("vfat"),
-    usage: Some(UsageFlags::FILESYSTEM),
-    flags: None,
+    usage: Some(Usage::FILESYSTEM),
     probe_fn: probe_vfat,
     minsz: None,
     magics: &[
-        BlockMagic {
+        BlockidMagic {
             magic: b"MSWIN",
             len: 5,
             b_offset: 0x52,
         },
-        BlockMagic {
+        BlockidMagic {
             magic: b"FAT32   ",
             len: 8,
             b_offset: 0x52,
         },
-        BlockMagic {
+        BlockidMagic {
             magic: b"MSDOS",
             len: 5,
             b_offset: 0x36,
         },
-        BlockMagic {
+        BlockidMagic {
             magic: b"FAT16   ",
             len: 8,
             b_offset: 0x36,
         },
-        BlockMagic {
+        BlockidMagic {
             magic: b"FAT12   ",
             len: 8,
             b_offset: 0x36,
         },
-        BlockMagic {
+        BlockidMagic {
             magic: b"FAT     ",
             len: 8,
             b_offset: 0x36,
@@ -72,7 +71,7 @@ pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             b_offset: None,
         },
         */
-        BlockMagic {
+        BlockidMagic {
             magic: &[0x55, 0xAA],
             len: 2,
             b_offset: 0x1fe,
@@ -252,7 +251,7 @@ fn get_sect_count (
 fn valid_fat (
         ms: MsDosSuperBlock,
         vs: VFatSuperBlock,
-        mag: BlockMagic,
+        mag: BlockidMagic,
     ) -> Result<() ,Box<dyn std::error::Error>> 
 {    
     if mag.len <= 2 {
@@ -315,7 +314,7 @@ pub fn probe_is_vfat(
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
 
-    let mag: BlockMagic = probe_get_magic(probe, &VFAT_ID_INFO)?;
+    let mag: BlockidMagic = probe_get_magic(probe, VFAT_ID_INFO)?;
     
     valid_fat(ms, vs, mag)?;
 
@@ -328,7 +327,7 @@ pub fn search_fat_label(
         root_dir_entries: u32,
     ) -> Result<[u8; 11], Box<dyn std::error::Error>> 
 {
-    let is_tiny = !probe.is_tiny();
+    let is_tiny = !probe.flags.contains(BlockidFlags::TINY_DEV);
 
     for i in 0..root_dir_entries {
         let offset = if is_tiny {
@@ -363,7 +362,7 @@ pub fn search_fat_label(
 
 pub fn probe_vfat(
     probe: &mut BlockidProbe,
-    mag: BlockMagic,
+    mag: BlockidMagic,
 ) -> Result<() ,Box<dyn std::error::Error>> 
 {
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
