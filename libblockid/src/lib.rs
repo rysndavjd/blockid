@@ -2,7 +2,7 @@ pub mod partitions;
 pub mod filesystems;
 pub mod probe;
 
-use std::fs::File;
+use std::{fs::File, slice::SliceIndex};
 use bitflags::bitflags;
 use filesystems::volume_id::{VolumeId32, VolumeId64};
 use rustix::fs::{Dev, Mode};
@@ -11,22 +11,29 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub struct BlockidProbe {
     pub file: File,
-    pub begin: u64,
-    pub end: u64,
-    pub io_size: u64,
+    //pub begin: u64,
+    //pub end: u64,
+    //pub io_size: u64,
 
-    pub devno: Dev,
-    pub disk_devno: Dev,
-    pub sector_size: u64,
-    pub mode: Mode,
+    //pub devno: Dev,
+    //pub disk_devno: Dev,
+    //pub sector_size: u64,
+    //pub mode: Mode,
 
     pub flags: BlockidFlags,
-    pub values: ProbeResult
+    pub pt_values: Option<ProbePtResult>,
+    pub fs_values: Option<ProbeFsResult>,
+}
+
+impl BlockidProbe {
+    pub fn new(file: File) -> Self {
+        BlockidProbe { file: file, flags: BlockidFlags::empty(), pt_values: Some(ProbePtResult::empty()), fs_values: Some(ProbeFsResult::empty())}
+    }
 }
 
 bitflags! {
     #[derive(Debug)]
-    struct BlockidFlags: u32 {
+    pub struct BlockidFlags: u32 {
         const PRIVATE_FD = 1 << 1;
         const TINY_DEV = 1 << 2;
         const CDROM_DEV = 1 << 3;
@@ -38,7 +45,7 @@ bitflags! {
 }
 
 #[derive(Debug)]
-pub struct ProbeResult {
+pub struct ProbePtResult {
     pub pt_type: Option<String>,
     pub pt_uuid: Option<BlockidPtUUID>,
     pub part_entry_scheme: Option<String>,
@@ -50,7 +57,16 @@ pub struct ProbeResult {
     pub part_entry_offset: Option<u64>,
     pub part_entry_size: Option<u64>,
     pub part_entry_disk: Option<Dev>,
+}
 
+impl ProbePtResult {
+    pub fn empty() -> Self {
+        ProbePtResult { pt_type: None, pt_uuid: None, part_entry_scheme: None, part_entry_name: None, part_entry_uuid: None, part_entry_number: None, part_entry_offset: None, part_entry_size: None, part_entry_disk: None }
+    }
+}
+
+#[derive(Debug)]
+pub struct ProbeFsResult {
     pub fs_type: Option<String>,
     pub sec_type: Option<String>,
     pub label: Option<String>,
@@ -71,41 +87,41 @@ pub struct ProbeResult {
     pub block_size: Option<u64>,
 }
 
-impl ProbeResult {
-    pub fn pt_type(&mut self, pt_type: Option<String>) {
-        self.pt_type = pt_type
+
+impl ProbeFsResult {
+    pub fn empty() -> Self {
+        ProbeFsResult { fs_type: None, sec_type: None, label: None, fs_uuid: None, log_uuid: None, ext_journal: None, fs_creator: None, usage: None, version: None, sbmagic: None, sbmagic_offset: None, fs_size: None, fs_last_block: None, fs_block_size: None, block_size: None }
     }
 }
 
 #[derive(Debug)]
-enum BlockidPtUUID {
+pub enum BlockidPtUUID {
     Standard(Uuid),
     VolumeId32(VolumeId32),
     VolumeId64(VolumeId64)
 }
 
 #[derive(Debug)]
-enum BlockidFsUUID {
+pub enum BlockidFsUUID {
     Standard(Uuid),
     VolumeId32(VolumeId32),
     VolumeId64(VolumeId64)
 }
 
-struct BlockidIdinfo {
-    name: Option<&'static str>,
-    usage: Option<Usage>,
-    minsz: Option<u64>,
-    probe_fn: ProbeFn,
-    magics: &'static [BlockidMagic],
+pub struct BlockidIdinfo {
+    pub name: Option<&'static str>,
+    pub usage: Option<Usage>,
+    pub minsz: Option<u64>,
+    pub probe_fn: ProbeFn,
+    pub magics: &'static [BlockidMagic],
 }
 
-bitflags! {
-    struct Usage: u32 {
-        const FILESYSTEM    = 1 << 1;
-        const RAID          = 1 << 2;
-        const CRYPTO        = 1 << 3;
-        const OTHER         = 1 << 4;
-    }
+pub enum Usage {
+    Filesystem,
+    PartitionTable,
+    Raid,
+    Crypto,
+    Other(String),
 }
 
 pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<(), Box<dyn std::error::Error>>;

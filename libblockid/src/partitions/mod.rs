@@ -27,6 +27,7 @@ struct BlockidPartTable {
     pttype: PTType,
     offset: u64,
     num_parts: u64,
+    id: Uuid,
 }
 
 struct BlockidPartition {
@@ -40,10 +41,26 @@ struct BlockidPartition {
 
     partno: u64,
     uuid: Option<Uuid>,
+    name: String,
+
+    table: BlockidPartTable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PTType {
+    #[cfg(feature = "dos")]
+    Dos,
+    #[cfg(feature = "gpt")]
+    Gpt,
+    #[cfg(feature = "mac")]
+    Mac,
+    #[cfg(feature = "bsd")]
+    Bsd,
+    Unknown(String), 
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PTflags {
     #[cfg(feature = "dos")]
     Dos,
     #[cfg(feature = "gpt")]

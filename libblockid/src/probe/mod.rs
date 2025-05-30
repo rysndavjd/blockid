@@ -6,28 +6,43 @@ use rustix::fs::{stat, Stat};
 
 use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic};
 
-pub fn get_buffer(
+pub fn read_buffer<const Buf_size: usize>(
         probe: &mut BlockidProbe,
         offset: u64,
-        buffer_size: usize,
-    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> 
+    ) -> Result<[u8; Buf_size], Box<dyn std::error::Error>> 
 {
     let mut block = probe.file.try_clone()?;
     block.seek(SeekFrom::Start(0))?;
 
-    let mut buffer = vec![0u8; buffer_size];
+    let mut buffer = [0u8; Buf_size];
     block.seek(SeekFrom::Start(offset))?;
     block.read_exact(&mut buffer)?;
 
     return Ok(buffer);
 }
 
-pub fn get_sector(
+pub fn read_buffer_vec(
         probe: &mut BlockidProbe,
-        sector: u64,
+        offset: u64,
+        buf_size: usize
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> 
 {
-    get_buffer(probe, sector << 9, 0x200)
+    let mut block = probe.file.try_clone()?;
+    block.seek(SeekFrom::Start(0))?;
+
+    let mut buffer = vec![0u8; buf_size];
+    block.seek(SeekFrom::Start(offset))?;
+    block.read_exact(&mut buffer)?;
+
+    return Ok(buffer);
+}
+
+pub fn read_sector(
+        probe: &mut BlockidProbe,
+        sector: u64,
+    ) -> Result<[u8; 512], Box<dyn std::error::Error>> 
+{
+    read_buffer::<512>(probe, sector << 9)
 }
 
 pub fn probe_get_magic(
