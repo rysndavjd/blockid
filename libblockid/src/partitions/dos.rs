@@ -1,10 +1,14 @@
+use std::collections::btree_map::Entry;
+use std::os::linux::raw;
 use std::u16;
 use std::io::{Read, Seek, SeekFrom};
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
+use bytemuck::{from_bytes, Pod, Zeroable};
 
-use crate::probe::{BlockId, BlockMagic, Usage};
+use crate::probe::read_sector;
+use crate::{BlockidIdinfo, Usage, BlockidProbe, BlockidMagic};
 use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
-
+use crate::filesystems::vfat::probe_is_vfat;
 use super::bsd::BSD_PT_IDINFO;
 use super::minix::MINIX_PT_IDINFO;
 use super::solaris_x86::SOLARIS_X86_PT_IDINFO;
@@ -132,18 +136,18 @@ impl MbrPartitionType {
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct DosPartitionEntry {
-    pub status: u8,                 /* 0x80 - active */
-    pub begin_head: u8,             /* begin CHS */
+    pub boot_ind: u8,           /* 0x80 - active */
+    pub begin_head: u8,         /* begin CHS */
     pub begin_sector: u8,
     pub begin_cylinder: u8,
-    pub partition_type: u8,         /* https://en.wikipedia.org/wiki/Partition_type */
-    pub end_head: u8,             /* end CHS */
+    pub sys_ind: u8,            /* https://en.wikipedia.org/wiki/Partition_type */
+    pub end_head: u8,           /* end CHS */
     pub end_sector: u8,
     pub end_cylinder: u8,
-    pub lba_first_sectors: u32,
-    pub number_of_sectors: u32,
+    pub start_sect: u32,
+    pub nr_sects: u32,
 }
 
 #[repr(C, packed)]
@@ -190,7 +194,7 @@ pub struct ModernMBR {
 
 pub struct DosSubType {
     type_code: u8,
-    id: &'static BlockId,
+    id: &'static BlockidIdinfo,
 }
 
 const DOS_NESTED: &[DosSubType] = &[
@@ -205,13 +209,11 @@ const DOS_NESTED: &[DosSubType] = &[
 const MBR_PT_OFFSET: u32 = 0x1be;
 const MBR_PT_BOOTBITS_SIZE: u32 = 440;
 
-
-
-
-pub const DOS_PT_ID_INFO: BlockId = BlockId {
-    name: "dos",
-    usage: Some(Usage::PartTable),
+pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+    name: Some("dos"),
+    usage: Some(Usage::PartitionTable),
     minsz: None,
+    probe_fn: probe_dos_pt,
     magics: &[
         /* DOS master boot sector:
 		 *
@@ -221,10 +223,56 @@ pub const DOS_PT_ID_INFO: BlockId = BlockId {
 		 *   510 | 0x55
 		 *   511 | 0xAA
 		 */
-        BlockMagic {
+         BlockidMagic {
             magic: b"\x55\xAA",
             len: 2,
             b_offset: 510,
         },
     ]
 };
+
+fn mbr_get_entries(mbr: &[u8; 512]) -> [DosPartitionEntry; 4] { 
+    // This is sketchy AF
+    let p0 = *from_bytes::<DosPartitionEntry>(&mbr[446..462]);
+    let p1 = *from_bytes::<DosPartitionEntry>(&mbr[462..478]);
+    let p2 = *from_bytes::<DosPartitionEntry>(&mbr[478..494]);
+    let p3 = *from_bytes::<DosPartitionEntry>(&mbr[494..510]);
+
+    return [p0, p1, p2, p3];
+}
+
+fn mbr_get_id(mbr: &[u8; 512]) -> u32 {
+    return LittleEndian::read_u32(&mbr[440..444]);
+}
+
+pub fn probe_dos_pt(probe: &mut BlockidProbe, mag: BlockidMagic) -> Result<(), Box<dyn std::error::Error>> {
+    
+    let mbr = read_sector(probe, 0)?;
+    
+    if mbr[0..3] == BLKID_AIX_MAGIC_STRING {
+        return Err("Aix detected".into());
+    }
+
+    let part_entries = mbr_get_entries(&mbr);
+
+    for entry in part_entries {
+        if entry.boot_ind != 0 && entry.boot_ind != 0x80 {
+            return Err("missing boot indicator -- ignore".into());
+        }
+    }
+
+    for entry in part_entries {
+        if entry.sys_ind == MbrPartitionType::MBR_GPT_PARTITION.as_byte() {
+            return Err("probably GPT -- ignore".into());
+        }
+    }
+
+    if probe_is_vfat(probe).is_ok() {
+        return Err("probably FAT -- ignore".into());
+    }
+
+    let id = mbr_get_id(&mbr);
+    println!("{:08X}", id);
+    
+    return Ok(());
+}

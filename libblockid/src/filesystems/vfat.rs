@@ -7,7 +7,7 @@ use bytemuck::{Pod, Zeroable};
 
 
 use crate::filesystems::volume_id::VolumeId32;
-use crate::probe::{read_as, probe_get_magic, get_buffer};
+use crate::probe::{read_as, probe_get_magic, read_buffer_vec};
 use crate::{BlockidMagic, BlockidIdinfo, Usage, BlockidProbe, BlockidFlags};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,7 +25,7 @@ pub struct VfatExtras {
 
 pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("vfat"),
-    usage: Some(Usage::FILESYSTEM),
+    usage: Some(Usage::Filesystem),
     probe_fn: probe_vfat,
     minsz: None,
     magics: &[
@@ -440,7 +440,8 @@ pub fn probe_vfat(
                 }
                 Err(_) => {
                     let fat_entry_offset: u32 = (reserved * sector_size) + (next * 4);
-                    let buffer: Vec<u8> = get_buffer(probe, fat_entry_offset as u64, buf_size as usize)?;
+                    let buffer: Vec<u8> = read_buffer_vec(probe, fat_entry_offset as u64, buf_size as usize)?;
+                    
                     if buffer.len() < 4 {
                         break;
                     }
