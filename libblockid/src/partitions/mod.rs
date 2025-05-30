@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 pub mod dos;
 pub mod gpt;
 pub mod mac;
@@ -22,5 +24,33 @@ pub mod minix;
 */
 
 struct BlockidPartTable {
-  
+    pttype: PTType,
+    offset: u64,
+    num_parts: u64,
+}
+
+struct BlockidPartition {
+    start: u64,
+    size: u64,
+    
+    pttype: PTType,
+    pttype_str: Option<Uuid>,
+
+    flags: Option<u64>,
+
+    partno: u64,
+    uuid: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PTType {
+    #[cfg(feature = "dos")]
+    Dos,
+    #[cfg(feature = "gpt")]
+    Gpt,
+    #[cfg(feature = "mac")]
+    Mac,
+    #[cfg(feature = "bsd")]
+    Bsd,
+    Unknown(String), 
 }

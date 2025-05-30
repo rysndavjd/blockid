@@ -24,3 +24,6 @@ FSBLOCKSIZE:    fs block size
 BLOCK_SIZE:     block size of phyical disk
 */
 
+pub trait ProbeFilesystem {
+    fn probe_is(&self) -> Result<(), Box<dyn std::error::Error>>;
+}

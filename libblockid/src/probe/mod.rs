@@ -1,16 +1,13 @@
-use uuid::Uuid;
 use std::fs::File;
 use std::path::Path;
-use bitflags::bitflags;
 use bytemuck::{from_bytes, Pod};
 use std::io::{Read, Seek, SeekFrom};
 use rustix::fs::{stat, Stat};
 
-use crate::filesystems::vfat::{VfatExtras, VfatVersion, probe_vfat, VFAT_ID_INFO};
-use crate::filesystems::volume_id::{self, VolumeId32, VolumeId64};
+use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic};
 
 pub fn get_buffer(
-        probe: &mut BlockProbe,
+        probe: &mut BlockidProbe,
         offset: u64,
         buffer_size: usize,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> 
@@ -26,7 +23,7 @@ pub fn get_buffer(
 }
 
 pub fn get_sector(
-        probe: &mut BlockProbe,
+        probe: &mut BlockidProbe,
         sector: u64,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> 
 {
@@ -34,9 +31,9 @@ pub fn get_sector(
 }
 
 pub fn probe_get_magic(
-        probe: &mut BlockProbe, 
-        id_info: &BlockId
-    ) -> Result<BlockMagic, Box<dyn std::error::Error>>
+        probe: &mut BlockidProbe, 
+        id_info: BlockidIdinfo
+    ) -> Result<BlockidMagic, Box<dyn std::error::Error>>
 {
     for magic in id_info.magics {
         let b_offset: u64 = magic.b_offset;
@@ -50,7 +47,7 @@ pub fn probe_get_magic(
         raw.read_exact(&mut buffer)?;
 
         if buffer == magic.magic {
-            return Ok(magic.clone());
+            return Ok(*magic);
         }
     }
     return Err("Unable to find any magic".into());
