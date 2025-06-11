@@ -5,10 +5,9 @@ use byteorder::{ByteOrder, LittleEndian};
 use bytemuck::checked::from_bytes;
 use bytemuck::{Pod, Zeroable};
 
-
 use crate::filesystems::volume_id::VolumeId32;
-use crate::probe::{read_as, probe_get_magic, read_buffer_vec};
-use crate::{BlockidMagic, BlockidIdinfo, Usage, BlockidProbe, BlockidFlags};
+use crate::{read_as, probe_get_magic, read_buffer_vec};
+use crate::{BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VfatVersion {
@@ -25,7 +24,7 @@ pub struct VfatExtras {
 
 pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("vfat"),
-    usage: Some(Usage::Filesystem),
+    usage: Some(UsageType::Filesystem),
     probe_fn: probe_vfat,
     minsz: None,
     magics: &[
@@ -309,16 +308,16 @@ fn valid_fat (
 
 pub fn probe_is_vfat(
         probe: &mut BlockidProbe,
-    ) -> Result<(), Box<dyn std::error::Error>>
+    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>>
 {
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
 
-    let mag: BlockidMagic = probe_get_magic(probe, VFAT_ID_INFO)?;
+    let mag: BlockidMagic = probe_get_magic(probe, &VFAT_ID_INFO)?;
     
     valid_fat(ms, vs, mag)?;
 
-    return Ok(());
+    return Ok(None);
 }
 
 pub fn search_fat_label(
@@ -327,7 +326,7 @@ pub fn search_fat_label(
         root_dir_entries: u32,
     ) -> Result<[u8; 11], Box<dyn std::error::Error>> 
 {
-    let is_tiny = !probe.flags.contains(BlockidFlags::TINY_DEV);
+    let is_tiny = false; // !probe.flags.contains(BlockidFlags::TINY_DEV);
 
     for i in 0..root_dir_entries {
         let offset = if is_tiny {
@@ -363,7 +362,7 @@ pub fn search_fat_label(
 pub fn probe_vfat(
     probe: &mut BlockidProbe,
     mag: BlockidMagic,
-) -> Result<() ,Box<dyn std::error::Error>> 
+) -> Result<Option<ProbeResult> ,Box<dyn std::error::Error>> 
 {
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
@@ -390,7 +389,7 @@ pub fn probe_vfat(
         let vol_serno: VolumeId32 = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
             VolumeId32::new(ms.ms_serno)
         } else { 
-            VolumeId32::empty() // maybe should error out, will think about it
+            return Err("Unable to get Volumeid".into());
         };
 
         let fat_version = if cluster_count < FAT12_MAX {
@@ -414,7 +413,7 @@ pub fn probe_vfat(
         //probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
         //probe.set_sec_type(FsSecType::Msdos);
 
-        return Ok(());
+        return Ok(None);
     } else if vs.vs_fat32_length != 0 {
         let mut maxloop = 100;
         
@@ -485,7 +484,7 @@ pub fn probe_vfat(
         //probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
         //probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
         
-        return Ok(());
+        return Ok(None);
     }
 
     return Err("Unable to probe fat stuff".into());

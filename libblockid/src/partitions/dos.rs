@@ -1,18 +1,18 @@
-use std::collections::btree_map::Entry;
-use std::os::linux::raw;
+use crate::partitions::{BlockidPartList, BlockidPartTable};
+use crate::{ProbeResult, BlockidIdinfo, UsageType, BlockidProbe, BlockidMagic, get_sectorsize, read_sector};
+use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
+use crate::filesystems::vfat::probe_is_vfat;
+use crate::partitions::PTType;
+use super::bsd::BSD_PT_IDINFO;
+use super::minix::MINIX_PT_IDINFO;
+use super::solaris_x86::SOLARIS_X86_PT_IDINFO;
+use super::unixware::UNIXWARE_PT_IDINFO;
+
 use std::u16;
 use std::io::{Read, Seek, SeekFrom};
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use bytemuck::{from_bytes, Pod, Zeroable};
 
-use crate::probe::read_sector;
-use crate::{BlockidIdinfo, Usage, BlockidProbe, BlockidMagic};
-use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
-use crate::filesystems::vfat::probe_is_vfat;
-use super::bsd::BSD_PT_IDINFO;
-use super::minix::MINIX_PT_IDINFO;
-use super::solaris_x86::SOLARIS_X86_PT_IDINFO;
-use super::unixware::UNIXWARE_PT_IDINFO;
 
 /*
 Info from https://en.wikipedia.org/wiki/Master_boot_record
@@ -211,7 +211,7 @@ const MBR_PT_BOOTBITS_SIZE: u32 = 440;
 
 pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("dos"),
-    usage: Some(Usage::PartitionTable),
+    usage: Some(UsageType::PartitionTable),
     minsz: None,
     probe_fn: probe_dos_pt,
     magics: &[
@@ -245,8 +245,11 @@ fn mbr_get_id(mbr: &[u8; 512]) -> u32 {
     return LittleEndian::read_u32(&mbr[440..444]);
 }
 
-pub fn probe_dos_pt(probe: &mut BlockidProbe, mag: BlockidMagic) -> Result<(), Box<dyn std::error::Error>> {
-    
+pub fn probe_dos_pt(
+        probe: &mut BlockidProbe, 
+        mag: BlockidMagic
+    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
+{
     let mbr = read_sector(probe, 0)?;
     
     if mbr[0..3] == BLKID_AIX_MAGIC_STRING {
@@ -259,9 +262,7 @@ pub fn probe_dos_pt(probe: &mut BlockidProbe, mag: BlockidMagic) -> Result<(), B
         if entry.boot_ind != 0 && entry.boot_ind != 0x80 {
             return Err("missing boot indicator -- ignore".into());
         }
-    }
 
-    for entry in part_entries {
         if entry.sys_ind == MbrPartitionType::MBR_GPT_PARTITION.as_byte() {
             return Err("probably GPT -- ignore".into());
         }
@@ -274,5 +275,9 @@ pub fn probe_dos_pt(probe: &mut BlockidProbe, mag: BlockidMagic) -> Result<(), B
     let id = mbr_get_id(&mbr);
     println!("{:08X}", id);
     
-    return Ok(());
+    let ssf = get_sectorsize(probe)? / 512;
+
+    //let mut tab = BlockidPartList::new_parttable(ls, pttype, offset, id)
+
+    return Ok(None);
 }

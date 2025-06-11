@@ -1,8 +1,8 @@
-use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic, Usage};
+use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic, UsageType, ProbeResult};
 
 pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("bsd"),
-    usage: Some(Usage::PartitionTable),
+    usage: Some(UsageType::PartitionTable),
     probe_fn: probe_bsd_pt,
     minsz: None,
     magics: &[
@@ -27,7 +27,7 @@ pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
 fn probe_bsd_pt(
         probe: &mut BlockidProbe,
         mag: BlockidMagic,
-    ) -> Result<() ,Box<dyn std::error::Error>> 
+    ) -> Result<Option<ProbeResult> ,Box<dyn std::error::Error>> 
 {
-    Ok(())
+    Ok(None)
 }
