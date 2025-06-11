@@ -1,8 +1,8 @@
-use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic, Usage};
+use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic, UsageType, ProbeResult};
 
 pub const MINIX_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("minix"),
-    usage: Some(Usage::PartitionTable),
+    usage: Some(UsageType::PartitionTable),
     probe_fn: probe_minix_pt,
     minsz: None,
     magics: &[
@@ -17,7 +17,7 @@ pub const MINIX_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
 fn probe_minix_pt(
         probe: &mut BlockidProbe,
         mag: BlockidMagic,
-    ) -> Result<() ,Box<dyn std::error::Error>> 
+    ) -> Result<Option<ProbeResult> ,Box<dyn std::error::Error>> 
 {
-    Ok(())
+    Ok(None)
 }

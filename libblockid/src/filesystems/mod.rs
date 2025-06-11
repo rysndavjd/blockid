@@ -1,4 +1,4 @@
-pub mod ext4;
+pub mod ext;
 pub mod exfat;
 pub mod vfat;
 pub mod volume_id;
@@ -12,7 +12,7 @@ UUID:           fs uuid
 UUID_RAW:       raw uuid
 UUID_SUB:       Sub uuid
 LOG_UUID:       external log uuid
-LOG_UUID_RAW:       external log uuid
+LOG_UUID_RAW:   external log uuid
 EXT_JOURNAL:    external journal uuid
 USAGE:          usage string 
 VERSION:        fs version
