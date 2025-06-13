@@ -4,29 +4,31 @@ use std::str::from_utf8;
 use byteorder::BigEndian;
 use libblockid::*;
 
+use rustix::fs::major;
+use rustix::fs::minor;
+use rustix::fs::Dev;
 use uuid::Uuid;
 use byteorder::LittleEndian;
 use byteorder::ByteOrder;
-use crc::{Algorithm, Crc};
-
-const CRC32C: Algorithm<u32> = Algorithm {
-    width: 32,
-    poly: 0x1EDC6F41,
-    init: 0xFFFFFFFF,
-    refin: true,
-    refout: true,
-    xorout: 0xFFFFFFFF,
-    check: 0xE3069283,
-    residue: 0xB798B438,
-};
+use libblockid::filesystems::ext::*;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
-    
-    let crc = crc::Crc::<u32>::new(&CRC32C);
-    let mut digest = crc.digest();
-    digest.update(b"1");
+    let file = File::open("/dev/sdb1")?; 
 
-    println!("{:X}", digest.finalize());
+    let mut probe = BlockidProbe::new(&file, 0, 0)?;
+
+    let magic = BlockidMagic {
+        magic: &[0x53, 0xEF],
+        len: 2,
+        b_offset: 0x38,
+    };
+
+    println!("{}, {}", major(256), minor(256));
+
+    let result = probe_ext2(&mut probe, magic)?;
+
+    println!("{:?}", result);
+
     return Ok(());
 }
 
