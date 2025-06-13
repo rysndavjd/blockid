@@ -13,7 +13,6 @@ use bytemuck::{from_bytes, Pod};
 use std::io::{Read, Seek, SeekFrom};
 use rustix::fs::{Stat, ioctl_blksszget, Dev, Mode};
 use rustix::fs::{fstat, stat};
-#[cfg(feature = "ext")]
 use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO, EXT4DEV_ID_INFO};
 use crate::filesystems::vfat::VFAT_ID_INFO;
 
@@ -33,7 +32,7 @@ static PROBES: &[BlockidIdinfo] = &[
 ];
 
 impl BlockidProbe {
-    fn new(
+    pub fn new(
             file: &File,
             offset: u64,
             size: u64,
