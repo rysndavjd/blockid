@@ -3,7 +3,6 @@ mod crc32c;
 pub mod partitions;
 pub mod filesystems;
 
-use std::os::fd::OwnedFd;
 use std::os::unix::fs::MetadataExt;
 use std::{fs::File, os::fd::AsFd};
 use std::path::Path;
@@ -13,10 +12,10 @@ use bytemuck::{from_bytes, Pod};
 use std::io::{Read, Seek, SeekFrom};
 use rustix::fs::{Stat, ioctl_blksszget, Dev, Mode};
 use rustix::fs::{fstat, stat};
-use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO, EXT4DEV_ID_INFO};
+use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO};
 use crate::filesystems::vfat::VFAT_ID_INFO;
 
-static PROBES: &[BlockidIdinfo] = &[
+pub static PROBES: &[BlockidIdinfo] = &[
     
     //Filesystems
     #[cfg(feature = "vfat")]
@@ -27,8 +26,6 @@ static PROBES: &[BlockidIdinfo] = &[
     EXT3_ID_INFO,
     #[cfg(feature = "ext")]
     EXT4_ID_INFO,
-    #[cfg(feature = "ext")]
-    EXT4DEV_ID_INFO,
 ];
 
 impl BlockidProbe {
@@ -135,7 +132,7 @@ pub struct FilesystemResults {
     pub log_uuid: Option<BlockidUUID>,
     //pub log_uuid_raw: Option<BlockidUUID>,
     pub ext_journal: Option<BlockidUUID>,
-    pub fs_creator: Option<String>,
+    pub fs_creator: Option<&'static str>,
     pub usage: Option<UsageType>,
     pub version: Option<BlockidVersion>,
     pub sbmagic: Option<&'static [u8]>,
@@ -198,10 +195,10 @@ pub enum UsageType {
 pub enum BlockidVersion {
     String(String),
     Number(u64),
-    DevId(Dev),
+    DevT(Dev),
 }
 
-pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>>;
+pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<ProbeResult, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct BlockidMagic {

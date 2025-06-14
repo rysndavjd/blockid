@@ -362,7 +362,7 @@ pub fn search_fat_label(
 pub fn probe_vfat(
     probe: &mut BlockidProbe,
     mag: BlockidMagic,
-) -> Result<Option<ProbeResult> ,Box<dyn std::error::Error>> 
+) -> Result<ProbeResult ,Box<dyn std::error::Error>> 
 {
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
@@ -413,7 +413,7 @@ pub fn probe_vfat(
         //probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
         //probe.set_sec_type(FsSecType::Msdos);
 
-        return Ok(None);
+        todo!();
     } else if vs.vs_fat32_length != 0 {
         let mut maxloop = 100;
         
@@ -484,7 +484,7 @@ pub fn probe_vfat(
         //probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
         //probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
         
-        return Ok(None);
+        todo!();
     }
 
     return Err("Unable to probe fat stuff".into());
