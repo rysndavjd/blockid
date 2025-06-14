@@ -27,7 +27,7 @@ pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
 fn probe_bsd_pt(
         probe: &mut BlockidProbe,
         mag: BlockidMagic,
-    ) -> Result<Option<ProbeResult> ,Box<dyn std::error::Error>> 
+    ) -> Result<ProbeResult ,Box<dyn std::error::Error>> 
 {
-    Ok(None)
+    todo!()
 }

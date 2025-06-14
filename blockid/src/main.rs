@@ -13,7 +13,7 @@ use byteorder::ByteOrder;
 use libblockid::filesystems::ext::*;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
-    let file = File::open("/dev/sdb1")?; 
+    let file = File::open("/dev/sdb3")?; 
 
     let mut probe = BlockidProbe::new(&file, 0, 0)?;
 
@@ -22,12 +22,14 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
         len: 2,
         b_offset: 0x38,
     };
-
-    println!("{}, {}", major(256), minor(256));
-
-    let result = probe_ext2(&mut probe, magic)?;
-
-    println!("{:?}", result);
+    
+    for prob in PROBES {
+        match (prob.probe_fn)(&mut probe, magic) {
+            Ok(t) => println!("{:?}", t),
+            Err(e) => eprintln!("{}", e),
+        };
+        
+    }
 
     return Ok(());
 }

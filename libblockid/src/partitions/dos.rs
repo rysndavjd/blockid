@@ -248,7 +248,7 @@ fn mbr_get_id(mbr: &[u8; 512]) -> u32 {
 pub fn probe_dos_pt(
         probe: &mut BlockidProbe, 
         mag: BlockidMagic
-    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
+    ) -> Result<ProbeResult, Box<dyn std::error::Error>> 
 {
     let mbr = read_sector(probe, 0)?;
     
@@ -279,5 +279,5 @@ pub fn probe_dos_pt(
 
     //let mut tab = BlockidPartList::new_parttable(ls, pttype, offset, id)
 
-    return Ok(None);
+    todo!()
 }

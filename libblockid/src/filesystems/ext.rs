@@ -8,12 +8,15 @@ use bytemuck::{Pod, Zeroable};
 use bitflags::bitflags;
 
 use crate::crc32c::{verify_crc32c, get_crc32c};
-use crate::{probe_get_magic, read_as, read_buffer_vec, FilesystemResults, FsSecType};
+use crate::{read_as, FilesystemResults, FsSecType};
 use crate::{FsType, BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult, BlockidUUID, BlockidVersion};
 
 /*
 https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 */
+
+const EXT_MAGIC: [u8; 2] = [0x53, 0xEF];
+const EXT_OFFSET: u64 = 0x38;
 
 //pub const JBD_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 //    name: Some("jbd"),
@@ -36,9 +39,9 @@ pub const EXT2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     minsz: None,
     magics: &[
         BlockidMagic {
-            magic: &[0x53, 0xEF],
+            magic: &EXT_MAGIC,
             len: 2,
-            b_offset: 0x38,
+            b_offset: EXT_OFFSET,
         },
     ]
 };
@@ -50,9 +53,9 @@ pub const EXT3_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     minsz: None,
     magics: &[
         BlockidMagic {
-            magic: &[0x53, 0xEF],
+            magic: &EXT_MAGIC,
             len: 2,
-            b_offset: 0x38,
+            b_offset: EXT_OFFSET,
         },
     ]
 };
@@ -64,26 +67,26 @@ pub const EXT4_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     minsz: None,
     magics: &[
         BlockidMagic {
-            magic: &[0x53, 0xEF],
+            magic: &EXT_MAGIC,
             len: 2,
-            b_offset: 0x38,
+            b_offset: EXT_OFFSET,
         },
     ]
 };
 
-pub const EXT4DEV_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("ext4dev"),
-    usage: Some(UsageType::Filesystem),
-    probe_fn: probe_ext4dev,
-    minsz: None,
-    magics: &[
-        BlockidMagic {
-            magic: &[0x53, 0xEF],
-            len: 2,
-            b_offset: 0x38,
-        },
-    ]
-};
+//pub const EXT4DEV_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+//    name: Some("ext4dev"),
+//    usage: Some(UsageType::Filesystem),
+//    probe_fn: probe_ext4dev,
+//    minsz: None,
+//    magics: &[
+//        BlockidMagic {
+//            magic: &[0x53, 0xEF],
+//            len: 2,
+//            b_offset: 0x38,
+//        },
+//    ]
+//};
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -145,6 +148,10 @@ pub struct Ext2SuperBlock {
     pub s_checksum: u32,
 }
 
+fn has_ext_flags(flags: u32, feature: ExtFlags) -> bool {
+    ExtFlags::from_bits_truncate(flags).contains(feature)
+}
+
 fn has_compat(compat: u32, feature: FeatureCompat) -> bool {
     FeatureCompat::from_bits_truncate(compat).contains(feature)
 }
@@ -195,14 +202,14 @@ bitflags! {
     }
 }
 
-
-enum ExtCreator {
-    Linux, 
-    Hurd,
-    Masix,
-    FreeBSD,
-    Lites,
-}
+//#[derive(Debug)]
+//pub enum ExtCreator {
+//    Linux, 
+//    Hurd,
+//    Masix,
+//    FreeBSD,
+//    Lites,
+//}
 
 /* Eventually I will figure a way to make these shortcuts for bitflags without using nightly rust
 
@@ -226,6 +233,20 @@ enum ExtCreator {
 
 // u32::from_le() == le32_to_cpu()
 // .to_le() == cpu_to_le32()
+
+fn get_os_creator(
+        es: Ext2SuperBlock,
+    ) -> Option<&'static str>
+{
+    match es.s_creator_os {
+        0 => Some("Linux"),
+        1 => Some("Hurd"),
+        2 => Some("Masix"),
+        3 => Some("FreeBSD"),
+        4 => Some("Lites"),
+        _ => None,
+    }
+}
 
 /*
  * reads superblock and returns:
@@ -253,18 +274,22 @@ fn ext_get_super(
 fn ext_get_info(
         ver: u8,
         es: Ext2SuperBlock,
-    ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, Option<FsSecType>, BlockidVersion, u64, u64), Box<dyn std::error::Error>>
+    ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, Option<FsSecType>, BlockidVersion, u64, u64, u64), Box<dyn std::error::Error>>
 {
     let label: Option<String> = if es.s_volume_name[0] != 0 {
-        Some("".to_string())
+        Some(String::from_utf8_lossy(&es.s_volume_name).to_string())
     } else {
         None
     };
     
     let uuid = BlockidUUID::Standard(Uuid::from_bytes(es.s_uuid));
-
-    let journal_uuid: Option<BlockidUUID> = if FeatureCompat::from_bits_truncate(es.s_feature_compat).contains(FeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
-        Some(BlockidUUID::Standard(Uuid::from_bytes(es.s_journal_uuid)))
+    
+    let journal_uuid: Option<BlockidUUID> = if has_compat(es.s_feature_compat, FeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
+        if es.s_journal_uuid == [0; 16] {
+            None //Journal is internal to the filesystem   
+        } else {
+            Some(BlockidUUID::Standard(Uuid::from_bytes(es.s_journal_uuid)))
+        }
     } else {
         None
     };
@@ -275,7 +300,12 @@ fn ext_get_info(
         None
     };
 
-    let version = BlockidVersion::DevId(makedev(es.s_rev_level, es.s_minor_rev_level.into()));
+    let version = BlockidVersion::DevT(makedev(es.s_rev_level, es.s_minor_rev_level.into()));
+
+    let log_block_size = u32::from_le(es.s_log_block_size);
+    assert!(log_block_size < 32, "Shift too large"); 
+    let block_size: u64 = (1024u32 << log_block_size).into();
+    
 
     let fslastblock: u64 = u64::from(u32::from_le(es.s_blocks_count))
     | if has_incompat(es.s_feature_incompat, FeatureIncompat::EXT4_FEATURE_INCOMPAT_64BIT) {
@@ -283,14 +313,10 @@ fn ext_get_info(
     } else {
         0
     };
-    
-    let log_block_size = u32::from_le(es.s_log_block_size);
-    //assert!(log_block_size <= 31, "Shift too large"); 
-    let block_size = 1024u32 << log_block_size;
 
-    let fs_size: u64 = block_size as u64 * u32::from_le(es.s_blocks_count) as u64; 
+    let fs_size: u64 = block_size * u32::from_le(es.s_blocks_count) as u64; 
 
-    Ok((label, uuid, journal_uuid, sec_type, version, fslastblock, fs_size))
+    Ok((label, uuid, journal_uuid, sec_type, version, block_size, fslastblock, fs_size))
 }
 
 //fn probe_jbd(
@@ -311,16 +337,14 @@ fn ext_get_info(
 pub fn probe_ext2(
         probe: &mut BlockidProbe, 
         _magic: BlockidMagic
-    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
+    ) -> Result<ProbeResult, Box<dyn std::error::Error>> 
 {
     let es: Ext2SuperBlock = read_as::<Ext2SuperBlock>(&probe.file, 1024)?;
-
-    println!("{:X?}", es);
 
     let (fc, _, frc) = ext_get_super(es)?;
     
     if has_compat(fc, FeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
-        return Ok(None)
+        return Err("Ext is ext3 not ext2".into())
     };
 
     if has_rocompat(frc, FeatureRoCompat::EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER|
@@ -329,54 +353,134 @@ pub fn probe_ext2(
         has_incompat(frc, FeatureIncompat::EXT2_FEATURE_INCOMPAT_FILETYPE|
                                             FeatureIncompat::EXT2_FEATURE_INCOMPAT_META_BG)
     {
-        return Ok(None)                                      
+        return Err("Ext contains unsupported feature on ext2".into())                                     
     }
-    //Option<String>, BlockidUUID, Option<BlockidUUID>, Option<FsSecType>, BlockidVersion, u64, u64
-    let (label, uuid, journal_uuid, sec_type, version, fslastblock, fs_size) = ext_get_info(2, es)?;
 
-    return Ok(Some(ProbeResult::Filesystem(
+    let (label, uuid, journal_uuid, sec_type, version, block_size, fs_last_block, fs_size) = ext_get_info(2, es)?;
+
+    return Ok(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext2), 
                                     sec_type, 
                                     label, 
                                     fs_uuid: Some(uuid), 
                                     log_uuid: None, 
                                     ext_journal: journal_uuid, 
-                                    fs_creator: None, // TODO
+                                    fs_creator: get_os_creator(es),
                                     usage: Some(UsageType::Filesystem), 
                                     version: Some(version), 
-                                    sbmagic: Some(&[0x53, 0xEF]), 
-                                    sbmagic_offset: Some(0x38), 
+                                    sbmagic: Some(&EXT_MAGIC), 
+                                    sbmagic_offset: Some(EXT_OFFSET), 
                                     fs_size: Some(fs_size), 
-                                    fs_last_block: None, // TODO
-                                    fs_block_size: Some(fslastblock),
-                                    block_size: None // TODO
+                                    fs_last_block: Some(fs_last_block),
+                                    fs_block_size: Some(block_size),
+                                    block_size: Some(block_size)
                                 }
                             )
-                        )
-                    );
+                        );
 
 }
 
-fn probe_ext3(
+pub fn probe_ext3(
         probe: &mut BlockidProbe, 
-        magic: BlockidMagic
-    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
+        _magic: BlockidMagic
+    ) -> Result<ProbeResult, Box<dyn std::error::Error>> 
 {
-    Ok(None)
+    let es: Ext2SuperBlock = read_as::<Ext2SuperBlock>(&probe.file, 1024)?;
+
+    let (fc, fi, frc) = ext_get_super(es)?;
+    
+    if !has_compat(fc, FeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
+        return Err("Ext3 needs journal".into())
+    };
+    
+    if has_rocompat(frc, FeatureRoCompat::EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER|
+                                        FeatureRoCompat::EXT2_FEATURE_RO_COMPAT_LARGE_FILE|
+                                        FeatureRoCompat::EXT2_FEATURE_RO_COMPAT_BTREE_DIR) ||
+        has_incompat(fi, FeatureIncompat::EXT2_FEATURE_INCOMPAT_FILETYPE| 
+                                        FeatureIncompat::EXT3_FEATURE_INCOMPAT_RECOVER| 
+                                        FeatureIncompat::EXT2_FEATURE_INCOMPAT_META_BG)
+    {
+        return Err("Ext doesnt contain all supported features of ext3".into())                                     
+    }
+
+    let (label, uuid, journal_uuid, sec_type, version, block_size, fs_last_block, fs_size) = ext_get_info(3, es)?;
+
+    return Ok(ProbeResult::Filesystem(
+                FilesystemResults { fs_type: Some(FsType::Ext3), 
+                                    sec_type, 
+                                    label, 
+                                    fs_uuid: Some(uuid), 
+                                    log_uuid: None, 
+                                    ext_journal: journal_uuid, 
+                                    fs_creator: get_os_creator(es),
+                                    usage: Some(UsageType::Filesystem), 
+                                    version: Some(version), 
+                                    sbmagic: Some(&EXT_MAGIC), 
+                                    sbmagic_offset: Some(EXT_OFFSET), 
+                                    fs_size: Some(fs_size), 
+                                    fs_last_block: Some(fs_last_block),
+                                    fs_block_size: Some(block_size),
+                                    block_size: Some(block_size)
+                                }
+                            )
+                        );
 }
 
-fn probe_ext4(
+pub fn probe_ext4(
         probe: &mut BlockidProbe, 
-        magic: BlockidMagic
-    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
+        _magic: BlockidMagic
+    ) -> Result<ProbeResult, Box<dyn std::error::Error>> 
 {
-    Ok(None)
+    let es: Ext2SuperBlock = read_as::<Ext2SuperBlock>(&probe.file, 1024)?;
+
+    let (_fc, fi, frc) = ext_get_super(es)?;
+    
+    if has_incompat(fi, FeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
+        return Err("Ext is jbd".into());
+    }
+        
+    if has_rocompat(frc, FeatureRoCompat::EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER|
+                                        FeatureRoCompat::EXT2_FEATURE_RO_COMPAT_LARGE_FILE|
+                                        FeatureRoCompat::EXT2_FEATURE_RO_COMPAT_BTREE_DIR) ||
+        has_incompat(fi, FeatureIncompat::EXT2_FEATURE_INCOMPAT_FILETYPE| 
+                                        FeatureIncompat::EXT3_FEATURE_INCOMPAT_RECOVER| 
+                                        FeatureIncompat::EXT2_FEATURE_INCOMPAT_META_BG)
+    {
+        return Err("Ext doesnt contain all supported features of ext4".into())                                     
+    }
+
+    if has_ext_flags(u32::from_le(es.s_flags), ExtFlags::EXT2_FLAGS_TEST_FILESYS) {
+        return Err("Ext is a ext4 development version".into());
+    }
+
+    let (label, uuid, journal_uuid, sec_type, version, block_size, fs_last_block, fs_size) = ext_get_info(4, es)?;
+
+    return Ok(ProbeResult::Filesystem(
+                FilesystemResults { fs_type: Some(FsType::Ext4), 
+                                    sec_type, 
+                                    label, 
+                                    fs_uuid: Some(uuid), 
+                                    log_uuid: None, 
+                                    ext_journal: journal_uuid, 
+                                    fs_creator: get_os_creator(es),
+                                    usage: Some(UsageType::Filesystem), 
+                                    version: Some(version), 
+                                    sbmagic: Some(&EXT_MAGIC), 
+                                    sbmagic_offset: Some(EXT_OFFSET), 
+                                    fs_size: Some(fs_size), 
+                                    fs_last_block: Some(fs_last_block),
+                                    fs_block_size: Some(block_size),
+                                    block_size: Some(block_size)
+                                }
+                            )
+                        );
+
 }
 
-fn probe_ext4dev(
-        probe: &mut BlockidProbe, 
-        magic: BlockidMagic
-    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
-{
-    Ok(None)
-}
+//fn probe_ext4dev(
+//        probe: &mut BlockidProbe, 
+//        magic: BlockidMagic
+//    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
+//{
+//    Ok(None)
+//}
