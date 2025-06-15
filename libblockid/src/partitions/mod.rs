@@ -8,9 +8,10 @@ pub mod unixware;
 pub mod minix;
 
 use crate::BlockidUUID;
+use rustix::fs::Dev;
 use uuid::Uuid;
-use std::rc::{Rc, Weak};
-use std::cell::RefCell;
+use thiserror::Error;
+use std::io;
 
 /*
   PTTYPE:               partition table type (dos, gpt, etc.).
@@ -26,114 +27,54 @@ use std::cell::RefCell;
   PART_ENTRY_DISK:      whole-disk maj:min
 */
 
-#[derive(Debug)]
-pub struct BlockidPartTable {
-    pub pttype: PTType,
-    pub offset: u64,
-    pub id: BlockidUUID,
 
-    pub num_parts: usize,
-    pub parent: Option<Weak<RefCell<BlockidPartition>>>,
-
-    pub partitions: Vec<Rc<RefCell<BlockidPartition>>>,
-
-    pub next: Option<Rc<RefCell<BlockidPartTable>>>,
-    pub prev: Option<Weak<RefCell<BlockidPartTable>>>,
+#[derive(Error, Debug)]
+pub enum PtError {
+    #[error("I/O operation failed")]
+    IoError(#[from] io::Error),
+    #[error("Invalid Header: {0}")]
+    InvalidHeader(String),
+    #[error("Unknown Partition: {0}")]
+    UnknownPartition(String),
+    #[error("Checksum failed, expected: \"{expected:?}\" and got: \"{got:?})\"")]
+    ChecksumError {
+        expected: u32,
+        got: u32,
+    }
 }
 
 #[derive(Debug)]
-struct BlockidPartition {
+pub enum PartitionItem {
+    PartTable(BlockidPartTable),
+    Partition(BlockidPartition)
+}
+
+#[derive(Debug)]
+pub struct BlockidPartTable {
+    pub start: u64,
+    pub size: u64,
+
+    pub pt_type: PTType,
+    pub flags: PTflags,
+    pub table_uuid: BlockidUUID,
+
+    pub partitions: Vec<PartitionItem>,
+}
+
+#[derive(Debug)]
+pub struct BlockidPartition {
     start: u64,
     size: u64,
-    
-    pttype: PTType,
-    pttype_str: Option<Uuid>,
 
-    flags: Option<u64>,
+    dev: Dev,
+    partno: u16,
 
-    partno: usize,
-    uuid: Option<Uuid>,
     name: String,
-
-    table: BlockidPartTable,
+    uuid: BlockidUUID,
+    entry_type: PTType,
 }
 
-#[derive(Debug)]
-pub struct BlockidPartList {
-    pub next_partno: usize,
-    pub next_parent: Option<Weak<RefCell<BlockidPartition>>>,
-
-    pub partitions: Vec<Rc<RefCell<BlockidPartition>>>,
-
-    pub head: Option<Rc<RefCell<BlockidPartTable>>>,
-    pub tail: Option<Rc<RefCell<BlockidPartTable>>>,
-    
-}
-
-impl BlockidPartList {
-    pub fn empty() -> Self {
-        BlockidPartList {
-            next_partno: 0,
-            next_parent: None,
-            partitions: Vec::new(),
-            head: None,
-            tail: None,
-        }
-    }
-
-    pub fn new(
-            next_partno: usize, 
-            next_parent: Option<Weak<RefCell<BlockidPartition>>>,
-            partitions: Vec<Rc<RefCell<BlockidPartition>>>,
-            head: Option<Rc<RefCell<BlockidPartTable>>>,
-            tail: Option<Rc<RefCell<BlockidPartTable>>>,
-        ) -> Self 
-    {
-        BlockidPartList {
-            next_partno: next_partno,
-            next_parent: next_parent,
-            partitions: partitions,
-            head: head,
-            tail: tail,
-        }
-    }
-
-    pub fn new_parttable(
-            &mut self,
-            pttype: PTType,
-            offset: u64,
-            id: BlockidUUID
-        ) -> Rc<RefCell<BlockidPartTable>>
-    {
-        let tab = Rc::new(RefCell::new(BlockidPartTable {
-            pttype: pttype,
-            offset: offset,
-            id: id,
-            num_parts: 0,
-            parent: self.next_parent.clone(),
-            partitions: Vec::new(),
-            next: None,
-            prev: None,
-        }));
-
-        match self.tail.take() {
-            Some(old_tail) => {
-                old_tail.borrow_mut().next = Some(Rc::clone(&tab));
-                tab.borrow_mut().prev = Some(Rc::downgrade(&old_tail));
-                self.tail = Some(Rc::clone(&tab));
-            }
-            None => {
-                self.head = Some(Rc::clone(&tab));
-                self.tail = Some(Rc::clone(&tab));
-            }
-        }
-
-        tab
-    }
-
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum PTType {
     #[cfg(feature = "dos")]
     Dos,
@@ -146,15 +87,13 @@ pub enum PTType {
     Unknown(String), 
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+pub enum PartEntryType {
+    Byte(u8),
+    Uuid(Uuid),
+}
+
+#[derive(Debug, Clone)]
 pub enum PTflags {
-    #[cfg(feature = "dos")]
-    Dos,
-    #[cfg(feature = "gpt")]
-    Gpt,
-    #[cfg(feature = "mac")]
-    Mac,
-    #[cfg(feature = "bsd")]
-    Bsd,
     Unknown(String), 
 }

@@ -3,6 +3,9 @@ pub mod exfat;
 pub mod vfat;
 pub mod volume_id;
 
+use thiserror::Error;
+use std::io;
+
 /* Tags
 TYPE:           filesystem type
 SEC_TYPE:       Secondary filesystem type
@@ -24,6 +27,17 @@ FSBLOCKSIZE:    fs block size
 BLOCK_SIZE:     block size of phyical disk
 */
 
-pub trait ProbeFilesystem {
-    fn probe_is(&self) -> Result<(), Box<dyn std::error::Error>>;
+#[derive(Error, Debug)]
+pub enum FsError {
+    #[error("I/O operation failed")]
+    IoError(#[from] io::Error),
+    #[error("Invalid Header: {0}")]
+    InvalidHeader(String),
+    #[error("Unknown Filesystem: {0}")]
+    UnknownFilesystem(String),
+    #[error("Checksum failed, expected: \"{expected:?}\" and got: \"{got:?})\"")]
+    ChecksumError {
+        expected: u32,
+        got: u32,
+    }
 }
