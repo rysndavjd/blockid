@@ -4,16 +4,29 @@ pub mod partitions;
 pub mod filesystems;
 
 use std::os::unix::fs::MetadataExt;
-use std::{fs::File, os::fd::AsFd};
-use std::path::Path;
+use std::{fs::File, os::fd::AsFd, path::Path};
 use filesystems::volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 use bytemuck::{from_bytes, Pod};
 use std::io::{Read, Seek, SeekFrom};
-use rustix::fs::{Stat, ioctl_blksszget, Dev, Mode};
-use rustix::fs::{fstat, stat};
+use rustix::fs::{Stat, ioctl_blksszget, Dev, Mode, fstat, stat};
+use thiserror::Error;
+use crate::filesystems::FsError;
+use crate::partitions::PtError;
 use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO};
 use crate::filesystems::vfat::VFAT_ID_INFO;
+
+
+#[derive(Error, Debug)]
+pub enum BlockidError {
+    #[error("Filesystem probe failed")]
+    FsError(#[from] FsError),
+    #[error("Partition Table probe failed")]
+    PtError(#[from] PtError),
+    
+}
+
+
 
 pub static PROBES: &[BlockidIdinfo] = &[
     
@@ -50,13 +63,14 @@ impl BlockidProbe {
         })
     }
 
-    pub fn get_values(
+    pub fn probe_values(
             &mut self
         ) -> Result<(), Box<dyn std::error::Error>>
     {
         for info in PROBES {
             let magic = probe_get_magic(self, info)?;
-            let test = (info.probe_fn)(self, magic)?;
+            let result = (info.probe_fn)(self, magic)?;
+            self.push_result(result);
         }
 
         Ok(())
