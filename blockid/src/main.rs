@@ -23,6 +23,9 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
         b_offset: 0x38,
     };
     
+    //let probe = probe_ext4(&mut probe, magic)?;
+
+    //println!("{:?}", probe);
     for prob in PROBES {
         match (prob.probe_fn)(&mut probe, magic) {
             Ok(t) => println!("{:?}", t),

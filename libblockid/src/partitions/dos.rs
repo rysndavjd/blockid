@@ -1,4 +1,4 @@
-use crate::partitions::{BlockidPartList, BlockidPartTable};
+use crate::partitions::{BlockidPartition, BlockidPartTable};
 use crate::{ProbeResult, BlockidIdinfo, UsageType, BlockidProbe, BlockidMagic, get_sectorsize, read_sector};
 use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
 use crate::filesystems::vfat::probe_is_vfat;
