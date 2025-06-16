@@ -8,12 +8,12 @@ use thiserror::Error;
 use std::io;
 
 use crate::filesystems::volume_id::VolumeId32;
-use crate::{read_as, probe_get_magic, read_buffer_vec};
-use crate::{BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult, BlockidError};
+use crate::{probe_get_magic, read_as, read_buffer_vec, FilesystemResults, FsType};
+use crate::{BlockidUUID, FsSecType, BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult, BlockidError};
 use crate::filesystems::FsError;
 
 #[derive(Error, Debug)]
-enum FatError {
+pub enum FatError {
     #[error("I/O operation failed")]
     IoError(#[from] io::Error),
     #[error("Fat Header Error: {0}")]
@@ -351,7 +351,7 @@ pub fn search_fat_label(
         probe: &mut BlockidProbe,
         root_start: u32,
         root_dir_entries: u32,
-    ) -> Result<[u8; 11], FatError> 
+    ) -> Result<String, FatError> 
 {
     let is_tiny = false; // !probe.flags.contains(BlockidFlags::TINY_DEV);
 
@@ -380,7 +380,7 @@ pub fn search_fat_label(
             if label[0] == 0x05 {
                 label[0] = 0xE5;
             }
-            return Ok(label);
+            return Ok(String::from_utf8_lossy(&label).to_string());
         }
     }
 
@@ -406,7 +406,7 @@ pub fn probe_vfat(
         let root_start: u32 = (reserved + fat_size) * sector_size;
         let root_dir_entries: u32 = vs.vs_dir_entries.into();
 
-        let vol_label: [u8; 11] = search_fat_label(probe, root_start, root_dir_entries)?;
+        let vol_label = search_fat_label(probe, root_start, root_dir_entries)?;
         
         let boot_label: Option<String> = if ms.ms_ext_boot_sign == 0x29 {
             Some(String::from_utf8_lossy(&ms.ms_label).to_string())
@@ -420,11 +420,7 @@ pub fn probe_vfat(
             return Err(FatError::FatHeaderError("Unable to get Volumeid".into()));
         };
 
-        let fat_version = if cluster_count < FAT12_MAX {
-            VfatVersion::Fat12
-        } else if cluster_count < FAT16_MAX {
-            VfatVersion::Fat16
-        } else {
+        if !(cluster_count < FAT12_MAX || cluster_count < FAT16_MAX) {
             return Err(FatError::UnknownFilesystem("Unknown Fat version".into()));
         };
         
@@ -435,13 +431,31 @@ pub fn probe_vfat(
         //probe.set_uuid(BlkUuid::VolumeId32(vol_serno));
         //probe.set_label_utf8_lossy(&vol_label);
         //probe.set_usage(Usage::Filesystem);
-        //probe.set_fs_block_size(vs.vs_cluster_size as u64 * sector_size as u64);
-        //probe.set_block_size(sector_size as u64);
-        //probe.set_fs_size(sector_size as u64 * get_sect_count(ms) as u64 );
+        //probe.set_fs_block_size();
+        //probe.set_block_size();
+        //probe.set_fs_size( );
         //probe.set_fs_extras(FsExtras::Vfat(VfatExtras { oem_name: Some(oem_name), boot_label: boot_label }));
         //probe.set_sec_type(FsSecType::Msdos);
 
-        todo!();
+        return Ok(ProbeResult::Filesystem(FilesystemResults { 
+                                    fs_type: Some(FsType::Vfat), 
+                                    sec_type: Some(FsSecType::Msdos), 
+                                    label: Some(vol_label), 
+                                    fs_uuid: Some(BlockidUUID::VolumeId32(vol_serno)), 
+                                    log_uuid: None, 
+                                    ext_journal: None, 
+                                    fs_creator: Some(oem_name), 
+                                    usage: Some(UsageType::Filesystem), 
+                                    version: None, 
+                                    sbmagic: Some(mag.magic), 
+                                    sbmagic_offset: Some(mag.b_offset), 
+                                    fs_size: Some(sector_size as u64 * get_sect_count(ms) as u64), 
+                                    fs_last_block: None, 
+                                    fs_block_size: Some(vs.vs_cluster_size as u64 * sector_size as u64), 
+                                    block_size: Some(sector_size as u64) 
+                                }
+                            )
+                        );
     } else if vs.vs_fat32_length != 0 {
         let mut maxloop = 100;
         
@@ -451,7 +465,7 @@ pub fn probe_vfat(
         let entries: u32 = vs.vs_fat32_length * sector_size / 4;
         let mut next: u32 = vs.vs_root_cluster;
 
-        let mut vol_label: Option<[u8; 11]> = None;
+        let mut vol_label: Option<String> = None;
 
         while next != 0 && next < entries && maxloop > 0 {
             maxloop -= 1;
