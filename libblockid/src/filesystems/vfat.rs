@@ -1,13 +1,36 @@
 use std::u16;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use byteorder::{ByteOrder, LittleEndian};
 use bytemuck::checked::from_bytes;
 use bytemuck::{Pod, Zeroable};
+use thiserror::Error;
+use std::io;
 
 use crate::filesystems::volume_id::VolumeId32;
 use crate::{read_as, probe_get_magic, read_buffer_vec};
-use crate::{BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult};
+use crate::{BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult, BlockidError};
+use crate::filesystems::FsError;
+
+#[derive(Error, Debug)]
+enum FatError {
+    #[error("I/O operation failed")]
+    IoError(#[from] io::Error),
+    #[error("Fat Header Error: {0}")]
+    FatHeaderError(String),
+    #[error("Not an Fat superblock: {0}")]
+    UnknownFilesystem(String),
+}
+
+impl From<FatError> for FsError {
+    fn from(err: FatError) -> Self {
+        match err {
+            FatError::IoError(e) => FsError::IoError(e),
+            FatError::FatHeaderError(info) => FsError::InvalidHeader(info),
+            FatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VfatVersion {
@@ -25,7 +48,11 @@ pub struct VfatExtras {
 pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("vfat"),
     usage: Some(UsageType::Filesystem),
-    probe_fn: probe_vfat,
+    probe_fn: |probe, magic| {
+        probe_vfat(probe, magic)
+        .map_err(FsError::from)
+        .map_err(BlockidError::from)
+    },
     minsz: None,
     magics: &[
         BlockidMagic {
@@ -190,7 +217,7 @@ fn is_power_2(num: u64) -> bool {
 fn read_vfat_dir_entry(
         raw_block: &File,
         offset: u32,
-    ) -> Result<VfatDirEntry, Box<dyn std::error::Error>> 
+    ) -> Result<VfatDirEntry, FatError> 
 {
     let mut block = raw_block.try_clone()?;
     block.seek(SeekFrom::Start(0))?;
@@ -251,11 +278,11 @@ fn valid_fat (
         ms: MsDosSuperBlock,
         vs: VFatSuperBlock,
         mag: BlockidMagic,
-    ) -> Result<() ,Box<dyn std::error::Error>> 
+    ) -> Result<(), FatError> 
 {    
     if mag.len <= 2 {
         if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
-            return Err("Given block is not Fat likely MBR".into());
+            return Err(FatError::UnknownFilesystem("Given block is not Fat likely MBR".into()));
         }
 
         /* Straight From libblkid
@@ -269,19 +296,19 @@ fn valid_fat (
 		 */
 
         if &ms.ms_magic == b"JFS     " || &ms.ms_magic == b"HPFS    " {
-            return Err("JFS/HPFS found".into());
+            return Err(FatError::UnknownFilesystem("JFS/HPFS found".into()));
         }
     }
 
     if ms.ms_fats == 0 {
-        return Err("Should be atleast one fat table".into());
+        return Err(FatError::FatHeaderError("Should be atleast one fat table".into()));
     }
     if ms.ms_reserved == 0 {
-        return Err("ms_reserved should not be 0".into());
+        return Err(FatError::FatHeaderError("ms_reserved should not be 0".into()));
     }
 
     if !is_power_2(ms.ms_cluster_size.into()) {
-        return Err("cluster_size is not ^2".into());
+        return Err(FatError::FatHeaderError("cluster_size is not ^2".into()));
     }
 
     let cluster_count: u32 = get_cluster_count(ms, vs);
@@ -295,20 +322,20 @@ fn valid_fat (
     };
 
     if cluster_count > max_count {
-        return Err("Too many clusters".into());
+        return Err(FatError::FatHeaderError("Too many clusters".into()));
     }
     
     if cluster_count < FAT12_MAX || cluster_count < FAT16_MAX || cluster_count < FAT32_MAX {
         return Ok(())
     } else {
-        return Err("Unknown fat type".into());
+        return Err(FatError::UnknownFilesystem("Unknown fat type".into()));
     }
 
 }
 
 pub fn probe_is_vfat(
         probe: &mut BlockidProbe,
-    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>>
+    ) -> Result<Option<ProbeResult>, FatError>
 {
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
@@ -324,7 +351,7 @@ pub fn search_fat_label(
         probe: &mut BlockidProbe,
         root_start: u32,
         root_dir_entries: u32,
-    ) -> Result<[u8; 11], Box<dyn std::error::Error>> 
+    ) -> Result<[u8; 11], FatError> 
 {
     let is_tiny = false; // !probe.flags.contains(BlockidFlags::TINY_DEV);
 
@@ -356,13 +383,14 @@ pub fn search_fat_label(
             return Ok(label);
         }
     }
-    return Err("Unable to get fat label".into());
+
+    return Err(FatError::IoError(io::Error::new(ErrorKind::NotFound, "Fat label not found")));
 }
 
 pub fn probe_vfat(
     probe: &mut BlockidProbe,
     mag: BlockidMagic,
-) -> Result<ProbeResult ,Box<dyn std::error::Error>> 
+) -> Result<ProbeResult, FatError> 
 {
     let ms: MsDosSuperBlock = read_as(&probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&probe.file, 0)?;
@@ -389,7 +417,7 @@ pub fn probe_vfat(
         let vol_serno: VolumeId32 = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
             VolumeId32::new(ms.ms_serno)
         } else { 
-            return Err("Unable to get Volumeid".into());
+            return Err(FatError::FatHeaderError("Unable to get Volumeid".into()));
         };
 
         let fat_version = if cluster_count < FAT12_MAX {
@@ -397,7 +425,7 @@ pub fn probe_vfat(
         } else if cluster_count < FAT16_MAX {
             VfatVersion::Fat16
         } else {
-            return Err("Unknown Fat version".into());
+            return Err(FatError::UnknownFilesystem("Unknown Fat version".into()));
         };
         
         let oem_name = String::from_utf8_lossy(&ms.ms_sysid).to_string();
@@ -457,13 +485,13 @@ pub fn probe_vfat(
                &fsinfo.signature1 != b"\x52\x52\x64\x41" &&
                &fsinfo.signature1 != b"\x00\x00\x00\x00" 
             {
-                return Err("Error".into());
+                return Err(FatError::FatHeaderError("Invalid fsinfo.signature1".into()));
             }
 
             if &fsinfo.signature2 != b"\x72\x72\x41\x61" &&
                &fsinfo.signature2 != b"\x00\x00\x00\x00" 
             {
-                return Err("Error".into());
+                return Err(FatError::FatHeaderError("Invalid fsinfo.signature2".into()));
             }
         }
         let oem_name = String::from_utf8_lossy(&ms.ms_sysid).to_string();
@@ -487,5 +515,5 @@ pub fn probe_vfat(
         todo!();
     }
 
-    return Err("Unable to probe fat stuff".into());
+    return Err(FatError::UnknownFilesystem("Block is not fat filesystem".into()));
 }

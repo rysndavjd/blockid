@@ -5,6 +5,7 @@ pub mod volume_id;
 
 use thiserror::Error;
 use std::io;
+use crate::{checksum::CsumAlgorium, BlockidError};
 
 /* Tags
 TYPE:           filesystem type
@@ -35,9 +36,9 @@ pub enum FsError {
     InvalidHeader(String),
     #[error("Unknown Filesystem: {0}")]
     UnknownFilesystem(String),
-    #[error("Checksum failed, expected: \"{expected:?}\" and got: \"{got:?})\"")]
+    #[error("Filesystem Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
     ChecksumError {
-        expected: u32,
-        got: u32,
+        expected: CsumAlgorium,
+        got: CsumAlgorium,
     }
 }

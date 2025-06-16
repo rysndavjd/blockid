@@ -1,4 +1,4 @@
-mod crc32c;
+mod checksum;
 
 pub mod partitions;
 pub mod filesystems;
@@ -8,7 +8,7 @@ use std::{fs::File, os::fd::AsFd, path::Path};
 use filesystems::volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 use bytemuck::{from_bytes, Pod};
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use rustix::fs::{Stat, ioctl_blksszget, Dev, Mode, fstat, stat};
 use thiserror::Error;
 use crate::filesystems::FsError;
@@ -25,8 +25,6 @@ pub enum BlockidError {
     PtError(#[from] PtError),
     
 }
-
-
 
 pub static PROBES: &[BlockidIdinfo] = &[
     
@@ -146,7 +144,7 @@ pub struct FilesystemResults {
     pub log_uuid: Option<BlockidUUID>,
     //pub log_uuid_raw: Option<BlockidUUID>,
     pub ext_journal: Option<BlockidUUID>,
-    pub fs_creator: Option<&'static str>,
+    pub fs_creator: Option<String>,
     pub usage: Option<UsageType>,
     pub version: Option<BlockidVersion>,
     pub sbmagic: Option<&'static [u8]>,
@@ -167,7 +165,7 @@ pub enum FsType {
     Ext3,
     #[cfg(feature = "ext")]
     Ext4,
-    Other(String)
+    //Other(String)
 }
 
 #[derive(Debug)]
@@ -212,7 +210,7 @@ pub enum BlockidVersion {
     DevT(Dev),
 }
 
-pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<ProbeResult, Box<dyn std::error::Error>>;
+pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<ProbeResult, BlockidError>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct BlockidMagic {
@@ -240,7 +238,7 @@ pub fn read_buffer_vec(
         probe: &mut BlockidProbe,
         offset: u64,
         buf_size: usize
-    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> 
+    ) -> Result<Vec<u8>, io::Error> 
 {
     let mut block = probe.file.try_clone()?;
     block.seek(SeekFrom::Start(0))?;
@@ -270,7 +268,7 @@ pub fn get_sectorsize(
 pub fn probe_get_magic(
         probe: &mut BlockidProbe, 
         id_info: &BlockidIdinfo
-    ) -> Result<BlockidMagic, Box<dyn std::error::Error>>
+    ) -> Result<BlockidMagic, io::Error>
 {
     for magic in id_info.magics {
         let b_offset: u64 = magic.b_offset;
@@ -287,13 +285,13 @@ pub fn probe_get_magic(
             return Ok(*magic);
         }
     }
-    return Err("Unable to find any magic".into());
+    return Err(ErrorKind::NotFound.into());
 }
 
 pub fn read_as<T: Pod>(
         raw_block: &File,
         offset: u64,
-    ) -> Result<T, Box<dyn std::error::Error>> 
+    ) -> Result<T, io::Error> 
 {
     let mut block = raw_block.try_clone()?;
     block.seek(SeekFrom::Start(0))?;

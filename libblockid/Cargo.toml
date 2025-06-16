@@ -13,7 +13,7 @@ vfat = []
 ext = []
 
 [dependencies]
-bitflags = "2.9.1"
+bitflags = { version = "2.9.1", features = ["bytemuck"] }
 bytemuck = { version = "1.23.0", features = ["derive", "min_const_generics"] }
 byteorder = "1.5.0"
 crc = "3.3.0"

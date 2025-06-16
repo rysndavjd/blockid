@@ -1,4 +1,4 @@
-use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic, UsageType, ProbeResult};
+use crate::{filesystems::FsError, BlockidIdinfo, BlockidMagic, BlockidProbe, ProbeResult, UsageType};
 
 pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("bsd"),
@@ -27,7 +27,7 @@ pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
 fn probe_bsd_pt(
         probe: &mut BlockidProbe,
         mag: BlockidMagic,
-    ) -> Result<ProbeResult ,Box<dyn std::error::Error>> 
+    ) -> Result<ProbeResult, FsError> 
 {
     todo!()
 }
