@@ -1,5 +1,4 @@
 use std::u16;
-use std::fs::File;
 use rustix::fs::makedev;
 use uuid::Uuid;
 use bytemuck::{Pod, Zeroable};
@@ -17,7 +16,7 @@ https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 */
 
 #[derive(Error, Debug)]
-enum ExtError {
+pub enum ExtError {
     #[error("I/O operation failed")]
     IoError(#[from] io::Error),
     #[error("Ext Feature Error: {0}")]
@@ -403,8 +402,7 @@ pub fn probe_ext2(
     let frc = es.s_feature_ro_compat;
 
     if fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
-        return Err(ExtError::UnknownFilesystem("Block has a journal so its not ext2".into()
-    ))
+        return Err(ExtError::UnknownFilesystem("Block has a journal so its not ext2".into()))
     };
 
     if frc.intersects(EXT2_FEATURE_RO_COMPAT_UNSUPPORTED) ||
@@ -501,9 +499,6 @@ pub fn probe_ext4(
     let frc = es.s_feature_ro_compat;
     let flags = es.s_flags;
 
-    println!("fi: {:?}", fi);
-    println!("frc: {:?}", frc);
-
     if fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
         return Err(ExtError::UnknownFilesystem("Block is jbd".into()));
     }
@@ -511,7 +506,7 @@ pub fn probe_ext4(
     if !frc.intersects(EXT3_FEATURE_RO_COMPAT_UNSUPPORTED) &&
         !fi.intersects(EXT3_FEATURE_INCOMPAT_UNSUPPORTED)
     {
-        return Err(ExtError::ExtFeatureError("Block does not contain supported features of ext4".into()))                                     
+        return Err(ExtError::ExtFeatureError("Block missing supported features of ext4".into()))                                     
     }
 
     if flags.contains(ExtFlags::EXT2_FLAGS_TEST_FILESYS) {

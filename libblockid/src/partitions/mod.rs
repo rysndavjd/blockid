@@ -1,13 +1,13 @@
-pub mod dos;
-pub mod gpt;
-pub mod mac;
-pub mod bsd;
-pub mod aix;
-pub mod solaris_x86;
-pub mod unixware;
-pub mod minix;
+//pub mod dos;
+//pub mod gpt;
+//pub mod mac;
+//pub mod bsd;
+//pub mod aix;
+//pub mod solaris_x86;
+//pub mod unixware;
+//pub mod minix;
 
-use crate::BlockidUUID;
+use crate::{checksum::CsumAlgorium, BlockidUUID};
 use rustix::fs::Dev;
 use uuid::Uuid;
 use thiserror::Error;
@@ -38,8 +38,8 @@ pub enum PtError {
     UnknownPartition(String),
     #[error("Checksum failed, expected: \"{expected:?}\" and got: \"{got:?})\"")]
     ChecksumError {
-        expected: u32,
-        got: u32,
+        expected: CsumAlgorium,
+        got: CsumAlgorium,
     }
 }
 
