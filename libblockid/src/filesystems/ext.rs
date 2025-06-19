@@ -8,7 +8,7 @@ use std::io;
 
 use crate::filesystems::FsError;
 use crate::checksum::{get_crc32c, verify_crc32c, CsumAlgorium};
-use crate::{read_as, FilesystemResults, FsSecType};
+use crate::{read_as, FilesystemResults};
 use crate::{BlockidError, FsType, BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult, BlockidUUID, BlockidVersion};
 
 /*
@@ -20,9 +20,9 @@ pub enum ExtError {
     #[error("I/O operation failed")]
     IoError(#[from] io::Error),
     #[error("Ext Feature Error: {0}")]
-    ExtFeatureError(String),
+    ExtFeatureError(&'static str),
     #[error("Not an Ext superblock: {0}")]
-    UnknownFilesystem(String),
+    UnknownFilesystem(&'static str),
     #[error("Crc32c Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
     ChecksumError {
         expected: CsumAlgorium,
@@ -34,7 +34,7 @@ impl From<ExtError> for FsError {
     fn from(err: ExtError) -> Self {
         match err {
             ExtError::IoError(e) => FsError::IoError(e),
-            ExtError::ExtFeatureError(feature) => FsError::InvalidHeader(format!("Ext Feature Error: {}", feature)),
+            ExtError::ExtFeatureError(feature) => FsError::InvalidHeader(feature),
             ExtError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
             ExtError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
         }
@@ -321,9 +321,8 @@ fn ext_checksum(
 }
 
 fn ext_get_info(
-        ver: u8,
         es: Ext2SuperBlock,
-    ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, Option<FsSecType>, BlockidVersion, u64, u64, u64), ExtError>
+    ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, BlockidVersion, u64, u64, u64), ExtError>
 {
 
     let fc = es.s_feature_compat;
@@ -348,12 +347,6 @@ fn ext_get_info(
         None
     };
 
-    let sec_type = if ver != 2 && fi.contains(EXT2_FEATURE_INCOMPAT_UNSUPPORTED) {
-        Some(FsSecType::Ext2)
-    } else {
-        None
-    };
-
     let version = BlockidVersion::DevT(makedev(es.s_rev_level, es.s_minor_rev_level.into()));
 
     let log_block_size = u32::from_le(es.s_log_block_size);
@@ -370,7 +363,7 @@ fn ext_get_info(
 
     let fs_size: u64 = block_size * u32::from_le(es.s_blocks_count) as u64; 
 
-    Ok((label, uuid, journal_uuid, sec_type, version, block_size, fslastblock, fs_size))
+    Ok((label, uuid, journal_uuid, version, block_size, fslastblock, fs_size))
 }
 
 //fn probe_jbd(
@@ -393,7 +386,7 @@ pub fn probe_ext2(
         _magic: BlockidMagic
     ) -> Result<ProbeResult, ExtError> 
 {
-    let es: Ext2SuperBlock = read_as::<Ext2SuperBlock>(&probe.file, 1024)?;
+    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
 
     ext_checksum(es)?;
 
@@ -411,13 +404,13 @@ pub fn probe_ext2(
         return Err(ExtError::ExtFeatureError("Block has features unsupported by ext2".into()))                                     
     }
 
-    let (label, uuid, journal_uuid, sec_type, version, block_size, fs_last_block, fs_size) = ext_get_info(2, es)?;
+    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size) = ext_get_info(es)?;
 
     let creator = es.s_creator_os;
 
     return Ok(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext2), 
-                                    sec_type, 
+                                    sec_type: None, 
                                     label, 
                                     fs_uuid: Some(uuid), 
                                     log_uuid: None, 
@@ -442,7 +435,7 @@ pub fn probe_ext3(
         _magic: BlockidMagic
     ) -> Result<ProbeResult, ExtError> 
 {
-    let es: Ext2SuperBlock = read_as::<Ext2SuperBlock>(&probe.file, 1024)?;
+    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
 
     ext_checksum(es)?;
 
@@ -460,13 +453,13 @@ pub fn probe_ext3(
         return Err(ExtError::ExtFeatureError("Block contains features unsupported by ext3".into()))                                     
     }
 
-    let (label, uuid, journal_uuid, sec_type, version, block_size, fs_last_block, fs_size) = ext_get_info(3, es)?;
+    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size) = ext_get_info(es)?;
 
     let creator = es.s_creator_os;
 
     return Ok(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext3), 
-                                    sec_type, 
+                                    sec_type: None, 
                                     label, 
                                     fs_uuid: Some(uuid), 
                                     log_uuid: None, 
@@ -490,7 +483,7 @@ pub fn probe_ext4(
         _magic: BlockidMagic
     ) -> Result<ProbeResult, ExtError> 
 {
-    let es: Ext2SuperBlock = read_as::<Ext2SuperBlock>(&probe.file, 1024)?;
+    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
 
     ext_checksum(es)?;
 
@@ -513,13 +506,13 @@ pub fn probe_ext4(
         return Err(ExtError::UnknownFilesystem("Ext is ext4dev".into()));
     }
 
-    let (label, uuid, journal_uuid, sec_type, version, block_size, fs_last_block, fs_size) = ext_get_info(4, es)?;
+    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size) = ext_get_info(es)?;
 
     let creator = es.s_creator_os;
 
     return Ok(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext4), 
-                                    sec_type, 
+                                    sec_type: None, 
                                     label, 
                                     fs_uuid: Some(uuid), 
                                     log_uuid: None, 
