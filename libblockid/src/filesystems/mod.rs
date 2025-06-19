@@ -33,9 +33,9 @@ pub enum FsError {
     #[error("I/O operation failed")]
     IoError(#[from] io::Error),
     #[error("Invalid Header: {0}")]
-    InvalidHeader(String),
+    InvalidHeader(&'static str),
     #[error("Unknown Filesystem: {0}")]
-    UnknownFilesystem(String),
+    UnknownFilesystem(&'static str),
     #[error("Filesystem Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
     ChecksumError {
         expected: CsumAlgorium,

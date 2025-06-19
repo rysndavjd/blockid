@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["dos", "gpt", "mac", "bsd", "vfat", "ext"]
+default = ["md", "lvm", "dm", "dos", "gpt", "mac", "bsd", "vfat", "ext"]
+md = []
+lvm = []
+dm = []
 dos = []
 gpt = []
 mac = []
