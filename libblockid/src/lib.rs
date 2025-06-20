@@ -4,21 +4,20 @@ pub mod partitions;
 pub mod filesystems;
 
 use std::fmt;
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::MetadataExt;
 use std::{fs::File, os::fd::AsFd, path::Path};
 use filesystems::volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 use bytemuck::{from_bytes, Pod};
 use std::io::{self, BufRead, ErrorKind, Read, Seek, SeekFrom};
-use rustix::fs::{ioctl_blksszget, Dev, Mode, fstat};
+use rustix::fs::{ioctl_blksszget, Dev, Mode, fstat, FileType};
 use rustix::io::Errno;
 use thiserror::Error;
+use crate::filesystems::exfat::EXFAT_ID_INFO;
 use crate::filesystems::FsError;
 use crate::partitions::PtError;
 use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO};
 use crate::filesystems::vfat::VFAT_ID_INFO;
-use bitflags::{bitflags, Flags};
+use bitflags::bitflags;
 
 #[derive(Error, Debug)]
 pub enum BlockidError {
@@ -36,6 +35,7 @@ pub static PROBES: &[BlockidIdinfo] = &[
     
     //Filesystems
     VFAT_ID_INFO,
+    EXFAT_ID_INFO,
     EXT2_ID_INFO,
     EXT3_ID_INFO,
     EXT4_ID_INFO,
@@ -51,7 +51,13 @@ impl BlockidProbe {
         ) -> Result<BlockidProbe, BlockidError>
     {   
         let stat = fstat(file.as_fd())?;
-        file.as_raw_fd();
+
+        let sector_size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
+            ioctl_blksszget(file.as_fd())?.into()
+        } else {
+            512
+        };
+
         Ok( Self { 
             file: file.try_clone()?, 
             offset: offset, 
@@ -59,7 +65,7 @@ impl BlockidProbe {
             io_size: stat.st_blksize, 
             devno: stat.st_rdev, 
             disk_devno: stat.st_dev, 
-            sector_size: ioctl_blksszget(file.as_fd())?.into(), 
+            sector_size, 
             mode: stat.st_mode.into(), 
             flags,
             filter,

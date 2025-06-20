@@ -1,4 +1,4 @@
-use std::{fs::File, io::{self, Read, Seek}, string};
+use std::{io::{self, Read, Seek}, string};
 use std::io::BufReader;
 
 use bytemuck::{checked::from_bytes, Pod, Zeroable};
@@ -60,8 +60,6 @@ pub const EXFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         },
     ]
 };
-
-
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -126,9 +124,8 @@ impl ExFatSuperBlock {
             cluster: u32
         ) -> u64
     {
-        return (u32::from_le(self.clustor_heap_offset) as u64 + 
-                (cluster - EXFAT_FIRST_DATA_CLUSTER) as u64)
-                << (self.sectors_per_cluster_shift);
+        return u32::from_le(self.clustor_heap_offset) as u64 +
+        (((cluster - EXFAT_FIRST_DATA_CLUSTER) as u64) << self.sectors_per_cluster_shift)
     }
 
     fn cluster_to_offset(
@@ -305,7 +302,7 @@ fn valid_exfat<R: Read + Seek>(
     return Ok(());
 }
 
-fn probe_is_exfat(
+pub fn probe_is_exfat(
         probe: &mut BlockidProbe,
     ) -> Result<(), ExFatError>
 {
@@ -329,38 +326,43 @@ fn find_label<R: Read+Seek>(
     let mut cluster = u32::from_le(sb.first_clustor_of_root);
     let mut offset = sb.cluster_to_offset(cluster);
 
-    let max_iter: u32 = 8388608;
-
     let mut i = 0;
 
-    while i < max_iter {
-        i += 1;
+    while i < 8388608 { // EXFAT_MAX_DIR_SIZE / EXFAT_ENTRY_SIZE
+        let buf = match read_buffer::<EXFAT_ENTRY_SIZE, R>(file, offset) {
+            Ok(t) => t,
+            Err(_) => {
+                return Ok(None)
+            }
+        };
+
+        let entry: ExfatEntryLabel = *from_bytes(&buf);
         
-        let entry = read_buffer::<EXFAT_ENTRY_SIZE, R>(file, offset)?;
-        
-        if entry[0] == EXFAT_ENTRY_EOD {
+        if entry.label_type == EXFAT_ENTRY_EOD {
             return Ok(None);
         }
-
-        if entry[0] == EXFAT_ENTRY_LABEL {            
-            return Ok(Some(ExfatEntryLabel::from(*from_bytes(&entry)).get_label_utf8()?))
+        if entry.label_type == EXFAT_ENTRY_LABEL {
+            return Ok(Some(entry.get_label_utf8()?));
         }
 
         offset += EXFAT_ENTRY_SIZE as u64;
+
+
         if sb.cluster_size() != 0 && (offset % sb.cluster_size() as u64) == 0 {
             cluster = sb.next_cluster(file, cluster)?;
             if cluster < EXFAT_FIRST_DATA_CLUSTER {
                 return Ok(None);
-            } 
+            }
             if cluster > EXFAT_LAST_DATA_CLUSTER {
                 return Ok(None);
             }
             offset = sb.cluster_to_offset(cluster);
-        }
+        } 
+        i += 1;
     }
-    return Ok(None);
-}
 
+    Ok(None)
+}
 
 pub fn probe_exfat(
         probe: &mut BlockidProbe,
@@ -374,7 +376,7 @@ pub fn probe_exfat(
     valid_exfat(&mut file_buf, sb)?;
 
     let label= find_label(&mut file_buf, sb)?; 
-    
+
     return Ok(ProbeResult::Filesystem(
                 FilesystemResults { 
                     fs_type: Some(FsType::Exfat), 
