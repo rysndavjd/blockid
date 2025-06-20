@@ -4,16 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["md", "lvm", "dm", "dos", "gpt", "mac", "bsd", "vfat", "ext"]
-md = []
-lvm = []
-dm = []
-dos = []
-gpt = []
-mac = []
-bsd = []
-vfat = []
-ext = []
+default = []
 
 [dependencies]
 bitflags = { version = "2.9.1", features = ["bytemuck"] }

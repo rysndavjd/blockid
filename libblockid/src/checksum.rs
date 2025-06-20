@@ -5,6 +5,7 @@ use std::fmt;
 pub enum CsumAlgorium {
     Crc32(u32),
     Crc32c(u32),
+    ExfatCsum(u32)
 }
 
 impl fmt::Display for CsumAlgorium {
@@ -12,6 +13,7 @@ impl fmt::Display for CsumAlgorium {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{}", checksum),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{}", checksum),
+            CsumAlgorium::ExfatCsum(checksum) => write!(f, "{}", checksum),
         }
     }
 }
@@ -21,6 +23,7 @@ impl fmt::UpperHex for CsumAlgorium {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{:X}", checksum),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{:X}", checksum),
+            CsumAlgorium::ExfatCsum(checksum) => write!(f, "{:X}", checksum),
         }
     }
 }
@@ -30,6 +33,7 @@ impl fmt::LowerHex for CsumAlgorium {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{:x}", checksum),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{:x}", checksum),
+            CsumAlgorium::ExfatCsum(checksum) => write!(f, "{:x}", checksum),
         }
     }
 }
@@ -71,3 +75,4 @@ pub fn get_crc32c(
 
     return digest.finalize();
 }
+
