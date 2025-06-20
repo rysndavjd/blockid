@@ -1,15 +1,19 @@
-use std::u16;
-use rustix::fs::makedev;
-use uuid::Uuid;
-use bytemuck::{Pod, Zeroable};
-use bitflags::bitflags;
-use thiserror::Error;
 use std::io;
+use std::u16;
 
-use crate::filesystems::FsError;
-use crate::checksum::{get_crc32c, verify_crc32c, CsumAlgorium};
-use crate::{read_as, FilesystemResults};
-use crate::{BlockidError, FsType, BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult, BlockidUUID, BlockidVersion};
+use bitflags::bitflags;
+use bytemuck::{Pod, Zeroable};
+use rustix::fs::makedev;
+use thiserror::Error;
+use uuid::Uuid;
+
+use crate::{
+    read_as, FilesystemResults,
+    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe,
+    BlockidUUID, BlockidVersion, FsType, ProbeResult, UsageType,
+    checksum::{get_crc32c, verify_crc32c, CsumAlgorium},
+    filesystems::FsError,
+};
 
 /*
 https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
@@ -372,7 +376,7 @@ fn ext_get_info(
     Ok((label, uuid, journal_uuid, version, block_size, fslastblock, fs_size, creator.to_string()))
 }
 
-fn probe_jbd(
+pub fn probe_jbd(
         probe: &mut BlockidProbe, 
         _magic: BlockidMagic
     ) -> Result<ProbeResult, ExtError> 
@@ -407,13 +411,6 @@ fn probe_jbd(
                     )
                 );
 }
-
-/*
- * reads superblock and returns:
- *	fc = feature_compat
- *	fi = feature_incompat
- *	frc = feature_ro_compat
- */
 
 pub fn probe_ext2(
         probe: &mut BlockidProbe, 
@@ -516,7 +513,6 @@ pub fn probe_ext4(
 
     ext_checksum(es)?;
 
-    //let fc = es.s_feature_compat;
     let fi = es.s_feature_incompat;
     let frc = es.s_feature_ro_compat;
     let flags = es.s_flags;
