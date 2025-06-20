@@ -35,13 +35,9 @@ pub enum BlockidError {
 pub static PROBES: &[BlockidIdinfo] = &[
     
     //Filesystems
-    #[cfg(feature = "vfat")]
     VFAT_ID_INFO,
-    #[cfg(feature = "ext")]
     EXT2_ID_INFO,
-    #[cfg(feature = "ext")]
     EXT3_ID_INFO,
-    #[cfg(feature = "ext")]
     EXT4_ID_INFO,
 ];
 
@@ -148,9 +144,7 @@ bitflags!{
         const SKIP_CONT = 0;
         const SKIP_PT = 1;
         const SKIP_FS = 2;
-        #[cfg(feature = "vfat")]
         const SKIP_VFAT = 3;
-        #[cfg(feature = "ext")]
         const SKIP_EXT = 4; 
     }
 }
@@ -213,11 +207,8 @@ pub struct FilesystemResults {
 
 #[derive(Debug)]
 pub enum ContType {
-    #[cfg(feature = "md")]
     Md,
-    #[cfg(feature = "lvm")]
     Lvm,
-    #[cfg(feature = "dm")]
     Dm,
     Other(String)
 }
@@ -225,11 +216,8 @@ pub enum ContType {
 impl fmt::Display for ContType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(feature = "md")]
             Self::Md => write!(f, "Md"),
-            #[cfg(feature = "lvm")]
             Self::Lvm => write!(f, "Lvm"),
-            #[cfg(feature = "dm")]
             Self::Dm => write!(f, "Dm"),
             Self::Other(s) => write!(f, "{s}"),
         }
@@ -238,13 +226,9 @@ impl fmt::Display for ContType {
 
 #[derive(Debug)]
 pub enum PtType {
-    #[cfg(feature = "dos")]
     Dos,
-    #[cfg(feature = "gpt")]
     Gpt,
-    #[cfg(feature = "mac")]
     Mac,
-    #[cfg(feature = "bsd")]
     Bsd,
     Other(String)
 }
@@ -252,13 +236,9 @@ pub enum PtType {
 impl fmt::Display for PtType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(feature = "dos")]
             Self::Dos => write!(f, "Dos"),
-            #[cfg(feature = "gpt")]
             Self::Gpt => write!(f, "Gpt"),
-            #[cfg(feature = "mac")]
             Self::Mac => write!(f, "Mac"),
-            #[cfg(feature = "bsd")]
             Self::Bsd => write!(f, "Bsd"),
             Self::Other(s) => write!(f, "{s}"),
         }
@@ -267,13 +247,10 @@ impl fmt::Display for PtType {
 
 #[derive(Debug)]
 pub enum FsType {
-    #[cfg(feature = "vfat")]
     Vfat,
-    #[cfg(feature = "ext")]
+    Exfat,
     Ext2,
-    #[cfg(feature = "ext")]
     Ext3,
-    #[cfg(feature = "ext")]
     Ext4,
     Other(String)
 }
@@ -281,13 +258,10 @@ pub enum FsType {
 impl fmt::Display for FsType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(feature = "vfat")]
             Self::Vfat => write!(f, "Vfat"),
-            #[cfg(feature = "ext")]
+            Self::Exfat => write!(f, "Exfat"),
             Self::Ext2 => write!(f, "Ext2"),
-            #[cfg(feature = "ext")]
             Self::Ext3 => write!(f, "Ext3"),
-            #[cfg(feature = "ext")]
             Self::Ext4 => write!(f, "Ext4"),
             Self::Other(s) => write!(f, "{s}"),
         }
@@ -296,11 +270,8 @@ impl fmt::Display for FsType {
 
 #[derive(Debug)]
 pub enum FsSecType {
-    #[cfg(feature = "vfat")]
     Fat12,
-    #[cfg(feature = "vfat")]
     Fat16,
-    #[cfg(feature = "vfat")]
     Fat32,
     Other(String)
 }
@@ -308,11 +279,8 @@ pub enum FsSecType {
 impl fmt::Display for FsSecType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(feature = "vfat")]
             Self::Fat12 => write!(f, "Fat12"),
-            #[cfg(feature = "vfat")]
             Self::Fat16 => write!(f, "Fat16"),
-            #[cfg(feature = "vfat")]
             Self::Fat32 => write!(f, "Fat32"),
             Self::Other(s) => write!(f, "{s}"),
         }
@@ -324,7 +292,6 @@ pub enum BlockidUUID {
     Standard(Uuid),
     VolumeId32(VolumeId32),
     VolumeId64(VolumeId64),
-    Other(&'static [u8]),
 }
 
 #[derive(Debug)]
@@ -364,7 +331,7 @@ pub struct BlockidMagic {
 pub fn read_buffer<const BUF_SIZE: usize, R: Read+Seek>(
         file: &mut R,
         offset: u64,
-    ) -> Result<[u8; BUF_SIZE], Box<dyn std::error::Error>> 
+    ) -> Result<[u8; BUF_SIZE], io::Error> 
 {
     file.seek(SeekFrom::Start(0))?;
 
@@ -393,7 +360,7 @@ pub fn read_buffer_vec<R: Read+Seek>(
 pub fn read_sector(
         probe: &mut BlockidProbe,
         sector: u64,
-    ) -> Result<[u8; 512], Box<dyn std::error::Error>> 
+    ) -> Result<[u8; 512], io::Error> 
 {
     read_buffer::<512, File>(&mut probe.file, sector << 9)
 }

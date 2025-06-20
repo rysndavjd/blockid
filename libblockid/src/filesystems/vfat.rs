@@ -332,7 +332,7 @@ pub fn valid_fat (
 
 pub fn probe_is_vfat(
         probe: &mut BlockidProbe,
-    ) -> Result<Option<ProbeResult>, FatError>
+    ) -> Result<(), FatError>
 {
     let ms: MsDosSuperBlock = read_as(&mut probe.file, 0)?;
     let vs: VFatSuperBlock = read_as(&mut probe.file, 0)?;
@@ -341,7 +341,7 @@ pub fn probe_is_vfat(
     
     valid_fat(ms, vs, mag)?;
 
-    return Ok(None);
+    return Ok(());
 }
 
 pub fn search_fat_label<R: Read+Seek>(
@@ -469,9 +469,9 @@ fn probe_fat32<R: Read+Seek>(
 }
 
 pub fn probe_vfat(
-    probe: &mut BlockidProbe,
-    mag: BlockidMagic,
-) -> Result<ProbeResult, FatError> 
+        probe: &mut BlockidProbe,
+        mag: BlockidMagic,
+    ) -> Result<ProbeResult, FatError> 
 {
     let mut file_buf = BufReader::with_capacity(4096, &probe.file);
 
