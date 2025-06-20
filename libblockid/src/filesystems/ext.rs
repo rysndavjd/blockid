@@ -44,19 +44,23 @@ impl From<ExtError> for FsError {
 const EXT_MAGIC: [u8; 2] = [0x53, 0xEF];
 const EXT_OFFSET: u64 = 0x38;
 
-//pub const JBD_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-//    name: Some("jbd"),
-//    usage: Some(UsageType::Other("jbd")),
-//    probe_fn: probe_jbd,
-//    minsz: None,
-//    magics: &[
-//        BlockidMagic {
-//            magic: &[0x53, 0xEF],
-//            len: 2,
-//            b_offset: 0x38,
-//        },
-//    ]
-//};
+pub const JBD_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+    name: Some("jbd"),
+    usage: Some(UsageType::Other("jbd")),
+    probe_fn: |probe, magic| {
+        probe_jbd(probe, magic)
+        .map_err(FsError::from)
+        .map_err(BlockidError::from)
+    },
+    minsz: None,
+    magics: &[
+        BlockidMagic {
+            magic: &[0x53, 0xEF],
+            len: 2,
+            b_offset: 0x38,
+        },
+    ]
+};
 
 pub const EXT2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("ext2"),
@@ -322,7 +326,7 @@ fn ext_checksum(
 
 fn ext_get_info(
         es: Ext2SuperBlock,
-    ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, BlockidVersion, u64, u64, u64), ExtError>
+    ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, BlockidVersion, u64, u64, u64, String), ExtError>
 {
 
     let fc = es.s_feature_compat;
@@ -347,7 +351,7 @@ fn ext_get_info(
         None
     };
 
-    let version = BlockidVersion::DevT(makedev(es.s_rev_level, es.s_minor_rev_level.into()));
+    let version = BlockidVersion::DevT(makedev(es.s_rev_level, es.s_minor_rev_level as u32));
 
     let log_block_size = u32::from_le(es.s_log_block_size);
     assert!(log_block_size < 32, "Shift too large"); 
@@ -363,16 +367,46 @@ fn ext_get_info(
 
     let fs_size: u64 = block_size * u32::from_le(es.s_blocks_count) as u64; 
 
-    Ok((label, uuid, journal_uuid, version, block_size, fslastblock, fs_size))
+    let creator = es.s_creator_os;
+
+    Ok((label, uuid, journal_uuid, version, block_size, fslastblock, fs_size, creator.to_string()))
 }
 
-//fn probe_jbd(
-//        probe: &mut BlockidProbe, 
-//        magic: BlockidMagic
-//    ) -> Result<Option<ProbeResult>, Box<dyn std::error::Error>> 
-//{
-//    Ok(None)
-//}
+fn probe_jbd(
+        probe: &mut BlockidProbe, 
+        _magic: BlockidMagic
+    ) -> Result<ProbeResult, ExtError> 
+{
+    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
+    
+    let fi = es.s_feature_incompat;
+
+    if !fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
+        return Err(ExtError::ExtFeatureError("Ext missing \"EXT3_FEATURE_INCOMPAT_JOURNAL_DEV\" to be JBD fs"));
+    }
+    
+    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
+
+    return Ok(ProbeResult::Filesystem(
+        FilesystemResults { fs_type: Some(FsType::Ext2), 
+                            sec_type: None, 
+                            label, 
+                            fs_uuid: Some(uuid), 
+                            log_uuid: Some(uuid), 
+                            ext_journal: journal_uuid, 
+                            fs_creator: Some(creator),
+                            usage: Some(UsageType::Filesystem), 
+                            version: Some(version), 
+                            sbmagic: Some(&EXT_MAGIC), 
+                            sbmagic_offset: Some(EXT_OFFSET), 
+                            fs_size: Some(fs_size), 
+                            fs_last_block: Some(fs_last_block),
+                            fs_block_size: Some(block_size),
+                            block_size: Some(block_size)
+                        }
+                    )
+                );
+}
 
 /*
  * reads superblock and returns:
@@ -404,9 +438,7 @@ pub fn probe_ext2(
         return Err(ExtError::ExtFeatureError("Block has features unsupported by ext2".into()))                                     
     }
 
-    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size) = ext_get_info(es)?;
-
-    let creator = es.s_creator_os;
+    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
     return Ok(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext2), 
@@ -415,7 +447,7 @@ pub fn probe_ext2(
                                     fs_uuid: Some(uuid), 
                                     log_uuid: None, 
                                     ext_journal: journal_uuid, 
-                                    fs_creator: Some(creator.to_string()),
+                                    fs_creator: Some(creator),
                                     usage: Some(UsageType::Filesystem), 
                                     version: Some(version), 
                                     sbmagic: Some(&EXT_MAGIC), 
@@ -427,7 +459,6 @@ pub fn probe_ext2(
                                 }
                             )
                         );
-
 }
 
 pub fn probe_ext3(
@@ -453,9 +484,7 @@ pub fn probe_ext3(
         return Err(ExtError::ExtFeatureError("Block contains features unsupported by ext3".into()))                                     
     }
 
-    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size) = ext_get_info(es)?;
-
-    let creator = es.s_creator_os;
+    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
     return Ok(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext3), 
@@ -464,7 +493,7 @@ pub fn probe_ext3(
                                     fs_uuid: Some(uuid), 
                                     log_uuid: None, 
                                     ext_journal: journal_uuid, 
-                                    fs_creator: Some(creator.to_string()),
+                                    fs_creator: Some(creator),
                                     usage: Some(UsageType::Filesystem), 
                                     version: Some(version), 
                                     sbmagic: Some(&EXT_MAGIC), 
@@ -506,9 +535,7 @@ pub fn probe_ext4(
         return Err(ExtError::UnknownFilesystem("Ext is ext4dev".into()));
     }
 
-    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size) = ext_get_info(es)?;
-
-    let creator = es.s_creator_os;
+    let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
     return Ok(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext4), 
@@ -517,7 +544,7 @@ pub fn probe_ext4(
                                     fs_uuid: Some(uuid), 
                                     log_uuid: None, 
                                     ext_journal: journal_uuid, 
-                                    fs_creator: Some(creator.to_string()),
+                                    fs_creator: Some(creator),
                                     usage: Some(UsageType::Filesystem), 
                                     version: Some(version), 
                                     sbmagic: Some(&EXT_MAGIC), 

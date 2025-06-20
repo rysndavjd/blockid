@@ -319,7 +319,7 @@ impl fmt::Display for FsSecType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BlockidUUID {
     Standard(Uuid),
     VolumeId32(VolumeId32),
