@@ -15,7 +15,6 @@ use libblockid::filesystems::vfat::*;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
     let file = File::open("/dev/sdb7")?; 
-
     let mut probe = BlockidProbe::new(&file, 0, 0, ProbeFlags::empty(), ProbeFilter::empty())?;
 
     let magic = BlockidMagic {
@@ -27,7 +26,7 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
     let result = probe_exfat(&mut probe, magic)?;
     
     println!("{:?}", result);
-    
+
     return Ok(());
 }
 
