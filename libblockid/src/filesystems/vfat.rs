@@ -1,17 +1,16 @@
-use std::u16;
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, BufReader};
-use byteorder::{ByteOrder, LittleEndian};
-use bytemuck::checked::from_bytes;
-use bytemuck::{Pod, Zeroable};
-use thiserror::Error;
-use std::io;
-use bitflags::bitflags;
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
 
-use crate::filesystems::volume_id::VolumeId32;
-use crate::{probe_get_magic, read_as, read_buffer_vec, FilesystemResults, FsType};
-use crate::{BlockidUUID, FsSecType, BlockidMagic, BlockidIdinfo, UsageType, BlockidProbe, ProbeResult, BlockidError};
-use crate::filesystems::FsError;
+use bitflags::bitflags;
+use byteorder::{ByteOrder, LittleEndian};
+use bytemuck::{checked::from_bytes, Pod, Zeroable};
+use thiserror::Error;
+
+use crate::{
+    probe_get_magic, read_as, read_buffer_vec,
+    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, ProbeResult,
+    FilesystemResults, FsSecType, FsType, UsageType,
+    filesystems::{volume_id::VolumeId32, FsError},
+};
 
 #[derive(Error, Debug)]
 pub enum FatError {
@@ -31,19 +30,6 @@ impl From<FatError> for FsError {
             FatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VfatVersion {
-    Fat12,
-    Fat16,
-    Fat32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VfatExtras {
-    oem_name: Option<String>,
-    boot_label: Option<String>
 }
 
 pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -405,8 +391,6 @@ fn probe_fat16<R: Read+Seek>(
 
     let vol_label = search_fat_label(file, root_start.into(), vs.vs_dir_entries.into())?;
     
-    println!("{:?}", vol_label);
-
     let vol_serno = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
         VolumeId32::new(ms.ms_serno)
     } else {
