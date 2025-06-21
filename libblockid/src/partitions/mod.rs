@@ -1,8 +1,8 @@
-//pub mod dos;
+pub mod dos;
 //pub mod gpt;
 //pub mod mac;
 //pub mod bsd;
-//pub mod aix;
+pub mod aix;
 //pub mod solaris_x86;
 //pub mod unixware;
 //pub mod minix;
@@ -27,7 +27,6 @@ use std::io;
   PART_ENTRY_DISK:      whole-disk maj:min
 */
 
-
 #[derive(Error, Debug)]
 pub enum PtError {
     #[error("I/O operation failed")]
@@ -41,59 +40,4 @@ pub enum PtError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
     }
-}
-
-#[derive(Debug)]
-pub enum PartitionItem {
-    PartTable(BlockidPartTable),
-    Partition(BlockidPartition)
-}
-
-#[derive(Debug)]
-pub struct BlockidPartTable {
-    pub start: u64,
-    pub size: u64,
-
-    pub pt_type: PTType,
-    pub flags: PTflags,
-    pub table_uuid: BlockidUUID,
-
-    pub partitions: Vec<PartitionItem>,
-}
-
-#[derive(Debug)]
-pub struct BlockidPartition {
-    start: u64,
-    size: u64,
-
-    dev: Dev,
-    partno: u16,
-
-    name: String,
-    uuid: BlockidUUID,
-    entry_type: PTType,
-}
-
-#[derive(Debug, Clone)]
-pub enum PTType {
-    #[cfg(feature = "dos")]
-    Dos,
-    #[cfg(feature = "gpt")]
-    Gpt,
-    #[cfg(feature = "mac")]
-    Mac,
-    #[cfg(feature = "bsd")]
-    Bsd,
-    Unknown(String), 
-}
-
-#[derive(Debug, Clone)]
-pub enum PartEntryType {
-    Byte(u8),
-    Uuid(Uuid),
-}
-
-#[derive(Debug, Clone)]
-pub enum PTflags {
-    Unknown(String), 
 }

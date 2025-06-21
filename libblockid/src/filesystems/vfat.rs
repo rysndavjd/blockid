@@ -330,14 +330,14 @@ pub fn valid_fat (
     }
 }
 
-pub fn probe_is_vfat(
-        probe: &mut BlockidProbe,
+pub fn probe_is_vfat<R: Read+Seek>(
+        file: &mut R,
     ) -> Result<(), FatError>
 {
-    let ms: MsDosSuperBlock = read_as(&mut probe.file, 0)?;
-    let vs: VFatSuperBlock = read_as(&mut probe.file, 0)?;
+    let ms: MsDosSuperBlock = read_as(file, 0)?;
+    let vs: VFatSuperBlock = read_as(file, 0)?;
 
-    let mag: BlockidMagic = probe_get_magic(probe, &VFAT_ID_INFO)?;
+    let mag: BlockidMagic = probe_get_magic(file, &VFAT_ID_INFO)?;
     
     valid_fat(ms, vs, mag)?;
 
