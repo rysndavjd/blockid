@@ -18,6 +18,7 @@ use crate::partitions::PtError;
 use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO};
 use crate::filesystems::vfat::VFAT_ID_INFO;
 use bitflags::bitflags;
+use crate::partitions::dos::MbrAttributes;
 
 #[derive(Error, Debug)]
 pub enum BlockidError {
@@ -79,7 +80,7 @@ impl BlockidProbe {
     {
         if self.filter.is_empty() {
             for info in PROBES {
-                let magic = probe_get_magic(self, info)?;
+                let magic = probe_get_magic(&mut self.file, info)?;
                 let result = (info.probe_fn)(self, magic)?;
                 self.push_result(result);
             }
@@ -176,17 +177,38 @@ pub struct ContainerResults {
 
 #[derive(Debug)]
 pub struct PartTableResults {
+    pub offset: Option<u64>,
+    pub size: Option<u64>,
+
     pub pt_type: Option<PtType>,
     pub pt_uuid: Option<BlockidUUID>,
-    pub part_entry_scheme: Option<String>,
-    pub part_entry_name: Option<String>,
-    pub part_entry_uuid: Option<BlockidUUID>,
-    //pub part_entry_type: Option<BlockidPartEntryType>,
-    //pub part_entry_flags: Option<String>,
-    pub part_entry_number: Option<u64>,
-    pub part_entry_offset: Option<u64>,
-    pub part_entry_size: Option<u64>,
-    pub part_entry_disk: Option<Dev>,
+
+    pub partitions: Option<Vec<PartitionResults>>,
+}
+
+#[derive(Debug)]
+pub struct PartitionResults {
+    pub offset: Option<u64>,
+    pub size: Option<u64>,
+
+    pub partno: Option<u64>,
+    pub part_uuid: Option<BlockidUUID>,
+    pub name: Option<String>,
+
+    pub entry_type: Option<PartEntryType>,
+    pub entry_attributes: Option<PartEntryAttributes>
+}
+
+#[derive(Debug)]
+pub enum PartEntryType {
+    Byte(u8),
+    Uuid(Uuid),
+}
+
+#[derive(Debug)]
+pub enum PartEntryAttributes {
+    Mbr(MbrAttributes),
+
 }
 
 #[derive(Debug)]
@@ -236,7 +258,6 @@ pub enum PtType {
     Gpt,
     Mac,
     Bsd,
-    Other(String)
 }
 
 impl fmt::Display for PtType {
@@ -246,7 +267,6 @@ impl fmt::Display for PtType {
             Self::Gpt => write!(f, "Gpt"),
             Self::Mac => write!(f, "Mac"),
             Self::Bsd => write!(f, "Bsd"),
-            Self::Other(s) => write!(f, "{s}"),
         }
     }
 }
@@ -258,7 +278,6 @@ pub enum FsType {
     Ext2,
     Ext3,
     Ext4,
-    Other(String)
 }
 
 impl fmt::Display for FsType {
@@ -269,7 +288,6 @@ impl fmt::Display for FsType {
             Self::Ext2 => write!(f, "Ext2"),
             Self::Ext3 => write!(f, "Ext3"),
             Self::Ext4 => write!(f, "Ext4"),
-            Self::Other(s) => write!(f, "{s}"),
         }
     }
 }
@@ -279,7 +297,6 @@ pub enum FsSecType {
     Fat12,
     Fat16,
     Fat32,
-    Other(String)
 }
 
 impl fmt::Display for FsSecType {
@@ -288,7 +305,6 @@ impl fmt::Display for FsSecType {
             Self::Fat12 => write!(f, "Fat12"),
             Self::Fat16 => write!(f, "Fat16"),
             Self::Fat32 => write!(f, "Fat32"),
-            Self::Other(s) => write!(f, "{s}"),
         }
     }
 }
@@ -363,23 +379,23 @@ pub fn read_buffer_vec<R: Read+Seek>(
     return Ok(buffer);
 }
 
-pub fn read_sector(
-        probe: &mut BlockidProbe,
+pub fn read_sector<R: Read+Seek>(
+        file: &mut R,
         sector: u64,
     ) -> Result<[u8; 512], io::Error> 
 {
-    read_buffer::<512, File>(&mut probe.file, sector << 9)
+    read_buffer::<512, R>(file, sector << 9)
 }
 
 pub fn get_sectorsize(
         probe: &mut BlockidProbe
-    ) -> Result<u32, Box<dyn std::error::Error>> 
+    ) -> Result<u32, io::Error> 
 {
     return Ok(ioctl_blksszget(probe.file.as_fd())?);
 }
 
-pub fn probe_get_magic(
-        probe: &mut BlockidProbe, 
+pub fn probe_get_magic<R: Read+Seek>(
+        file: &mut R, 
         id_info: &BlockidIdinfo
     ) -> Result<BlockidMagic, io::Error>
 {
@@ -387,12 +403,11 @@ pub fn probe_get_magic(
         let b_offset: u64 = magic.b_offset;
         let magic_len: usize = magic.len;
 
-        let mut raw = probe.file.try_clone()?;
-        raw.seek(SeekFrom::Start(b_offset))?;
+        file.seek(SeekFrom::Start(b_offset))?;
 
         let mut buffer = vec![0; magic_len];
 
-        raw.read_exact(&mut buffer)?;
+        file.read_exact(&mut buffer)?;
 
         if buffer == magic.magic {
             return Ok(*magic);

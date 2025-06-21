@@ -1,24 +1,174 @@
-use crate::partitions::{BlockidPartition, BlockidPartTable};
-use crate::{ProbeResult, BlockidIdinfo, UsageType, BlockidProbe, BlockidMagic, get_sectorsize, read_sector};
-use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
+use crate::filesystems::exfat::probe_is_exfat;
+use crate::filesystems::volume_id::VolumeId32;
+use crate::{get_sectorsize, partitions, read_as, read_sector, BlockidIdinfo, BlockidMagic, BlockidProbe, PartEntryAttributes, PartTableResults, PartitionResults, ProbeResult, PtType, UsageType};
 use crate::filesystems::vfat::probe_is_vfat;
-use crate::partitions::PTType;
-use super::bsd::BSD_PT_IDINFO;
-use super::minix::MINIX_PT_IDINFO;
-use super::solaris_x86::SOLARIS_X86_PT_IDINFO;
-use super::unixware::UNIXWARE_PT_IDINFO;
+use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
+//use super::bsd::BSD_PT_IDINFO;
+//use super::minix::MINIX_PT_IDINFO;
+//use super::solaris_x86::SOLARIS_X86_PT_IDINFO;
+//use super::unixware::UNIXWARE_PT_IDINFO;
 
 use std::u16;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, BufReader};
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
-use bytemuck::{from_bytes, Pod, Zeroable};
-
+use bytemuck::{bytes_of, from_bytes, Pod, Zeroable};
+use thiserror::Error;
+use crate::BlockidUUID;
+use crate::PartEntryType;
+use bitflags::bitflags;
 
 /*
 Info from https://en.wikipedia.org/wiki/Master_boot_record
 */
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Error, Debug)]
+pub enum DosPTError {
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] io::Error),
+    #[error("Not an Dos table superblock: {0}")]
+    UnknownFilesystem(&'static str),
+    #[error("Dos table header error: {0}")]
+    DosPTHeaderError(&'static str),
+}
+
+pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+    name: Some("dos"),
+    usage: Some(UsageType::PartitionTable),
+    minsz: None,
+    probe_fn: probe_dos_pt,
+    magics: &[
+        /* DOS master boot sector:
+		 *
+		 *     0 | Code Area
+		 *   440 | Optional Disk signature
+		 *   446 | Partition table
+		 *   510 | 0x55
+		 *   511 | 0xAA
+		 */
+         BlockidMagic {
+            magic: b"\x55\xAA",
+            len: 2,
+            b_offset: 510,
+        },
+    ]
+};
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct DosTable {
+    pub boot_code1: [u8; 218],
+    pub disk_timestamp: DiskTimestamp,
+    pub boot_code2: [u8; 216],
+    pub disk_id: [u8; 4],
+    pub state: [u8; 2],
+    pub partition_entry1: DosPartitionEntry,
+    pub partition_entry2: DosPartitionEntry,
+    pub partition_entry3: DosPartitionEntry,
+    pub partition_entry4: DosPartitionEntry,
+    pub boot_signature: [u8; 2],
+}
+
+impl DosTable {
+    fn is_partitions_empty(
+            &self,
+        ) -> bool
+    {
+        self.partition_entry1.is_empty() &&
+        self.partition_entry2.is_empty() &&
+        self.partition_entry3.is_empty() &&
+        self.partition_entry4.is_empty()
+    }
+    
+    fn get_valid_partitions(
+            &self,
+        ) -> Vec<DosPartitionEntry>
+    {
+        let mut partitions = Vec::new();
+
+        for entry in [
+            self.partition_entry1,
+            self.partition_entry2,
+            self.partition_entry3,
+            self.partition_entry4,
+        ] {
+            if !entry.is_empty() {
+                partitions.push(entry);
+            }
+        }
+        return partitions;
+    }
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct DiskTimestamp {
+    pub reserved: u16,
+    pub physical_disk: u8,          
+    pub seconds: u8,             
+    pub minutes: u8,
+    pub hours: u8,
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct DosPartitionEntry {
+    pub boot_ind: MbrAttributes,    /* 0x80 - active */
+    pub begin_head: u8,             /* begin CHS */
+    pub begin_sector: u8,
+    pub begin_cylinder: u8,
+    pub sys_ind: MbrPartitionType,  /* https://en.wikipedia.org/wiki/Partition_type */
+    pub end_head: u8,               /* end CHS */
+    pub end_sector: u8,
+    pub end_cylinder: u8,
+    pub start_sect: u32,
+    pub nr_sects: u32,
+}
+
+impl DosPartitionEntry {
+    fn is_empty(
+            &self,
+        ) -> bool
+    {
+        bytes_of(self) == [0u8; 16]
+    }
+
+    fn check_dos_entry<R: Read+Seek>(
+            &self,
+            file: &mut R,
+        ) -> Result<(), DosPTError>
+    {
+        if self.boot_ind.contains(MbrAttributes::INACTIVE) && self.boot_ind.contains(MbrAttributes::ACTIVE) {
+            return Err(DosPTError::DosPTHeaderError("missing boot indicator"));
+        }
+
+        if self.sys_ind == MbrPartitionType::MBR_GPT_PARTITION {
+            return Err(DosPTError::UnknownFilesystem("probably GPT"));
+        }
+
+        if probe_is_vfat(file).is_ok() && probe_is_exfat(file).is_ok() {
+            return Err(DosPTError::UnknownFilesystem("probably FAT"));
+        }
+
+        // TODO - probe_is_ntfs 
+
+        // TODO - is_lvm(pr) && is_empty_mbr(data)
+
+        Ok(())
+    }
+
+    fn is_extended(
+            &self
+        ) -> bool
+    {
+        self.sys_ind == MbrPartitionType::MBR_DOS_EXTENDED_PARTITION ||
+        self.sys_ind == MbrPartitionType::MBR_W95_EXTENDED_PARTITION ||
+        self.sys_ind == MbrPartitionType::MBR_LINUX_EXTENDED_PARTITION 
+    }
+
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Pod, Zeroable)]
 pub struct MbrPartitionType(u8);
 
 impl MbrPartitionType {
@@ -130,154 +280,88 @@ impl MbrPartitionType {
         Self(byte)
     }
 
-    pub const fn as_byte(&self) -> u8 {
+    pub fn as_byte(&self) -> u8 {
         self.0
     }
 }
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-pub struct DosPartitionEntry {
-    pub boot_ind: u8,           /* 0x80 - active */
-    pub begin_head: u8,         /* begin CHS */
-    pub begin_sector: u8,
-    pub begin_cylinder: u8,
-    pub sys_ind: u8,            /* https://en.wikipedia.org/wiki/Partition_type */
-    pub end_head: u8,           /* end CHS */
-    pub end_sector: u8,
-    pub end_cylinder: u8,
-    pub start_sect: u32,
-    pub nr_sects: u32,
-}
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct GenericMBR {
-    pub bootstrap_code_area: [u8; 446],
-    pub partition_entry_1: DosPartitionEntry,
-    pub partition_entry_2: DosPartitionEntry,
-    pub partition_entry_3: DosPartitionEntry,
-    pub partition_entry_4: DosPartitionEntry,
-    pub boot_signature: [u8; 2],
-}
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct DiskTimestamp {
-    pub empty_bytes: [u8; 2],
-    pub physical_drive: u8,
-    pub seconds: u8,
-    pub minutes: u8,
-    pub hours: u8,
-}
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct DiskSignature {
-    pub signature: u32,
-    pub status: u16,
-}
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct ModernMBR {
-    pub bootstrap_code_area_1: [u8; 218],
-    pub disk_timestamp: DiskTimestamp,
-    pub bootstrap_code_area_2: [u8; 216],
-    pub disk_signature: DiskSignature,
-    pub partition_entry_1: DosPartitionEntry,
-    pub partition_entry_2: DosPartitionEntry,
-    pub partition_entry_3: DosPartitionEntry,
-    pub partition_entry_4: DosPartitionEntry,
-    pub boot_signature: [u8; 2],
-}
-
-pub struct DosSubType {
-    type_code: u8,
-    id: &'static BlockidIdinfo,
-}
-
-const DOS_NESTED: &[DosSubType] = &[
-    DosSubType { type_code: MbrPartitionType::MBR_FREEBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
-    DosSubType { type_code: MbrPartitionType::MBR_NETBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
-    DosSubType { type_code: MbrPartitionType::MBR_OPENBSD_PARTITION.as_byte(), id: &BSD_PT_IDINFO },
-    DosSubType { type_code: MbrPartitionType::MBR_UNIXWARE_PARTITION.as_byte(), id: &UNIXWARE_PT_IDINFO },
-    DosSubType { type_code: MbrPartitionType::MBR_SOLARIS_X86_PARTITION.as_byte(), id: &SOLARIS_X86_PT_IDINFO },
-    DosSubType { type_code: MbrPartitionType::MBR_MINIX_PARTITION.as_byte(), id: &MINIX_PT_IDINFO },
-];
-
-const MBR_PT_OFFSET: u32 = 0x1be;
+const MBR_PT_OFFSET: usize = 0x1be;
 const MBR_PT_BOOTBITS_SIZE: u32 = 440;
 
-pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("dos"),
-    usage: Some(UsageType::PartitionTable),
-    minsz: None,
-    probe_fn: probe_dos_pt,
-    magics: &[
-        /* DOS master boot sector:
-		 *
-		 *     0 | Code Area
-		 *   440 | Optional Disk signature
-		 *   446 | Partition table
-		 *   510 | 0x55
-		 *   511 | 0xAA
-		 */
-         BlockidMagic {
-            magic: b"\x55\xAA",
-            len: 2,
-            b_offset: 510,
-        },
-    ]
-};
-
-fn mbr_get_entries(mbr: &[u8; 512]) -> [DosPartitionEntry; 4] { 
-    // This is sketchy AF
-    let p0 = *from_bytes::<DosPartitionEntry>(&mbr[446..462]);
-    let p1 = *from_bytes::<DosPartitionEntry>(&mbr[462..478]);
-    let p2 = *from_bytes::<DosPartitionEntry>(&mbr[478..494]);
-    let p3 = *from_bytes::<DosPartitionEntry>(&mbr[494..510]);
-
-    return [p0, p1, p2, p3];
-}
-
-fn mbr_get_id(mbr: &[u8; 512]) -> u32 {
-    return LittleEndian::read_u32(&mbr[440..444]);
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    pub struct MbrAttributes: u8 {
+        const ACTIVE = 0x80;
+        const INACTIVE = 0x00;
+    }
 }
 
 pub fn probe_dos_pt(
         probe: &mut BlockidProbe, 
         mag: BlockidMagic
-    ) -> Result<ProbeResult, Box<dyn std::error::Error>> 
+    ) -> Result<ProbeResult, DosPTError> 
 {
-    let mbr = read_sector(probe, 0)?;
+    let mut buffered = BufReader::with_capacity(4096, &probe.file);
     
-    if mbr[0..3] == BLKID_AIX_MAGIC_STRING {
-        return Err("Aix detected".into());
+    let dos_pt: DosTable = read_as(&mut buffered, 0)?;
+    
+    if dos_pt.boot_code1[0..3] == BLKID_AIX_MAGIC_STRING {
+        return Err(DosPTError::UnknownFilesystem("Disk has AIX magic number"));
     }
+    let ssf = probe.sector_size / 512;
 
-    let part_entries = mbr_get_entries(&mbr);
+    let mut partitions: Vec<PartitionResults> = Vec::new();
 
-    for entry in part_entries {
-        if entry.boot_ind != 0 && entry.boot_ind != 0x80 {
-            return Err("missing boot indicator -- ignore".into());
+    let mut partno: u64 = 0;
+
+    let entry_list = [dos_pt.partition_entry1, dos_pt.partition_entry2, dos_pt.partition_entry3, dos_pt.partition_entry4];
+
+    for entry in entry_list {
+        let start = entry.start_sect as u64 * ssf;
+        let size = entry.nr_sects as u64 * ssf;
+
+        if size == 0 {
+            partno += 1;
+            continue;
         }
 
-        if entry.sys_ind == MbrPartitionType::MBR_GPT_PARTITION.as_byte() {
-            return Err("probably GPT -- ignore".into());
+        partitions.push(PartitionResults{
+            offset: Some(start),
+            size: Some(size),
+            partno: Some(partno),
+            part_uuid: None,
+            name: None,
+            entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
+            entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind))
+        });
+    }
+
+    partno == 5;
+
+    for entry in entry_list {
+        let start = entry.start_sect as u64 * ssf;
+        let size = entry.nr_sects as u64 * ssf;
+
+        if size == 0 {
+            //partno += 1;
+            continue;
         }
+
+        if entry.is_extended() &&
+            
+
+
+        //partitions.push(PartitionResults{
+        //    offset: Some(start),
+        //    size: Some(size),
+        //    partno: Some(partno),
+        //    part_uuid: None,
+        //    name: None,
+        //    entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
+        //    entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind))
+        //});
     }
 
-    if probe_is_vfat(probe).is_ok() {
-        return Err("probably FAT -- ignore".into());
-    }
-
-    let id = mbr_get_id(&mbr);
-    println!("{:08X}", id);
-    
-    let ssf = get_sectorsize(probe)? / 512;
-
-    //let mut tab = BlockidPartList::new_parttable(ls, pttype, offset, id)
-
-    todo!()
+    Ok(())
 }

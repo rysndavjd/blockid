@@ -302,18 +302,18 @@ fn valid_exfat<R: Read + Seek>(
     return Ok(());
 }
 
-pub fn probe_is_exfat(
-        probe: &mut BlockidProbe,
+pub fn probe_is_exfat<R: Read+Seek>(
+        file: &mut R,
     ) -> Result<(), ExFatError>
 {
-    let sb: ExFatSuperBlock = read_as(&mut probe.file, 0)?;
+    let sb: ExFatSuperBlock = read_as(file, 0)?;
     
-    match probe_get_magic(probe, &VFAT_ID_INFO) {
+    match probe_get_magic(file, &VFAT_ID_INFO) {
         Ok(_) => return Err(ExFatError::UnknownFilesystem("Block is detetcted with a vfat magic")),
         Err(_) => (),
     }
 
-    valid_exfat(&mut probe.file, sb)?;
+    valid_exfat(file, sb)?;
 
     return Ok(());
 }
