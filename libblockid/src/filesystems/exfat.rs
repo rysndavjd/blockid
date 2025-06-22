@@ -308,9 +308,8 @@ pub fn probe_is_exfat<R: Read+Seek>(
 {
     let sb: ExFatSuperBlock = read_as(file, 0)?;
     
-    match probe_get_magic(file, &VFAT_ID_INFO) {
-        Ok(_) => return Err(ExFatError::UnknownFilesystem("Block is detetcted with a vfat magic")),
-        Err(_) => (),
+    if probe_get_magic(file, &VFAT_ID_INFO).is_ok() {
+        return Err(ExFatError::UnknownFilesystem("Block is detected with a VFAT magic"));
     }
 
     valid_exfat(file, sb)?;

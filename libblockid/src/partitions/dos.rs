@@ -1,5 +1,6 @@
 use crate::filesystems::exfat::probe_is_exfat;
 use crate::filesystems::volume_id::VolumeId32;
+use crate::partitions::PtError;
 use crate::{get_sectorsize, partitions, read_as, read_sector, BlockidIdinfo, BlockidMagic, BlockidProbe, PartEntryAttributes, PartTableResults, PartitionResults, ProbeResult, PtType, UsageType};
 use crate::filesystems::vfat::probe_is_vfat;
 use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
@@ -8,14 +9,16 @@ use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
 //use super::solaris_x86::SOLARIS_X86_PT_IDINFO;
 //use super::unixware::UNIXWARE_PT_IDINFO;
 
-use std::u16;
+use std::collections::HashSet;
 use std::io::{self, Read, Seek, BufReader};
+use std::thread::panicking;
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use bytemuck::{bytes_of, from_bytes, Pod, Zeroable};
 use thiserror::Error;
 use crate::BlockidUUID;
 use crate::PartEntryType;
 use bitflags::bitflags;
+use crate::BlockidError;
 
 /*
 Info from https://en.wikipedia.org/wiki/Master_boot_record
@@ -26,16 +29,30 @@ pub enum DosPTError {
     #[error("I/O operation failed: {0}")]
     IoError(#[from] io::Error),
     #[error("Not an Dos table superblock: {0}")]
-    UnknownFilesystem(&'static str),
+    UnknownPartition(&'static str),
     #[error("Dos table header error: {0}")]
     DosPTHeaderError(&'static str),
+}
+
+impl From<DosPTError> for PtError {
+    fn from(err: DosPTError) -> Self {
+        match err {
+            DosPTError::IoError(e) => PtError::IoError(e),
+            DosPTError::DosPTHeaderError(pt) => PtError::InvalidHeader(pt),
+            DosPTError::UnknownPartition(pt) => PtError::UnknownPartition(pt),
+        }
+    }
 }
 
 pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("dos"),
     usage: Some(UsageType::PartitionTable),
     minsz: None,
-    probe_fn: probe_dos_pt,
+    probe_fn: |probe, magic| {
+        probe_dos_pt(probe, magic)
+        .map_err(PtError::from)
+        .map_err(BlockidError::from)
+    },
     magics: &[
         /* DOS master boot sector:
 		 *
@@ -61,41 +78,35 @@ pub struct DosTable {
     pub boot_code2: [u8; 216],
     pub disk_id: [u8; 4],
     pub state: [u8; 2],
-    pub partition_entry1: DosPartitionEntry,
-    pub partition_entry2: DosPartitionEntry,
-    pub partition_entry3: DosPartitionEntry,
-    pub partition_entry4: DosPartitionEntry,
+    pub partition_entries: [DosPartitionEntry; 4],
     pub boot_signature: [u8; 2],
 }
 
 impl DosTable {
-    fn is_partitions_empty(
+    fn valid_signature(
             &self,
         ) -> bool
     {
-        self.partition_entry1.is_empty() &&
-        self.partition_entry2.is_empty() &&
-        self.partition_entry3.is_empty() &&
-        self.partition_entry4.is_empty()
+        self.boot_signature == [0x55, 0xAA]
     }
-    
-    fn get_valid_partitions(
-            &self,
-        ) -> Vec<DosPartitionEntry>
-    {
-        let mut partitions = Vec::new();
 
-        for entry in [
-            self.partition_entry1,
-            self.partition_entry2,
-            self.partition_entry3,
-            self.partition_entry4,
-        ] {
-            if !entry.is_empty() {
-                partitions.push(entry);
+    fn is_empty_part_entries(
+            &self
+        ) -> bool
+    {
+        self.partition_entries.iter().all(|entry| entry.is_empty())
+    }
+
+    fn get_extended_partition(
+            &self
+        ) -> Option<DosPartitionEntry>
+    {
+        for entry in self.partition_entries {
+            if entry.is_extended() {
+                return Some(entry)
             }
         }
-        return partitions;
+        return None;
     }
 }
 
@@ -130,30 +141,6 @@ impl DosPartitionEntry {
         ) -> bool
     {
         bytes_of(self) == [0u8; 16]
-    }
-
-    fn check_dos_entry<R: Read+Seek>(
-            &self,
-            file: &mut R,
-        ) -> Result<(), DosPTError>
-    {
-        if self.boot_ind.contains(MbrAttributes::INACTIVE) && self.boot_ind.contains(MbrAttributes::ACTIVE) {
-            return Err(DosPTError::DosPTHeaderError("missing boot indicator"));
-        }
-
-        if self.sys_ind == MbrPartitionType::MBR_GPT_PARTITION {
-            return Err(DosPTError::UnknownFilesystem("probably GPT"));
-        }
-
-        if probe_is_vfat(file).is_ok() && probe_is_exfat(file).is_ok() {
-            return Err(DosPTError::UnknownFilesystem("probably FAT"));
-        }
-
-        // TODO - probe_is_ntfs 
-
-        // TODO - is_lvm(pr) && is_empty_mbr(data)
-
-        Ok(())
     }
 
     fn is_extended(
@@ -297,9 +284,140 @@ bitflags! {
     }
 }
 
+fn is_valid_dos<R: Read+Seek>(
+        pt: DosTable,
+        file: &mut R,
+    ) -> Result<(), DosPTError>
+{
+    for entry in pt.partition_entries {
+        if !entry.boot_ind.contains(MbrAttributes::INACTIVE) && !entry.boot_ind.contains(MbrAttributes::ACTIVE) {
+            return Err(DosPTError::DosPTHeaderError("missing boot indicator"));
+        }
+
+        if entry.sys_ind == MbrPartitionType::MBR_GPT_PARTITION {
+            return Err(DosPTError::UnknownPartition("probably GPT"));
+        }
+    }
+
+    if probe_is_vfat(file).is_ok() && probe_is_exfat(file).is_ok() {
+        return Err(DosPTError::UnknownPartition("probably FAT"));
+    }
+
+    // TODO - probe_is_ntfs 
+
+    // TODO - is_lvm(pr) && is_empty_mbr(data)
+
+    Ok(())
+}
+
+
+
+fn parse_dos_extended<R: Read+Seek>(
+        file: &mut R,
+        entry: DosPartitionEntry,
+        ssf: u64,
+    ) -> Result<Option<Vec<PartitionResults>>, DosPTError>
+{
+    let ex_start = entry.start_sect as u64 * ssf;
+    let ex_size = entry.nr_sects as u64 * ssf;
+    
+    if ex_start == 0 {
+        return Err(DosPTError::DosPTHeaderError("Bad offset in primary extended partition -- ignore"));
+    }
+
+    let mut extended_partitions: Vec<PartTableResults> = Vec::new();
+    let mut cur_start = ex_start;
+    let mut cur_size = ex_size;
+    let mut ct_nodata = 0;
+    let mut i = 0;
+
+    loop {
+        if ct_nodata > 100 {
+            break;
+        } else {
+            ct_nodata += 1;
+        }
+    
+        let data: DosTable = read_as(file, cur_start)?;
+
+        if !data.valid_signature() {
+            return Err(DosPTError::DosPTHeaderError("extended pt doesnt contain mbr sig"));
+        }
+
+        let mut seen_pt = HashSet::new();
+
+        let extended: Vec<PartitionResults> = data
+            .partition_entries
+            .iter()
+            .enumerate()
+            .filter_map(|(partno, entry)| {            
+                let start = entry.start_sect as u64 * ssf;
+                let size = entry.nr_sects as u64 * ssf;
+                let abs_start = cur_start + start;
+
+                if size == 0 || entry.is_extended() {
+                    return None;
+                }
+
+                if partno >= 2 {
+                    if start + size > cur_size {
+                        return None;
+                    }
+                    if abs_start < ex_start {
+                        return None;
+                    }
+                    if abs_start + size > ex_start + ex_size {
+                        return None;
+                    }
+                }
+
+                if seen_pt.contains(&abs_start) {
+                    i += 1;
+                    return None;
+                } else {
+                    seen_pt.insert(abs_start);
+                }
+
+                ct_nodata = 0;
+
+                Some(PartitionResults {
+                    offset: Some(start),
+                    size: Some(size),
+                    partno: Some(partno as u64 + 1),
+                    part_uuid: None,
+                    name: None,
+                    entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
+                    entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind)),
+                })
+            }
+        ).collect();
+
+        println!("395: {:?}", extended);
+
+        for entry in data.partition_entries {
+            let start = entry.start_sect as u64 * ssf;
+            let size = entry.nr_sects as u64 * ssf;
+
+            if size > 0 && entry.is_extended() {
+                if start == 0 {
+                    i += 1;
+                    //return Err(DosPTError::DosPTHeaderError("BR link offset is zero -- ignore"));
+                } else {
+                    cur_start = ex_start + start;
+                    cur_size = size;
+                    break;
+                }
+            }
+        }
+
+    }
+
+    Ok(None)
+}
+
 pub fn probe_dos_pt(
         probe: &mut BlockidProbe, 
-        mag: BlockidMagic
+        _mag: BlockidMagic
     ) -> Result<ProbeResult, DosPTError> 
 {
     let mut buffered = BufReader::with_capacity(4096, &probe.file);
@@ -307,61 +425,42 @@ pub fn probe_dos_pt(
     let dos_pt: DosTable = read_as(&mut buffered, 0)?;
     
     if dos_pt.boot_code1[0..3] == BLKID_AIX_MAGIC_STRING {
-        return Err(DosPTError::UnknownFilesystem("Disk has AIX magic number"));
+        return Err(DosPTError::UnknownPartition("Disk has AIX magic number"));
     }
+
+    is_valid_dos(dos_pt, &mut buffered)?;
+
     let ssf = probe.sector_size / 512;
 
-    let mut partitions: Vec<PartitionResults> = Vec::new();
+    let primary_partitions: Vec<PartitionResults> = dos_pt
+        .partition_entries
+        .iter()
+        .enumerate()
+        .filter_map(|(partno, entry)| {            
+            let start = entry.start_sect as u64 * ssf;
+            let size = entry.nr_sects as u64 * ssf;
 
-    let mut partno: u64 = 0;
+            if size == 0 {
+                return None;
+            }
 
-    let entry_list = [dos_pt.partition_entry1, dos_pt.partition_entry2, dos_pt.partition_entry3, dos_pt.partition_entry4];
+            Some(PartitionResults {
+                offset: Some(start),
+                size: Some(size),
+                partno: Some(partno as u64 + 1),
+                part_uuid: None,
+                name: None,
+                entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
+                entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind)),
+            })
+        }).collect();
 
-    for entry in entry_list {
-        let start = entry.start_sect as u64 * ssf;
-        let size = entry.nr_sects as u64 * ssf;
+    println!("Primary: {:?}", primary_partitions);
 
-        if size == 0 {
-            partno += 1;
-            continue;
-        }
-
-        partitions.push(PartitionResults{
-            offset: Some(start),
-            size: Some(size),
-            partno: Some(partno),
-            part_uuid: None,
-            name: None,
-            entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
-            entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind))
-        });
-    }
-
-    partno == 5;
-
-    for entry in entry_list {
-        let start = entry.start_sect as u64 * ssf;
-        let size = entry.nr_sects as u64 * ssf;
-
-        if size == 0 {
-            //partno += 1;
-            continue;
-        }
-
-        if entry.is_extended() &&
-            
-
-
-        //partitions.push(PartitionResults{
-        //    offset: Some(start),
-        //    size: Some(size),
-        //    partno: Some(partno),
-        //    part_uuid: None,
-        //    name: None,
-        //    entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
-        //    entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind))
-        //});
-    }
-
-    Ok(())
+    if let Some(ex_entry) = dos_pt.get_extended_partition() {
+        println!("Extended: {:?}", ex_entry);
+        parse_dos_extended(&mut buffered, ex_entry, ssf)?;
+    };
+    
+    return Err(DosPTError::UnknownPartition("testing"));
 }

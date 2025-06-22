@@ -7,9 +7,7 @@ pub mod aix;
 //pub mod unixware;
 //pub mod minix;
 
-use crate::{checksum::CsumAlgorium, BlockidUUID};
-use rustix::fs::Dev;
-use uuid::Uuid;
+use crate::{checksum::CsumAlgorium};
 use thiserror::Error;
 use std::io;
 
@@ -32,9 +30,9 @@ pub enum PtError {
     #[error("I/O operation failed")]
     IoError(#[from] io::Error),
     #[error("Invalid Header: {0}")]
-    InvalidHeader(String),
+    InvalidHeader(&'static str),
     #[error("Unknown Partition: {0}")]
-    UnknownPartition(String),
+    UnknownPartition(&'static str),
     #[error("Checksum failed, expected: \"{expected:?}\" and got: \"{got:?})\"")]
     ChecksumError {
         expected: CsumAlgorium,
