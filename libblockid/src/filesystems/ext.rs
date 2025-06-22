@@ -1,5 +1,4 @@
 use std::io;
-use std::u16;
 
 use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
@@ -426,13 +425,13 @@ pub fn probe_ext2(
     let frc = es.s_feature_ro_compat;
 
     if fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
-        return Err(ExtError::UnknownFilesystem("Block has a journal so its not ext2".into()))
+        return Err(ExtError::UnknownFilesystem("Block has a journal so its not ext2"))
     };
 
     if frc.intersects(EXT2_FEATURE_RO_COMPAT_UNSUPPORTED) ||
         fi.intersects(EXT2_FEATURE_INCOMPAT_UNSUPPORTED)
     {
-        return Err(ExtError::ExtFeatureError("Block has features unsupported by ext2".into()))                                     
+        return Err(ExtError::ExtFeatureError("Block has features unsupported by ext2"))                                     
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
@@ -472,13 +471,13 @@ pub fn probe_ext3(
     let frc = es.s_feature_ro_compat;
 
     if !fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
-        return Err(ExtError::ExtFeatureError("Block is missing journal".into()))
+        return Err(ExtError::ExtFeatureError("Block is missing journal"))
     };
     
     if frc.intersects(EXT3_FEATURE_RO_COMPAT_UNSUPPORTED) ||
         fi.intersects(EXT3_FEATURE_INCOMPAT_UNSUPPORTED)
     {
-        return Err(ExtError::ExtFeatureError("Block contains features unsupported by ext3".into()))                                     
+        return Err(ExtError::ExtFeatureError("Block contains features unsupported by ext3"))                                     
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
@@ -518,17 +517,17 @@ pub fn probe_ext4(
     let flags = es.s_flags;
 
     if fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
-        return Err(ExtError::UnknownFilesystem("Block is jbd".into()));
+        return Err(ExtError::UnknownFilesystem("Block is jbd"));
     }
         
     if !frc.intersects(EXT3_FEATURE_RO_COMPAT_UNSUPPORTED) &&
         !fi.intersects(EXT3_FEATURE_INCOMPAT_UNSUPPORTED)
     {
-        return Err(ExtError::ExtFeatureError("Block missing supported features of ext4".into()))                                     
+        return Err(ExtError::ExtFeatureError("Block missing supported features of ext4"))                                     
     }
 
     if flags.contains(ExtFlags::EXT2_FLAGS_TEST_FILESYS) {
-        return Err(ExtError::UnknownFilesystem("Ext is ext4dev".into()));
+        return Err(ExtError::UnknownFilesystem("Ext is ext4dev"));
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;

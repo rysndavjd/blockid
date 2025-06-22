@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 mod checksum;
 
 pub mod partitions;
@@ -384,7 +386,7 @@ pub fn read_sector<R: Read+Seek>(
         sector: u64,
     ) -> Result<[u8; 512], io::Error> 
 {
-    read_buffer::<512, R>(file, sector << 9)
+    return read_buffer::<512, R>(file, sector << 9);
 }
 
 pub fn get_sectorsize(
@@ -428,5 +430,5 @@ pub fn read_as<T: Pod, R: Read+Seek>(
     raw_block.read_exact(&mut buffer)?;
 
     let ptr = from_bytes::<T>(&buffer);
-    Ok(*ptr)
+    return Ok(*ptr);
 }

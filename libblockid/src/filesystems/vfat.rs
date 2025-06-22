@@ -217,7 +217,7 @@ fn read_vfat_dir_entry<R: Read+Seek>(
     block.seek(SeekFrom::Start(0))?;
 
     let mut buffer = [0u8; 32];
-    block.seek(SeekFrom::Start(offset.into()))?;
+    block.seek(SeekFrom::Start(offset))?;
     block.read_exact(&mut buffer)?;
 
     return Ok(*from_bytes::<VfatDirEntry>(&buffer));
@@ -276,7 +276,7 @@ pub fn valid_fat (
 {    
     if mag.len <= 2 {
         if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
-            return Err(FatError::UnknownFilesystem("Given block is not Fat likely MBR".into()));
+            return Err(FatError::UnknownFilesystem("Given block is not Fat likely MBR"));
         }
 
         /* Straight From libblkid
@@ -455,13 +455,13 @@ fn probe_fat32<R: Read+Seek>(
            &fsinfo.signature1 != b"\x52\x52\x64\x41" &&
            &fsinfo.signature1 != b"\x00\x00\x00\x00" 
         {
-            return Err(FatError::FatHeaderError("Invalid fsinfo.signature1".into()));
+            return Err(FatError::FatHeaderError("Invalid fsinfo.signature1"));
         }
 
         if &fsinfo.signature2 != b"\x72\x72\x41\x61" &&
            &fsinfo.signature2 != b"\x00\x00\x00\x00" 
         {
-            return Err(FatError::FatHeaderError("Invalid fsinfo.signature2".into()));
+            return Err(FatError::FatHeaderError("Invalid fsinfo.signature2"));
         }
     }
 
@@ -487,7 +487,7 @@ pub fn probe_vfat(
     } else if vs.vs_fat32_length != 0 {
         probe_fat32(&mut file_buf, ms, vs, fat_size)?
     } else {
-        return Err(FatError::UnknownFilesystem("Block is not fat filesystem".into()));
+        return Err(FatError::UnknownFilesystem("Block is not fat filesystem"));
     };
     
     let creator = String::from_utf8_lossy(&ms.ms_sysid).to_string();
