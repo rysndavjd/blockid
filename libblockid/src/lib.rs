@@ -180,7 +180,6 @@ pub struct ContainerResults {
 #[derive(Debug)]
 pub struct PartTableResults {
     pub offset: Option<u64>,
-    pub size: Option<u64>,
 
     pub pt_type: Option<PtType>,
     pub pt_uuid: Option<BlockidUUID>,
