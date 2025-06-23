@@ -27,7 +27,7 @@ use std::io;
 
 #[derive(Error, Debug)]
 pub enum PtError {
-    #[error("I/O operation failed")]
+    #[error("I/O operation failed: {0}")]
     IoError(#[from] io::Error),
     #[error("Invalid Header: {0}")]
     InvalidHeader(&'static str),

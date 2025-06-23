@@ -180,7 +180,7 @@ const EXFAT_ENTRY_EOD: u8 = 0x00;
 const EXFAT_ENTRY_LABEL: u8 = 0x83;
 
 // 256 * 1024 * 1024
-const EXFAT_MAX_DIR_SIZE: u32 = 268435456;
+//const EXFAT_MAX_DIR_SIZE: u32 = 268435456;
 
 
 pub fn get_exfatcsum(

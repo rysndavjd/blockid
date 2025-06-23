@@ -3,9 +3,9 @@ pub mod exfat;
 pub mod vfat;
 pub mod volume_id;
 
-use thiserror::Error;
 use std::io;
-use crate::{checksum::CsumAlgorium, BlockidError};
+use thiserror::Error;
+use crate::checksum::CsumAlgorium;
 
 /* Tags
 TYPE:           filesystem type
@@ -30,7 +30,7 @@ BLOCK_SIZE:     block size of phyical disk
 
 #[derive(Error, Debug)]
 pub enum FsError {
-    #[error("I/O operation failed")]
+    #[error("I/O operation failed: {0}")]
     IoError(#[from] io::Error),
     #[error("Invalid Header: {0}")]
     InvalidHeader(&'static str),
