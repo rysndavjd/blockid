@@ -90,13 +90,6 @@ impl DosTable {
         self.boot_signature == [0x55, 0xAA]
     }
 
-    fn is_empty_part_entries(
-            &self
-        ) -> bool
-    {
-        self.partition_entries.iter().all(|entry| entry.is_empty())
-    }
-
     fn get_extended_partition(
             &self
         ) -> Option<DosPartitionEntry>
@@ -272,15 +265,13 @@ impl MbrPartitionType {
     }
 }
 
-const MBR_PT_OFFSET: usize = 0x1be;
-const MBR_PT_BOOTBITS_SIZE: u32 = 440;
-
 bitflags! {
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
     pub struct MbrAttributes: u8 {
         const ACTIVE = 0x80;
         const INACTIVE = 0x00;
+        
     }
 }
 
@@ -311,108 +302,73 @@ fn is_valid_dos<R: Read+Seek>(
 }
 
 
+/* 
+ * This function assumes that extended boot record only uses the first 
+ * two partition entries for data and pointer to where next EBR is 
+ * and that this function will check for a maximum of 128 logical partitions.
+ * Also that MBRs extended partitions are janky as hell with its edge cases.
+ */
 
 fn parse_dos_extended<R: Read+Seek>(
         file: &mut R,
-        entry: DosPartitionEntry,
+        ex_entry: DosPartitionEntry,
         ssf: u64,
-    ) -> Result<Option<Vec<PartitionResults>>, DosPTError>
+    ) -> Result<Vec<PartitionResults>, DosPTError>
 {
-    let ex_start = entry.start_sect as u64 * ssf;
-    let ex_size = entry.nr_sects as u64 * ssf;
+    let ex_start = ex_entry.start_sect as u64 * ssf;
     
     if ex_start == 0 {
         return Err(DosPTError::DosPTHeaderError("Bad offset in primary extended partition -- ignore"));
     }
 
-    let mut extended_partitions: Vec<PartTableResults> = Vec::new();
+    let mut ex_partitions: Vec<PartitionResults> = Vec::new();
     let mut cur_start = ex_start;
-    let mut cur_size = ex_size;
-    let mut ct_nodata = 0;
-    let mut i = 0;
 
-    loop {
-        if ct_nodata > 100 {
+    for i in 5..133 {
+        let sector = read_sector(file, cur_start)?;
+
+        let ex_pt: DosTable = *from_bytes(&sector);
+
+        if !ex_pt.valid_signature() {
+            return Err(DosPTError::DosPTHeaderError("Extended partition doesnt have valid signature"));
+        };
+
+        let data_entry = ex_pt.partition_entries[0];
+
+        let data_start = data_entry.start_sect as u64 * ssf;
+        let data_size = data_entry.nr_sects as u64 * ssf;
+        let abs_start = cur_start + data_start;
+
+        // Empty EBR 
+        if data_entry.is_empty() { 
+            return Ok(ex_partitions);
+        }
+
+        ex_partitions.push(PartitionResults {
+            offset: Some(abs_start),
+            size: Some(data_size),
+            partno: Some(i),
+            part_uuid: None,
+            name: None,
+            entry_type: Some(PartEntryType::Byte(data_entry.sys_ind.as_byte())),
+            entry_attributes: Some(PartEntryAttributes::Mbr(data_entry.boot_ind)),
+        });
+
+        let next_ebr = ex_pt.partition_entries[1];
+
+        if next_ebr.is_empty() {
+            return Ok(ex_partitions);
+        } 
+        let next_start = next_ebr.start_sect as u64 * ssf;
+        let next_size = next_ebr.nr_sects as u64 * ssf;
+        
+        if next_size == 0 && next_ebr.is_extended() {
             break;
-        } else {
-            ct_nodata += 1;
         }
-    
-        let data: DosTable = read_as(file, cur_start)?;
-
-        if !data.valid_signature() {
-            return Err(DosPTError::DosPTHeaderError("extended pt doesnt contain mbr sig"));
-        }
-
-        let mut seen_pt = HashSet::new();
-
-        let extended: Vec<PartitionResults> = data
-            .partition_entries
-            .iter()
-            .enumerate()
-            .filter_map(|(partno, entry)| {            
-                let start = entry.start_sect as u64 * ssf;
-                let size = entry.nr_sects as u64 * ssf;
-                let abs_start = cur_start + start;
-
-                if size == 0 || entry.is_extended() {
-                    return None;
-                }
-
-                if partno >= 2 {
-                    if start + size > cur_size {
-                        return None;
-                    }
-                    if abs_start < ex_start {
-                        return None;
-                    }
-                    if abs_start + size > ex_start + ex_size {
-                        return None;
-                    }
-                }
-
-                if seen_pt.contains(&abs_start) {
-                    i += 1;
-                    return None;
-                } else {
-                    seen_pt.insert(abs_start);
-                }
-
-                ct_nodata = 0;
-
-                Some(PartitionResults {
-                    offset: Some(start),
-                    size: Some(size),
-                    partno: Some(partno as u64 + 1),
-                    part_uuid: None,
-                    name: None,
-                    entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
-                    entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind)),
-                })
-            }
-        ).collect();
-
-        println!("395: {:?}", extended);
-
-        for entry in data.partition_entries {
-            let start = entry.start_sect as u64 * ssf;
-            let size = entry.nr_sects as u64 * ssf;
-
-            if size > 0 && entry.is_extended() {
-                if start == 0 {
-                    i += 1;
-                    //return Err(DosPTError::DosPTHeaderError("BR link offset is zero -- ignore"));
-                } else {
-                    cur_start = ex_start + start;
-                    cur_size = size;
-                    break;
-                }
-            }
-        }
-
+        
+        cur_start = ex_start + next_start;
     }
-
-    Ok(None)
+    return Ok(ex_partitions);
 }
 
 pub fn probe_dos_pt(
@@ -420,6 +376,8 @@ pub fn probe_dos_pt(
         _mag: BlockidMagic
     ) -> Result<ProbeResult, DosPTError> 
 {
+    let mut partitions: Vec<PartitionResults> = Vec::new();
+
     let mut buffered = BufReader::with_capacity(4096, &probe.file);
     
     let dos_pt: DosTable = read_as(&mut buffered, 0)?;
@@ -453,14 +411,26 @@ pub fn probe_dos_pt(
                 entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
                 entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind)),
             })
-        }).collect();
+        }
+    ).collect();
 
-    println!("Primary: {:?}", primary_partitions);
+    partitions.extend(primary_partitions);
 
     if let Some(ex_entry) = dos_pt.get_extended_partition() {
-        println!("Extended: {:?}", ex_entry);
-        parse_dos_extended(&mut buffered, ex_entry, ssf)?;
+        let ex = parse_dos_extended(&mut buffered, ex_entry, ssf)?;
+        partitions.extend(ex);
     };
     
-    return Err(DosPTError::UnknownPartition("testing"));
+    let pt_size: u64 = partitions
+        .iter()
+        .filter_map(|part| part.size)
+        .sum();
+
+    return Ok(ProbeResult::PartTable(
+                PartTableResults { 
+                    offset: Some(probe.offset), 
+                    pt_type: Some(PtType::Dos), 
+                    pt_uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(dos_pt.disk_id))), 
+                    partitions: Some(partitions) 
+                }));
 }
