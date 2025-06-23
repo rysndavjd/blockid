@@ -1,13 +1,13 @@
 # Blockid
 
-**Blockid** is a Rust-based tool for identifying various types of superblocks, such as filesystems and partition tables.
+**Blockid** is a tool for identifying various types of superblocks like filesystems and partition tables.
 > *NOTE:* `blockid` currently is just a test method for `libblockid` and is unusable for how blkid would be used.
 
-This project is a copy of `libblkid` and the `blkid` utility from [util-linux](https://github.com/util-linux/util-linux/)—but written in Rust. It's currently HIGNLY experimental and incomplete.
+This project is a copy of `libblkid` and the `blkid` utility from [util-linux](https://github.com/util-linux/util-linux/) but written in Rust. It's currently HIGNLY experimental and incomplete.
 
 ## Supported Superblocks
 
-`libblockid` serves as the core library for superblock detection. Below is a list of supported and in-progress block types.
+`libblockid` serves as the core library for superblock detection. Below is a list of supported and inprogress block types.
 
 > ⚠️ **NOTE:** `libblockid` is under Major development. Its API is unstable and subject to change without notice.
 
@@ -16,7 +16,7 @@ This project is a copy of `libblkid` and the `blkid` utility from [util-linux](h
 | APFS       | Todo   | Filesystem       |
 | Btrfs      | Todo   | Filesystem       |
 | BSD        | Todo   | Partition Table  |
-| DOS        | Next   | Partition Table  |
+| DOS        | Works   | Partition Table  |
 | GPT        | Todo   | Partition Table  |
 | Mac        | Todo   | Partition Table  |
 | ExFAT      | Works  | Filesystem       |
@@ -31,8 +31,8 @@ This project is a copy of `libblkid` and the `blkid` utility from [util-linux](h
 
 - **Todo**: Planned, but not yet started.
 - **Next**: Currently being implemented or thought of.
-- **Works**: Functionally implemented; successfully identifies and parses relevant metadata.
-- **Complete**: Fully implemented with complete parsing and edge-case handling.
+- **Works**: Functionally implemented; successfully identifies and parses most metadata.
+- **Complete**: Fully implemented with complete parsing and edge case handling.
 
 ## License
 
