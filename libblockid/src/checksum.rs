@@ -1,5 +1,5 @@
-use crc::{Crc, CRC_32_CKSUM, CRC_32_ISCSI};
 use std::fmt;
+use crc::{Crc, CRC_32_CKSUM, CRC_32_ISCSI};
 
 #[derive(Debug)]
 pub enum CsumAlgorium {

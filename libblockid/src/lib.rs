@@ -2,6 +2,7 @@
 
 mod checksum;
 
+pub mod containers;
 pub mod partitions;
 pub mod filesystems;
 
@@ -10,7 +11,7 @@ use std::{fs::File, os::fd::AsFd, path::Path};
 use filesystems::volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 use bytemuck::{from_bytes, Pod};
-use std::io::{self, BufRead, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use rustix::fs::{ioctl_blksszget, Dev, Mode, fstat, FileType};
 use rustix::io::Errno;
 use thiserror::Error;
