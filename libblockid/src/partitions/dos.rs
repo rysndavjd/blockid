@@ -1,24 +1,16 @@
-use crate::filesystems::exfat::probe_is_exfat;
-use crate::filesystems::volume_id::VolumeId32;
-use crate::partitions::PtError;
-use crate::{get_sectorsize, partitions, read_as, read_sector, BlockidIdinfo, BlockidMagic, BlockidProbe, PartEntryAttributes, PartTableResults, PartitionResults, ProbeResult, PtType, UsageType};
-use crate::filesystems::vfat::probe_is_vfat;
-use crate::partitions::aix::BLKID_AIX_MAGIC_STRING;
-//use super::bsd::BSD_PT_IDINFO;
-//use super::minix::MINIX_PT_IDINFO;
-//use super::solaris_x86::SOLARIS_X86_PT_IDINFO;
-//use super::unixware::UNIXWARE_PT_IDINFO;
-
-use std::collections::HashSet;
 use std::io::{self, Read, Seek, BufReader};
-use std::thread::panicking;
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
+
+use bitflags::bitflags;
 use bytemuck::{bytes_of, from_bytes, Pod, Zeroable};
 use thiserror::Error;
-use crate::BlockidUUID;
-use crate::PartEntryType;
-use bitflags::bitflags;
-use crate::BlockidError;
+
+use crate::{
+    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,
+    PartEntryAttributes, PartEntryType, PartTableResults, PartitionResults,
+    ProbeResult, PtType, UsageType, read_as, read_sector, filesystems::{
+    exfat::probe_is_exfat, vfat::probe_is_vfat, volume_id::VolumeId32},
+    partitions::{aix::BLKID_AIX_MAGIC_STRING, PtError},
+};
 
 /*
 Info from https://en.wikipedia.org/wiki/Master_boot_record
@@ -271,7 +263,7 @@ bitflags! {
     pub struct MbrAttributes: u8 {
         const ACTIVE = 0x80;
         const INACTIVE = 0x00;
-        
+
     }
 }
 
@@ -421,11 +413,6 @@ pub fn probe_dos_pt(
         partitions.extend(ex);
     };
     
-    let pt_size: u64 = partitions
-        .iter()
-        .filter_map(|part| part.size)
-        .sum();
-
     return Ok(ProbeResult::PartTable(
                 PartTableResults { 
                     offset: Some(probe.offset), 
