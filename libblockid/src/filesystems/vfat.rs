@@ -471,7 +471,7 @@ fn probe_fat32<R: Read+Seek>(
 pub fn probe_vfat(
         probe: &mut BlockidProbe,
         mag: BlockidMagic,
-    ) -> Result<ProbeResult, FatError> 
+    ) -> Result<(), FatError> 
 {
     let mut file_buf = BufReader::with_capacity(4096, &probe.file);
 
@@ -492,7 +492,7 @@ pub fn probe_vfat(
     
     let creator = String::from_utf8_lossy(&ms.ms_sysid).to_string();
 
-    return Ok(ProbeResult::Filesystem(
+    probe.push_result(ProbeResult::Filesystem(
                 FilesystemResults { 
                     fs_type: Some(FsType::Vfat), 
                     sec_type: Some(sec_type), 
@@ -512,4 +512,6 @@ pub fn probe_vfat(
                 }
             )
         );
+    
+    return Ok(());
 }

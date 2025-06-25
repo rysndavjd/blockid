@@ -366,7 +366,7 @@ fn find_label<R: Read+Seek>(
 pub fn probe_exfat(
         probe: &mut BlockidProbe,
         _mag: BlockidMagic,
-    ) -> Result<ProbeResult, ExFatError> 
+    ) -> Result<(), ExFatError> 
 {
     let mut file_buf = BufReader::with_capacity(8192, &probe.file);
 
@@ -376,7 +376,7 @@ pub fn probe_exfat(
 
     let label= find_label(&mut file_buf, sb)?; 
 
-    return Ok(ProbeResult::Filesystem(
+    probe.push_result(ProbeResult::Filesystem(
                 FilesystemResults { 
                     fs_type: Some(FsType::Exfat), 
                     sec_type: None, 
@@ -396,4 +396,6 @@ pub fn probe_exfat(
                 }
             )
         );
+
+    return Ok(());
 }

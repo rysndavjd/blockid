@@ -378,7 +378,7 @@ fn ext_get_info(
 pub fn probe_jbd(
         probe: &mut BlockidProbe, 
         _magic: BlockidMagic
-    ) -> Result<ProbeResult, ExtError> 
+    ) -> Result<(), ExtError> 
 {
     let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
     
@@ -390,7 +390,7 @@ pub fn probe_jbd(
     
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    return Ok(ProbeResult::Filesystem(
+    probe.push_result(ProbeResult::Filesystem(
         FilesystemResults { fs_type: Some(FsType::Ext2), 
                             sec_type: None, 
                             label, 
@@ -409,12 +409,14 @@ pub fn probe_jbd(
                         }
                     )
                 );
+    
+    return Ok(());
 }
 
 pub fn probe_ext2(
         probe: &mut BlockidProbe, 
         _magic: BlockidMagic
-    ) -> Result<ProbeResult, ExtError> 
+    ) -> Result<(), ExtError> 
 {
     let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
 
@@ -436,7 +438,7 @@ pub fn probe_ext2(
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    return Ok(ProbeResult::Filesystem(
+    probe.push_result(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext2), 
                                     sec_type: None, 
                                     label, 
@@ -455,12 +457,14 @@ pub fn probe_ext2(
                                 }
                             )
                         );
+
+    return Ok(());
 }
 
 pub fn probe_ext3(
         probe: &mut BlockidProbe, 
         _magic: BlockidMagic
-    ) -> Result<ProbeResult, ExtError> 
+    ) -> Result<(), ExtError> 
 {
     let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
 
@@ -482,7 +486,7 @@ pub fn probe_ext3(
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    return Ok(ProbeResult::Filesystem(
+    probe.push_result(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext3), 
                                     sec_type: None, 
                                     label, 
@@ -501,12 +505,14 @@ pub fn probe_ext3(
                                 }
                             )
                         );
+    
+    return Ok(());
 }
 
 pub fn probe_ext4(
         probe: &mut BlockidProbe, 
         _magic: BlockidMagic
-    ) -> Result<ProbeResult, ExtError> 
+    ) -> Result<(), ExtError> 
 {
     let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
 
@@ -532,7 +538,7 @@ pub fn probe_ext4(
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    return Ok(ProbeResult::Filesystem(
+    probe.push_result(ProbeResult::Filesystem(
                 FilesystemResults { fs_type: Some(FsType::Ext4), 
                                     sec_type: None, 
                                     label, 
@@ -551,7 +557,8 @@ pub fn probe_ext4(
                                 }
                             )
                         );
-
+    
+    return Ok(());                    
 }
 
 //fn probe_ext4dev(
