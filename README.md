@@ -26,6 +26,7 @@ This project is a copy of `libblkid` and the `blkid` utility from [util-linux](h
 | VFat       | Works  | Filesystem       |
 | XFS        | Todo   | Filesystem       |
 | ZFS        | Todo   | Filesystem       |
+| Swap        | next   | Filesystem       |
 
 ### Status
 
