@@ -21,12 +21,12 @@ This project is a copy of `libblkid` and the `blkid` utility from [util-linux](h
 | Mac        | Todo   | Partition Table  |
 | ExFAT      | Works  | Filesystem       |
 | Ext2/3/4   | Works  | Filesystem       |
-| LUKS       | Next   | Container        |
+| LUKS       | Works   | Container        |
 | NTFS       | Todo   | Filesystem       |
 | VFat       | Works  | Filesystem       |
 | XFS        | Todo   | Filesystem       |
 | ZFS        | Todo   | Filesystem       |
-| Swap        | next   | Filesystem       |
+| Swap        | Next   | Filesystem       |
 
 ### Status
 
