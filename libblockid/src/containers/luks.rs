@@ -173,7 +173,7 @@ impl Luks2Header {
             file: &mut R,
         ) -> bool
     {
-        if self.magic == LUKS2_MAGIC {
+        if self.magic == LUKS1_MAGIC && u16::from_be(self.version) == 2 {
             return true;
         }
         
