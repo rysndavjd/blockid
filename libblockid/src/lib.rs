@@ -15,6 +15,7 @@ use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use rustix::fs::{ioctl_blksszget, Dev, Mode, fstat, FileType};
 use rustix::io::Errno;
 use thiserror::Error;
+use crate::containers::ContError;
 use crate::filesystems::exfat::EXFAT_ID_INFO;
 use crate::filesystems::FsError;
 use crate::partitions::PtError;
@@ -25,13 +26,17 @@ use crate::partitions::dos::MbrAttributes;
 
 #[derive(Error, Debug)]
 pub enum BlockidError {
-    #[error("Filesystem probe failed")]
+    #[error("Probe failed: {0}")]
+    ProbeError(&'static str),
+    #[error("Filesystem probe failed: {0}")]
     FsError(#[from] FsError),
-    #[error("Partition Table probe failed")]
+    #[error("Partition Table probe failed: {0}")]
     PtError(#[from] PtError),
-    #[error("I/O operation failed")]
+    #[error("Container probe failed: {0}")]
+    ContError(#[from] ContError),
+    #[error("I/O operation failed: {0}")]
     IoError(#[from] io::Error),
-    #[error("*Nix operation failed")]
+    #[error("*Nix operation failed: {0}")]
     NixError(#[from] Errno),
 }
 
@@ -84,9 +89,13 @@ impl BlockidProbe {
         if self.filter.is_empty() {
             for info in PROBES {
                 let magic = probe_get_magic(&mut self.file, info)?;
-                let result = (info.probe_fn)(self, magic)?;
-                self.push_result(result);
+                let result = (info.probe_fn)(self, magic);
+                
+                if result.is_ok() {
+                    return Ok(());
+                }
             }
+            return Err(BlockidError::ProbeError("All probe functions exhasted"));
         }
         
         let mut filtered_probe: BlockidIdinfo;
@@ -174,6 +183,8 @@ pub struct ContainerResults {
     pub cont_creator: Option<String>,
     pub usage: Option<UsageType>,
     pub version: Option<BlockidVersion>,
+    pub sbmagic: Option<&'static [u8]>,
+    pub sbmagic_offset: Option<u64>,
     pub cont_size: Option<u64>,
     pub cont_block_size: Option<u64>,
 }
@@ -184,6 +195,8 @@ pub struct PartTableResults {
 
     pub pt_type: Option<PtType>,
     pub pt_uuid: Option<BlockidUUID>,
+    pub sbmagic: Option<&'static [u8]>,
+    pub sbmagic_offset: Option<u64>,
 
     pub partitions: Option<Vec<PartitionResults>>,
 }
@@ -237,18 +250,22 @@ pub struct FilesystemResults {
 
 #[derive(Debug)]
 pub enum ContType {
-    Md,
-    Lvm,
-    Dm,
+    MD,
+    LVM,
+    DM,
+    LUKS1,
+    LUKS2,
     Other(String)
 }
 
 impl fmt::Display for ContType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Md => write!(f, "Md"),
-            Self::Lvm => write!(f, "Lvm"),
-            Self::Dm => write!(f, "Dm"),
+            Self::MD => write!(f, "MD"),
+            Self::LVM => write!(f, "LVM"),
+            Self::DM => write!(f, "DM"),
+            Self::LUKS1 => write!(f, "LUKS1"),
+            Self::LUKS2 => write!(f, "LUKS2"),
             Self::Other(s) => write!(f, "{s}"),
         }
     }
@@ -343,7 +360,7 @@ pub enum BlockidVersion {
     DevT(Dev),
 }
 
-pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<ProbeResult, BlockidError>;
+pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<(), BlockidError>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct BlockidMagic {

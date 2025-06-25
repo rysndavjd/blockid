@@ -366,7 +366,7 @@ fn parse_dos_extended<R: Read+Seek>(
 pub fn probe_dos_pt(
         probe: &mut BlockidProbe, 
         _mag: BlockidMagic
-    ) -> Result<ProbeResult, DosPTError> 
+    ) -> Result<(), DosPTError> 
 {
     let mut partitions: Vec<PartitionResults> = Vec::new();
 
@@ -413,11 +413,14 @@ pub fn probe_dos_pt(
         partitions.extend(ex);
     };
     
-    return Ok(ProbeResult::PartTable(
-                PartTableResults { 
-                    offset: Some(probe.offset), 
-                    pt_type: Some(PtType::Dos), 
-                    pt_uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(dos_pt.disk_id))), 
-                    partitions: Some(partitions) 
-                }));
+    probe.push_result(ProbeResult::PartTable(
+                        PartTableResults { 
+                            offset: Some(probe.offset), 
+                            pt_type: Some(PtType::Dos), 
+                            pt_uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(dos_pt.disk_id))), 
+                            sbmagic: Some(b"\x55\xAA"),
+                            sbmagic_offset: Some(510),
+                            partitions: Some(partitions) 
+                        }));
+    return Ok(());
 }
