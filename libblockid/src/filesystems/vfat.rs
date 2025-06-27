@@ -1,8 +1,9 @@
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
 
 use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian};
-use bytemuck::{checked::from_bytes, Pod, Zeroable};
+use zerocopy::{FromBytes, IntoBytes, Unaligned, 
+    byteorder::U32, byteorder::U16, byteorder::LittleEndian,
+    transmute, Immutable};
 use thiserror::Error;
 
 use crate::{
@@ -92,30 +93,30 @@ pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     ]
 };
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct VFatSuperBlock {
     pub vs_ignored: [u8; 3],
     pub vs_sysid: [u8; 8],
-    pub vs_sector_size: u16,
+    pub vs_sector_size: U16<LittleEndian>,
     pub vs_cluster_size: u8,
-    pub vs_reserved: u16,
+    pub vs_reserved: U16<LittleEndian>,
     pub vs_fats: u8,
-    pub vs_dir_entries: u16,
-    pub vs_sectors: u16, 
+    pub vs_dir_entries: U16<LittleEndian>,
+    pub vs_sectors: U16<LittleEndian>, 
     pub vs_media: u8,
-    pub vs_fat_length: u16, 
-    pub vs_secs_track: u16,
-    pub vs_heads: u16,
-    pub vs_hidden: u32,
-    pub vs_total_sect: u32, 
+    pub vs_fat_length: U16<LittleEndian>, 
+    pub vs_secs_track: U16<LittleEndian>,
+    pub vs_heads: U16<LittleEndian>,
+    pub vs_hidden: U32<LittleEndian>,
+    pub vs_total_sect: U32<LittleEndian>, 
 
-    pub vs_fat32_length: u32,
-    pub vs_flags: u16,
-    pub vs_version: u16,
-    pub vs_root_cluster: u32,
-    pub vs_fsinfo_sector: u16,
-    pub vs_backup_boot: u16,
+    pub vs_fat32_length: U32<LittleEndian>,
+    pub vs_flags: U16<LittleEndian>,
+    pub vs_version: U16<LittleEndian>,
+    pub vs_root_cluster: U32<LittleEndian>,
+    pub vs_fsinfo_sector: U16<LittleEndian>,
+    pub vs_backup_boot: U16<LittleEndian>,
     pub vs_reserved2: [u8; 12],
     pub vs_drive_number: u8,
     pub vs_boot_flags: u8,
@@ -127,26 +128,26 @@ pub struct VFatSuperBlock {
     pub vs_pmagic: [u8; 2],
 }
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct MsDosSuperBlock {
     /* DOS 2.0 BPB */
     pub ms_ignored: [u8; 3],
     pub ms_sysid: [u8; 8],
-    pub ms_sector_size: u16,
+    pub ms_sector_size: U16<LittleEndian>,
     pub ms_cluster_size: u8,
-    pub ms_reserved: u16,
+    pub ms_reserved: U16<LittleEndian>,
     pub ms_fats: u8,
-    pub ms_dir_entries: u16,
-    pub ms_sectors: u16, /* =0 iff V3 or later */
+    pub ms_dir_entries: U16<LittleEndian>,
+    pub ms_sectors: U16<LittleEndian>, /* =0 iff V3 or later */
     pub ms_media: u8,
-    pub ms_fat_length: u16, /* Sectors per FAT */
+    pub ms_fat_length: U16<LittleEndian>, /* Sectors per FAT */
     /* DOS 3.0 BPB */
-    pub ms_secs_track: u16,
-    pub ms_heads: u16,
-    pub ms_hidden: u32,
+    pub ms_secs_track: U16<LittleEndian>,
+    pub ms_heads: U16<LittleEndian>,
+    pub ms_hidden: U32<LittleEndian>,
     /* DOS 3.31 BPB */
-    pub ms_total_sect: u32,
+    pub ms_total_sect: U32<LittleEndian>,
     /* DOS 3.4 EBPB */
     pub ms_drive_number: u8,
     pub ms_boot_flags: u8,
@@ -160,44 +161,52 @@ pub struct MsDosSuperBlock {
     pub ms_pmagic: [u8; 2],
 }
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 struct VfatDirEntry {
     name: [u8; 11],
-    attr: FatAttr,
-    time_creat: u16,
-    date_creat: u16,
-    time_acc: u16,
-    date_acc: u16,
-    cluster_high: u16,
-    time_write: u16,
-    date_write: u16,
-    cluster_low: u16,
-    size: u32,
+    attr: u8,
+    time_creat: U16<LittleEndian>,
+    date_creat: U16<LittleEndian>,
+    time_acc: U16<LittleEndian>,
+    date_acc: U16<LittleEndian>,
+    cluster_high: U16<LittleEndian>,
+    time_write: U16<LittleEndian>,
+    date_write: U16<LittleEndian>,
+    cluster_low: U16<LittleEndian>,
+    size: U32<LittleEndian>,
+}
+
+impl VfatDirEntry {
+    fn flags(
+            &self
+        ) -> FatAttr 
+    {
+        FatAttr::from_bits_truncate(self.attr)
+    }
 }
 
 bitflags!{
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct FatAttr: u8 {
-    const FAT_ATTR_VOLUME_ID = 0x08;
-    const FAT_ATTR_DIR = 0x10;
-    const FAT_ATTR_LONG_NAME = 0x0f;
-    const FAT_ATTR_MASK = 0x3f;
+        const FAT_ATTR_VOLUME_ID = 0x08;
+        const FAT_ATTR_DIR = 0x10;
+        const FAT_ATTR_LONG_NAME = 0x0f;
+        const FAT_ATTR_MASK = 0x3f;
     }
 }
 
 const FAT_ENTRY_FREE: u8 = 0xe5;
 
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 struct Fat32FsInfo {
     signature1: [u8; 4],
     reserved1: [u8; 120],
     signature2: [u8; 4],
-    free_clusters: u32,
-    next_cluster: u32,
+    free_clusters: U32<LittleEndian>,
+    next_cluster: U32<LittleEndian>,
     reserved2: [u8; 4],
 }
 
@@ -220,7 +229,9 @@ fn read_vfat_dir_entry<R: Read+Seek>(
     block.seek(SeekFrom::Start(offset))?;
     block.read_exact(&mut buffer)?;
 
-    return Ok(*from_bytes::<VfatDirEntry>(&buffer));
+    let data: VfatDirEntry = transmute!(buffer);
+
+    return Ok(data);
 }
 
 pub fn get_fat_size (
@@ -230,7 +241,7 @@ pub fn get_fat_size (
 {   
     let num_fat: u32 = ms.ms_fats.into();
     let fat_length: u32 = if ms.ms_fat_length == 0 {
-        vs.vs_fat32_length
+        vs.vs_fat32_length.into()
     } else {
         ms.ms_fat_length.into()
     };
@@ -244,13 +255,15 @@ pub fn get_cluster_count (
     ) -> u32
 {
     let sect_count: u32 = if ms.ms_sectors == 0 {
-        ms.ms_total_sect
+        ms.ms_total_sect.into()
     } else {
         ms.ms_sectors.into()
     };
 
     let sector_size: u32 = ms.ms_sector_size.into();
-    let cluster_count: u32 = (sect_count - (ms.ms_reserved as u32 + get_fat_size(ms, vs) + ((ms.ms_dir_entries as u32 * 32) + (sector_size - 1) / sector_size))) / ms.ms_cluster_size as u32;
+    let cluster_count: u32 = (sect_count - (u32::from(ms.ms_reserved) + 
+        get_fat_size(ms, vs) + ((u32::from(ms.ms_dir_entries) * 32) + 
+        (sector_size - 1) / sector_size))) / ms.ms_cluster_size as u32;
     
     return cluster_count;
 }
@@ -260,7 +273,7 @@ pub fn get_sect_count (
     ) -> u32
 {
     let sect_count: u32 = if ms.ms_sectors == 0 {
-        ms.ms_total_sect
+        ms.ms_total_sect.into()
     } else {
         ms.ms_sectors.into()
     };
@@ -354,6 +367,8 @@ pub fn search_fat_label<R: Read+Seek>(
         let offset = root_start + (i * 32);
     
         let entry = read_vfat_dir_entry(file, offset)?;
+        
+        let attr = entry.flags();
 
         if entry.name[0] == 0x00 {
             break;
@@ -361,12 +376,12 @@ pub fn search_fat_label<R: Read+Seek>(
 
         if entry.name[0] == FAT_ENTRY_FREE || 
             (entry.cluster_high != 0 || entry.cluster_low != 0) || 
-            entry.attr.intersection(FatAttr::FAT_ATTR_MASK) == FatAttr::FAT_ATTR_LONG_NAME
+            attr.intersection(FatAttr::FAT_ATTR_MASK) == FatAttr::FAT_ATTR_LONG_NAME
         {
             continue;
         }
 
-        if entry.attr.contains(FatAttr::FAT_ATTR_VOLUME_ID) && !entry.attr.contains(FatAttr::FAT_ATTR_DIR) {
+        if attr.contains(FatAttr::FAT_ATTR_VOLUME_ID) && !attr.contains(FatAttr::FAT_ATTR_DIR) {
             let mut label = entry.name;
             if label[0] == 0x05 {
                 label[0] = 0xE5;
@@ -387,7 +402,7 @@ fn probe_fat16<R: Read+Seek>(
 {   
     let reserved: u32 = ms.ms_reserved.into();
 
-    let root_start: u32 = (reserved + fat_size) * ms.ms_sector_size as u32;
+    let root_start: u32 = (reserved + fat_size) * u32::from(ms.ms_sector_size);
 
     let vol_label = search_fat_label(file, root_start.into(), vs.vs_dir_entries.into())?;
     
@@ -409,11 +424,11 @@ fn probe_fat32<R: Read+Seek>(
 {   
     let reserved: u32 = ms.ms_reserved.into();
 
-    let buf_size: u64 = vs.vs_cluster_size as u64 * ms.ms_sector_size as u64;
+    let buf_size: u64 = vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size);
     let start_data_sect: u32 = reserved + fat_size;
-    let entries: u32 = (u32::from_le(vs.vs_fat32_length) as u64 * ms.ms_sector_size as u64) as u32 / 4;
+    let entries: u32 = (u64::from(vs.vs_fat32_length) * u64::from(ms.ms_sector_size)) as u32 / 4;
     
-    let mut next: u32 = u32::from_le(vs.vs_root_cluster);
+    let mut next: u32 = u32::from(vs.vs_root_cluster);
     let mut maxloop = 100;
 
     let vol_label: Option<String> = loop {
@@ -424,7 +439,7 @@ fn probe_fat32<R: Read+Seek>(
         maxloop -= 1;
 
         let next_sect_off: u64 = (next as u64 - 2)  * vs.vs_cluster_size as u64;
-        let next_off: u64 = (start_data_sect as u64 + next_sect_off) * ms.ms_sector_size as u64;
+        let next_off: u64 = (start_data_sect as u64 + next_sect_off) * u64::from(ms.ms_sector_size);
         let count: u64 = buf_size / 32;
         
         match search_fat_label(file, next_off, count)? {
@@ -432,14 +447,14 @@ fn probe_fat32<R: Read+Seek>(
                 break Some(label);
             },
             None => {
-                let fat_entry_off = (reserved as u64 * ms.ms_sector_size as u64) + (next as u64 * 4);
+                let fat_entry_off = (reserved as u64 * u64::from(ms.ms_sector_size)) + (next as u64 * 4);
                 let buf = read_buffer_vec(file, fat_entry_off, buf_size as usize)?;
                 
                 if buf.len() < 4 {
                     break None;
                 }
-
-                next = LittleEndian::read_u32(&buf[0..4]) & 0x0FFFFFFF;
+                
+                next = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) & 0x0FFFFFFF;
                 continue;
             },
         };
@@ -447,9 +462,9 @@ fn probe_fat32<R: Read+Seek>(
 
     let vol_serno = VolumeId32::new(vs.vs_serno);
 
-    let fsinfo_sect: u16 = u16::from_le(vs.vs_fsinfo_sector);
+    let fsinfo_sect = u64::from(vs.vs_fsinfo_sector);
     if fsinfo_sect != 0 {
-        let fsinfo: Fat32FsInfo = read_as(file, fsinfo_sect as u64 * ms.ms_sector_size as u64)?;
+        let fsinfo: Fat32FsInfo = read_as(file, fsinfo_sect * u64::from(ms.ms_sector_size))?;
 
         if &fsinfo.signature1 != b"\x52\x52\x61\x41" &&
            &fsinfo.signature1 != b"\x52\x52\x64\x41" &&
@@ -505,10 +520,10 @@ pub fn probe_vfat(
                     version: None, 
                     sbmagic: Some(mag.magic), 
                     sbmagic_offset: Some(mag.b_offset), 
-                    fs_size: Some(ms.ms_sector_size as u64 * get_sect_count(ms) as u64), 
+                    fs_size: Some(u64::from(ms.ms_sector_size) * get_sect_count(ms) as u64), 
                     fs_last_block: None, 
-                    fs_block_size: Some(vs.vs_cluster_size as u64 * ms.ms_sector_size as u64), 
-                    block_size: Some(ms.ms_sector_size as u64) 
+                    fs_block_size: Some(vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size)), 
+                    block_size: Some(u64::from(ms.ms_sector_size)),
                 }
             )
         );

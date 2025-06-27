@@ -1,11 +1,11 @@
 use std::{io::{self, Read, Seek}, string};
 use std::io::BufReader;
 
-use bytemuck::{checked::from_bytes, Pod, Zeroable};
+use zerocopy::{FromBytes, IntoBytes, Unaligned, 
+    byteorder::U64, byteorder::U32, byteorder::U16, 
+    byteorder::LittleEndian, Immutable, transmute};
 use rustix::fs::makedev;
 use thiserror::Error;
-use byteorder::LittleEndian;
-use byteorder::ByteOrder;
 
 use crate::{
     probe_get_magic, read_as, read_buffer_vec, read_buffer,
@@ -61,23 +61,23 @@ pub const EXFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     ]
 };
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct ExFatSuperBlock {
     pub bootjmp: [u8; 3],
     pub fs_name: [u8; 8],
     must_be_zero: [u8; 53],
-    pub partition_offset: u64,
-    pub volume_length: u64,
-    pub fat_offset: u32,
-    pub fat_length: u32,
-    pub clustor_heap_offset: u32,
-    pub clustor_count: u32,
-    pub first_clustor_of_root: u32,
+    pub partition_offset: U64<LittleEndian>,
+    pub volume_length: U64<LittleEndian>,
+    pub fat_offset: U32<LittleEndian>,
+    pub fat_length: U32<LittleEndian>,
+    pub clustor_heap_offset: U32<LittleEndian>,
+    pub clustor_count: U32<LittleEndian>,
+    pub first_clustor_of_root: U32<LittleEndian>,
     pub volume_serial: [u8; 4],
     pub vermin: u8,
     pub vermaj: u8,
-    pub volume_flags: u16,
+    pub volume_flags: U16<LittleEndian>,
     pub bytes_per_sector_shift: u8,
     pub sectors_per_cluster_shift: u8,
     pub number_of_fats: u8,
@@ -85,7 +85,7 @@ pub struct ExFatSuperBlock {
     pub percent_in_use: u8,
     reserved: [u8; 7],
     pub boot_code: [u8; 390],
-    pub boot_signature: u16,
+    pub boot_signature: U16<LittleEndian>,
 }
 
 impl ExFatSuperBlock {
@@ -124,7 +124,7 @@ impl ExFatSuperBlock {
             cluster: u32
         ) -> u64
     {
-        return u32::from_le(self.clustor_heap_offset) as u64 +
+        return u64::from(self.clustor_heap_offset) +
         (((cluster - EXFAT_FIRST_DATA_CLUSTER) as u64) << self.sectors_per_cluster_shift)
     }
 
@@ -142,7 +142,7 @@ impl ExFatSuperBlock {
             cluster: u32,
         ) -> Result<u32, ExFatError>
     {
-        let fat_offset = self.block_to_offset(u32::from_le(self.fat_offset) as u64)
+        let fat_offset = self.block_to_offset(u64::from(self.fat_offset))
                 + (cluster as u64 * 4);
         let next: [u8; 4] = read_buffer(file, fat_offset)?;
         
@@ -150,8 +150,8 @@ impl ExFatSuperBlock {
     }
 }
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 struct ExfatEntryLabel {
     label_type: u8,
     length: u8,
@@ -216,8 +216,8 @@ fn verify_exfat_checksum<R: Read + Seek>(
     for i in 0..(sector_size / 4) {
         let offset = sector_size * 11 + i * 4;
         if let Some(bytes) = data.get(offset..offset + 4) {
-            let expected = LittleEndian::read_u32(bytes);
-            
+            let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]); // FIX later
+
             if checksum != expected {
                 return Err(ExFatError::ChecksumError { expected: CsumAlgorium::ExfatCsum(expected), got: CsumAlgorium::ExfatCsum(checksum) });
             }
@@ -239,7 +239,7 @@ fn valid_exfat<R: Read + Seek>(
         sb: ExFatSuperBlock
     ) -> Result<(), ExFatError>
 {
-    if u16::from_le(sb.boot_signature) != 0xAA55 {
+    if u16::from(sb.boot_signature) != 0xAA55 {
         return Err(ExFatError::UnknownFilesystem("Block is not exfat likely a mbr partiton table"));
     }
 
@@ -272,25 +272,25 @@ fn valid_exfat<R: Read + Seek>(
     }
 
     if !in_range_inclusive(
-            u32::from_le(sb.fat_offset), 
+            u32::from(sb.fat_offset), 
             24, 
-            u32::from_le(sb.clustor_heap_offset) - 
-                    (u32::from_le(sb.fat_length) * sb.number_of_fats as u32)) 
+            u32::from(sb.clustor_heap_offset) - 
+                    (u32::from(sb.fat_length) * sb.number_of_fats as u32)) 
     {
         return Err(ExFatError::ExfatHeaderError("fat_offset needs to be val >= 24 && val <= clustor_heap_offset - fat_length * number_of_fats "));
     }
 
     if !in_range_inclusive(
-            u32::from_le(sb.clustor_heap_offset), 
-            u32::from_le(sb.fat_offset) + 
-                    u32::from_le(sb.fat_length) * sb.number_of_fats as u32,
+            u32::from(sb.clustor_heap_offset), 
+            u32::from(sb.fat_offset) + 
+                    u32::from(sb.fat_length) * sb.number_of_fats as u32,
             1u32 << (32 - 1)) 
     {
         return Err(ExFatError::ExfatHeaderError("clustor_heap_offset needs to be val >= fat_offset + fat_length * number_of_fats && val <= 1u32 << (32 - 1)"));
     }
 
     if !in_range_inclusive(
-            u32::from_le(sb.first_clustor_of_root), 
+            u32::from(sb.first_clustor_of_root), 
             2, 
             u32::from(sb.clustor_count) + 1) 
     {
@@ -322,7 +322,7 @@ fn find_label<R: Read+Seek>(
         sb: ExFatSuperBlock
     ) -> Result<Option<String>, ExFatError>
 {
-    let mut cluster = u32::from_le(sb.first_clustor_of_root);
+    let mut cluster = u32::from(sb.first_clustor_of_root);
     let mut offset = sb.cluster_to_offset(cluster);
 
     let mut i = 0;
@@ -335,8 +335,8 @@ fn find_label<R: Read+Seek>(
             }
         };
 
-        let entry: ExfatEntryLabel = *from_bytes(&buf);
-        
+        let entry: ExfatEntryLabel = transmute!(buf);
+
         if entry.label_type == EXFAT_ENTRY_EOD {
             return Ok(None);
         }
@@ -389,7 +389,7 @@ pub fn probe_exfat(
                     version: Some(BlockidVersion::DevT(makedev(sb.vermaj as u32, sb.vermin as u32))), 
                     sbmagic: Some(b"EXFAT   "), 
                     sbmagic_offset: Some(3), 
-                    fs_size: Some(sb.block_size() as u64 * u64::from_le(sb.volume_length)), 
+                    fs_size: Some(sb.block_size() as u64 * u64::from(sb.volume_length)), 
                     fs_last_block: None, 
                     fs_block_size: Some(sb.block_size() as u64), 
                     block_size: Some(sb.block_size() as u64) 

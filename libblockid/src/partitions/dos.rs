@@ -1,7 +1,9 @@
 use std::io::{self, Read, Seek, BufReader};
 
 use bitflags::bitflags;
-use bytemuck::{bytes_of, from_bytes, Pod, Zeroable};
+use zerocopy::{FromBytes, IntoBytes, Unaligned, 
+    byteorder::U32, byteorder::LittleEndian,
+    transmute, Immutable};
 use thiserror::Error;
 
 use crate::{
@@ -62,11 +64,11 @@ pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     ]
 };
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct DosTable {
     pub boot_code1: [u8; 218],
-    pub disk_timestamp: DiskTimestamp,
+    pub disk_timestamp: [u8; 6],
     pub boot_code2: [u8; 216],
     pub disk_id: [u8; 4],
     pub state: [u8; 2],
@@ -95,20 +97,10 @@ impl DosTable {
     }
 }
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-pub struct DiskTimestamp {
-    pub reserved: u16,
-    pub physical_disk: u8,          
-    pub seconds: u8,             
-    pub minutes: u8,
-    pub hours: u8,
-}
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct DosPartitionEntry {
-    pub boot_ind: MbrAttributes,    /* 0x80 - active */
+    pub boot_ind: u8,    /* 0x80 - active */
     pub begin_head: u8,             /* begin CHS */
     pub begin_sector: u8,
     pub begin_cylinder: u8,
@@ -116,8 +108,8 @@ pub struct DosPartitionEntry {
     pub end_head: u8,               /* end CHS */
     pub end_sector: u8,
     pub end_cylinder: u8,
-    pub start_sect: u32,
-    pub nr_sects: u32,
+    pub start_sect: U32<LittleEndian>,
+    pub nr_sects: U32<LittleEndian>,
 }
 
 impl DosPartitionEntry {
@@ -125,7 +117,7 @@ impl DosPartitionEntry {
             &self,
         ) -> bool
     {
-        bytes_of(self) == [0u8; 16]
+        Self::as_bytes(&self) == [0u8; 16]
     }
 
     fn is_extended(
@@ -137,10 +129,16 @@ impl DosPartitionEntry {
         self.sys_ind == MbrPartitionType::MBR_LINUX_EXTENDED_PARTITION 
     }
 
+    fn flags(
+            &self
+        ) -> MbrAttributes 
+    {
+        MbrAttributes::from_bits_truncate(self.boot_ind)
+    }
 }
 
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct MbrPartitionType(u8);
 
 impl MbrPartitionType {
@@ -259,7 +257,7 @@ impl MbrPartitionType {
 
 bitflags! {
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct MbrAttributes: u8 {
         const ACTIVE = 0x80;
         const INACTIVE = 0x00;
@@ -273,7 +271,8 @@ fn is_valid_dos<R: Read+Seek>(
     ) -> Result<(), DosPTError>
 {
     for entry in pt.partition_entries {
-        if !entry.boot_ind.contains(MbrAttributes::INACTIVE) && !entry.boot_ind.contains(MbrAttributes::ACTIVE) {
+        let boot_ind = entry.flags();
+        if !boot_ind.contains(MbrAttributes::INACTIVE) && !boot_ind.contains(MbrAttributes::ACTIVE) {
             return Err(DosPTError::DosPTHeaderError("missing boot indicator"));
         }
 
@@ -307,7 +306,7 @@ fn parse_dos_extended<R: Read+Seek>(
         ssf: u64,
     ) -> Result<Vec<PartitionResults>, DosPTError>
 {
-    let ex_start = ex_entry.start_sect as u64 * ssf;
+    let ex_start = u64::from(ex_entry.start_sect) * ssf;
     
     if ex_start == 0 {
         return Err(DosPTError::DosPTHeaderError("Bad offset in primary extended partition -- ignore"));
@@ -319,7 +318,7 @@ fn parse_dos_extended<R: Read+Seek>(
     for i in 5..133 {
         let sector = read_sector(file, cur_start)?;
 
-        let ex_pt: DosTable = *from_bytes(&sector);
+        let ex_pt: DosTable = transmute!(sector);
 
         if !ex_pt.valid_signature() {
             return Err(DosPTError::DosPTHeaderError("Extended partition doesnt have valid signature"));
@@ -327,8 +326,8 @@ fn parse_dos_extended<R: Read+Seek>(
 
         let data_entry = ex_pt.partition_entries[0];
 
-        let data_start = data_entry.start_sect as u64 * ssf;
-        let data_size = data_entry.nr_sects as u64 * ssf;
+        let data_start = u64::from(data_entry.start_sect) * ssf;
+        let data_size = u64::from(data_entry.nr_sects) * ssf;
         let abs_start = cur_start + data_start;
 
         // Empty EBR 
@@ -343,7 +342,7 @@ fn parse_dos_extended<R: Read+Seek>(
             part_uuid: None,
             name: None,
             entry_type: Some(PartEntryType::Byte(data_entry.sys_ind.as_byte())),
-            entry_attributes: Some(PartEntryAttributes::Mbr(data_entry.boot_ind)),
+            entry_attributes: Some(PartEntryAttributes::Mbr(data_entry.flags())),
         });
 
         let next_ebr = ex_pt.partition_entries[1];
@@ -351,8 +350,8 @@ fn parse_dos_extended<R: Read+Seek>(
         if next_ebr.is_empty() {
             return Ok(ex_partitions);
         } 
-        let next_start = next_ebr.start_sect as u64 * ssf;
-        let next_size = next_ebr.nr_sects as u64 * ssf;
+        let next_start = u64::from(next_ebr.start_sect) * ssf;
+        let next_size = u64::from(next_ebr.nr_sects) * ssf;
         
         if next_size == 0 && next_ebr.is_extended() {
             break;
@@ -387,8 +386,8 @@ pub fn probe_dos_pt(
         .iter()
         .enumerate()
         .filter_map(|(partno, entry)| {            
-            let start = entry.start_sect as u64 * ssf;
-            let size = entry.nr_sects as u64 * ssf;
+            let start = u64::from(entry.start_sect) * ssf;
+            let size = u64::from(entry.nr_sects) * ssf;
 
             if size == 0 {
                 return None;
@@ -401,7 +400,7 @@ pub fn probe_dos_pt(
                 part_uuid: None,
                 name: None,
                 entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
-                entry_attributes: Some(PartEntryAttributes::Mbr(entry.boot_ind)),
+                entry_attributes: Some(PartEntryAttributes::Mbr(entry.flags())),
             })
         }
     ).collect();

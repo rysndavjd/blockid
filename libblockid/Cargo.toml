@@ -7,10 +7,10 @@ edition = "2024"
 default = []
 
 [dependencies]
-bitflags = { version = "2.9.1", features = ["bytemuck"] }
-bytemuck = { version = "1.23.0", features = ["derive", "min_const_generics"] }
+bitflags = { version = "2.9.1"}
 byteorder = "1.5.0"
 crc = "3.3.0"
 rustix = { version = "1.0.7", features = ["fs"] }
 thiserror = "2.0.12"
 uuid = "1.16.0"
+zerocopy = { version = "0.8.26", features = ["std", "alloc", "derive"] }

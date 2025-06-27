@@ -1,10 +1,10 @@
-use core::str;
-use std::{io::{self, Read, Seek}, str::FromStr};
+use std::{io::{self, Read, Seek}, str::{self, FromStr, Utf8Error}};
 
-use bytemuck::{Pod, Zeroable};
+use zerocopy::{FromBytes, IntoBytes, Unaligned, 
+    byteorder::U64, byteorder::U32, byteorder::U16, 
+    byteorder::BigEndian, Immutable};
 use thiserror::Error;
 use uuid::{Uuid};
-use std::str::Utf8Error;
 
 use crate::{
     containers::ContError, read_as, BlockidError, BlockidIdinfo, 
@@ -99,19 +99,19 @@ pub const LUKS_OPAL_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     magics: &[]
 };
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct Luks1Header {
     pub magic: [u8; 6],
-    pub version: u16,
+    pub version: U16<BigEndian>,
     pub cipher_name: [u8; 32],
     pub cipher_mode: [u8; 32],
     pub hash_spec: [u8; 32],
-    pub payload_offset: u32,
-    pub key_bytes: u32,
+    pub payload_offset: U32<BigEndian>,
+    pub key_bytes: U32<BigEndian>,
     pub mk_digest: [u8; 20],
     pub mk_digest_salt: [u8; 32],
-    pub mk_digest_iterations: u32,
+    pub mk_digest_iterations: U32<BigEndian>,
     pub uuid: [u8; 40],
 }
 
@@ -131,7 +131,7 @@ impl Luks1Header {
         ) -> bool
     {
         if self.magic == LUKS1_MAGIC &&
-            u16::from_be(self.version) == 1
+            u16::from(self.version) == 1
         {
             return true;
         }
@@ -140,19 +140,19 @@ impl Luks1Header {
     }
 }
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct Luks2Header {
     pub magic: [u8; 6],
-    pub version: u16,
-    pub hdr_size: u64,
-    pub seqid: u64,
+    pub version: U16<BigEndian>,
+    pub hdr_size: U64<BigEndian>,
+    pub seqid: U64<BigEndian>,
     pub label: [u8; 48],
     pub checksum_alg: [u8; 32],
     pub salt: [u8; 64],
     pub uuid: [u8; 40],
     pub subsystem: [u8; 48],
-    pub hdr_offset: u64,
+    pub hdr_offset: U64<BigEndian>,
     _padding: [u8; 184],
     pub csum: [u8; 64],
 }
@@ -173,15 +173,15 @@ impl Luks2Header {
             file: &mut R,
         ) -> bool
     {
-        if self.magic == LUKS1_MAGIC && u16::from_be(self.version) == 2 {
+        if self.magic == LUKS1_MAGIC && u16::from(self.version) == 2 {
             return true;
         }
         
         for offset in SECONDARY_OFFSETS {
             match read_as::<Luks2Header, R>(file, offset) {
                 Ok(secondary) => {
-                    if u16::from_be(secondary.version) == 2 && 
-                        u64::from_be(secondary.hdr_offset) == offset 
+                    if u16::from(secondary.version) == 2 && 
+                        u64::from(secondary.hdr_offset) == offset 
                     {
                         return true;
                     }
@@ -212,7 +212,7 @@ pub fn probe_luks1(
                     cont_uuid: Some(BlockidUUID::Standard(header.get_uuid()?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
-                    version: Some(BlockidVersion::Number(u16::from_be(header.version) as u64)), 
+                    version: Some(BlockidVersion::Number(u64::from(header.version))), 
                     sbmagic: Some(&LUKS1_MAGIC), 
                     sbmagic_offset: Some(0), 
                     cont_size: None, 
@@ -242,7 +242,7 @@ pub fn probe_luks2(
                     cont_uuid: Some(BlockidUUID::Standard(header.get_uuid()?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
-                    version: Some(BlockidVersion::Number(u16::from_be(header.version) as u64)), 
+                    version: Some(BlockidVersion::Number(u64::from(header.version))), 
                     sbmagic: Some(&LUKS2_MAGIC), 
                     sbmagic_offset: Some(0), 
                     cont_size: None, 
@@ -278,7 +278,7 @@ pub fn probe_luks_opal(
                     cont_uuid: Some(BlockidUUID::Standard(header.get_uuid()?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
-                    version: Some(BlockidVersion::Number(u16::from_be(header.version) as u64)), 
+                    version: Some(BlockidVersion::Number(u64::from(header.version))), 
                     sbmagic: Some(&LUKS2_MAGIC), 
                     sbmagic_offset: Some(0), 
                     cont_size: None, 
