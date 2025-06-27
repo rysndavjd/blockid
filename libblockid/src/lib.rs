@@ -10,7 +10,6 @@ use std::fmt;
 use std::{fs::File, os::fd::AsFd, path::Path};
 use filesystems::volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
-use bytemuck::{from_bytes, Pod};
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use rustix::fs::{ioctl_blksszget, Dev, Mode, fstat, FileType};
 use rustix::io::Errno;
@@ -23,6 +22,7 @@ use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO};
 use crate::filesystems::vfat::VFAT_ID_INFO;
 use bitflags::bitflags;
 use crate::partitions::dos::MbrAttributes;
+use zerocopy::{transmute, FromBytes, KnownLayout, Immutable};
 
 #[derive(Error, Debug)]
 pub enum BlockidError {
@@ -297,6 +297,7 @@ pub enum FsType {
     Ext2,
     Ext3,
     Ext4,
+    Swap,
 }
 
 impl fmt::Display for FsType {
@@ -307,6 +308,7 @@ impl fmt::Display for FsType {
             Self::Ext2 => write!(f, "Ext2"),
             Self::Ext3 => write!(f, "Ext3"),
             Self::Ext4 => write!(f, "Ext4"),
+            Self::Swap => write!(f, "Swap"),
         }
     }
 }
@@ -435,17 +437,17 @@ pub fn probe_get_magic<R: Read+Seek>(
     return Err(ErrorKind::NotFound.into());
 }
 
-pub fn read_as<T: Pod, R: Read+Seek>(
-        raw_block: &mut R,
+pub fn read_as<T: FromBytes, R: Read+Seek>(
+        file: &mut R,
         offset: u64,
     ) -> Result<T, io::Error> 
 {
-    raw_block.seek(SeekFrom::Start(0))?;
-
     let mut buffer = vec![0u8; std::mem::size_of::<T>()];
-    raw_block.seek(SeekFrom::Start(offset))?;
-    raw_block.read_exact(&mut buffer)?;
+    file.seek(SeekFrom::Start(offset))?;
+    file.read_exact(&mut buffer)?;
 
-    let ptr = from_bytes::<T>(&buffer);
-    return Ok(*ptr);
+    let data = T::read_from_bytes(&buffer)
+        .map_err(|_| ErrorKind::UnexpectedEof)?;
+    
+    return Ok(data);
 }

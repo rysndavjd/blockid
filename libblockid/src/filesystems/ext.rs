@@ -1,7 +1,9 @@
 use std::io;
 
 use bitflags::bitflags;
-use bytemuck::{Pod, Zeroable};
+use zerocopy::{FromBytes, IntoBytes, Unaligned, 
+    byteorder::U64, byteorder::U32, byteorder::U16, 
+    byteorder::LittleEndian, Immutable};
 use rustix::fs::makedev;
 use thiserror::Error;
 use uuid::Uuid;
@@ -20,7 +22,7 @@ https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 
 #[derive(Error, Debug)]
 pub enum ExtError {
-    #[error("I/O operation failed")]
+    #[error("I/O operation failed: {0}")]
     IoError(#[from] io::Error),
     #[error("Ext Feature Error: {0}")]
     ExtFeatureError(&'static str),
@@ -133,69 +135,113 @@ pub const EXT4_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 //    ]
 //};
 
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct Ext2SuperBlock {
-    pub s_inodes_count: u32,
-    pub s_blocks_count: u32,
-    pub s_r_blocks_count: u32,
-    pub s_free_blocks_count: u32,
-    pub s_free_inodes_count: u32,
-    pub s_first_data_block: u32,
-    pub s_log_block_size: u32,
-    s_dummy3: [u32; 7],
+    pub s_inodes_count: U32<LittleEndian>,
+    pub s_blocks_count: U32<LittleEndian>,
+    pub s_r_blocks_count: U32<LittleEndian>,
+    pub s_free_blocks_count: U32<LittleEndian>,
+    pub s_free_inodes_count: U32<LittleEndian>,
+    pub s_first_data_block: U32<LittleEndian>,
+    pub s_log_block_size: U32<LittleEndian>,
+    s_dummy3: [U32<LittleEndian>; 7],
     pub s_magic: [u8; 2],
-    pub s_state: ExtState,
-    pub s_errors: ExtErrors,
-    pub s_minor_rev_level: u16,
-    pub s_lastcheck: u32,
-    pub s_checkinterval: u32,
+    pub s_state: U16<LittleEndian>,
+    pub s_errors: U16<LittleEndian>,
+    pub s_minor_rev_level: U16<LittleEndian>,
+    pub s_lastcheck: U32<LittleEndian>,
+    pub s_checkinterval: U32<LittleEndian>,
     pub s_creator_os: ExtCreator,
-    pub s_rev_level: u32,
-    pub s_def_resuid: u16,
-    pub s_def_resgid: u16,
-    pub s_first_ino: u32,
-    pub s_inode_size: u16,
-    pub s_block_group_nr: u16,
-    pub s_feature_compat: ExtFeatureCompat,
-    pub s_feature_incompat: ExtFeatureIncompat,
-    pub s_feature_ro_compat: ExtFeatureRoCompat,
+    pub s_rev_level: U32<LittleEndian>,
+    pub s_def_resuid: U16<LittleEndian>,
+    pub s_def_resgid: U16<LittleEndian>,
+    pub s_first_ino: U32<LittleEndian>,
+    pub s_inode_size: U16<LittleEndian>,
+    pub s_block_group_nr: U16<LittleEndian>,
+    pub s_feature_compat: U32<LittleEndian>,
+    pub s_feature_incompat: U32<LittleEndian>,
+    pub s_feature_ro_compat: U32<LittleEndian>,
     pub s_uuid: [u8; 16],
     pub s_volume_name: [u8; 16],
     pub s_last_mounted: [u8; 64],
-    pub s_algorithm_usage_bitmap: u32,
+    pub s_algorithm_usage_bitmap: U32<LittleEndian>,
     pub s_prealloc_blocks: u8,
     pub s_prealloc_dir_blocks: u8,
-    pub s_reserved_gdt_blocks: u16,
+    pub s_reserved_gdt_blocks: U16<LittleEndian>,
     pub s_journal_uuid: [u8; 16],
-    pub s_journal_inum: u32,
-    pub s_journal_dev: u32,
-    pub s_last_orphan: u32,
-    pub s_hash_seed: [u32; 4],
+    pub s_journal_inum: U32<LittleEndian>,
+    pub s_journal_dev: U32<LittleEndian>,
+    pub s_last_orphan: U32<LittleEndian>,
+    pub s_hash_seed: [U32<LittleEndian>; 4],
     pub s_def_hash_version: u8,
     pub s_jnl_backup_type: u8,
-    pub s_reserved_word_pad: u16,
-    pub s_default_mount_opts: u32,
-    pub s_first_meta_bg: u32,
-    pub s_mkfs_time: u32,
-    pub s_jnl_blocks: [u32; 17],
-    pub s_blocks_count_hi: u32,
-    pub s_r_blocks_count_hi: u32,
-    pub s_free_blocks_hi: u32,
-    pub s_min_extra_isize: u16,
-    pub s_want_extra_isize: u16,
-    pub s_flags: ExtFlags,
-    pub s_raid_stride: u16,
-    pub s_mmp_interval: u16,
-    pub s_mmp_block: u64,
-    pub s_raid_stripe_width: u32,
-    s_reserved: [u32; 162],
-    pub s_checksum: u32,
+    pub s_reserved_word_pad: U16<LittleEndian>,
+    pub s_default_mount_opts: U32<LittleEndian>,
+    pub s_first_meta_bg: U32<LittleEndian>,
+    pub s_mkfs_time: U32<LittleEndian>,
+    pub s_jnl_blocks: [U32<LittleEndian>; 17],
+    pub s_blocks_count_hi: U32<LittleEndian>,
+    pub s_r_blocks_count_hi: U32<LittleEndian>,
+    pub s_free_blocks_hi: U32<LittleEndian>,
+    pub s_min_extra_isize: U16<LittleEndian>,
+    pub s_want_extra_isize: U16<LittleEndian>,
+    pub s_flags: U32<LittleEndian>,
+    pub s_raid_stride: U16<LittleEndian>,
+    pub s_mmp_interval: U16<LittleEndian>,
+    pub s_mmp_block: U64<LittleEndian>,
+    pub s_raid_stripe_width: U32<LittleEndian>,
+    s_reserved: [U32<LittleEndian>; 162],
+    pub s_checksum: U32<LittleEndian>,
+}
+
+impl Ext2SuperBlock {
+    fn ext_state(
+            &self
+        ) -> ExtState
+    {
+        ExtState::from_bits_truncate(u16::from(self.s_state))
+    }
+
+    fn ext_errors(
+            &self
+        ) -> ExtErrors
+    {
+        ExtErrors::from_bits_truncate(u16::from(self.s_errors))
+    }
+
+    fn feature_compat(
+            &self
+        ) -> ExtFeatureCompat
+    {
+        ExtFeatureCompat::from_bits_truncate(u32::from(self.s_feature_compat))
+    }
+
+    fn feature_incompat(
+            &self
+        ) -> ExtFeatureIncompat
+    {
+        ExtFeatureIncompat::from_bits_truncate(u32::from(self.s_feature_incompat))
+    }
+
+    fn feature_rocompat(
+            &self
+        ) -> ExtFeatureRoCompat
+    {
+        ExtFeatureRoCompat::from_bits_truncate(u32::from(self.s_feature_ro_compat))
+    }
+
+    fn ext_flags(
+            &self
+        ) -> ExtFlags
+    {
+        ExtFlags::from_bits_truncate(u32::from(self.s_flags))
+    }
 }
 
 bitflags! {
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtState: u16 {
         const CleanlyUmounted = 0x0001;
         const ErrorsDetected = 0x0002;
@@ -203,7 +249,7 @@ bitflags! {
     }
 
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtErrors: u16 {
         const Continue = 1;
         const RemountRO = 2;
@@ -211,23 +257,13 @@ bitflags! {
     }
 
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
-    pub struct ExtCreator: u32 {
-        const Linux = 0;
-        const Hurd = 1;
-        const Masix = 2;
-        const FreeBSD = 3;
-        const Lites = 4;
-    }
-
-    #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtFeatureCompat: u32 {
         const EXT3_FEATURE_COMPAT_HAS_JOURNAL = 0x0004;
     }
 
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtFeatureIncompat: u32 {
         const EXT2_FEATURE_INCOMPAT_FILETYPE         = 0x0002;
         const EXT3_FEATURE_INCOMPAT_RECOVER          = 0x0004;
@@ -240,7 +276,7 @@ bitflags! {
     }
 
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtFeatureRoCompat: u32 {
         const EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER     = 0x0001;
         const EXT2_FEATURE_RO_COMPAT_LARGE_FILE       = 0x0002;
@@ -253,15 +289,19 @@ bitflags! {
     }
 
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Pod, Zeroable)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtFlags: u32 {
         const EXT2_FLAGS_TEST_FILESYS = 0x0004;
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Unaligned, Immutable)]
+pub struct ExtCreator(U32<LittleEndian>);
+
 impl ToString for ExtCreator {
     fn to_string(&self) -> String {
-        match self.bits() {
+        match u32::from(self.0) {
             0 => String::from("Linux"),
             1 => String::from("Hurd"),
             2 => String::from("Masix"),
@@ -313,14 +353,14 @@ fn ext_checksum(
         es: Ext2SuperBlock,
     ) -> Result<(), ExtError>
 {   
-    let ro_compat = es.s_feature_ro_compat; 
+    let ro_compat = es.feature_rocompat(); 
     
     if ro_compat.contains(ExtFeatureRoCompat::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
         let s_checksum = es.s_checksum;
-        let csum = get_crc32c(&s_checksum.to_le_bytes());
+        let csum = get_crc32c(&s_checksum.to_bytes());
     
-        if !verify_crc32c(&s_checksum.to_le_bytes(), csum) {
-            return Err(ExtError::ChecksumError { expected: CsumAlgorium::Crc32c(s_checksum), got: CsumAlgorium::Crc32c(csum) });
+        if !verify_crc32c(&s_checksum.to_bytes(), csum) {
+            return Err(ExtError::ChecksumError { expected: CsumAlgorium::Crc32c(u32::from(s_checksum)), got: CsumAlgorium::Crc32c(csum) });
         };
     }
 
@@ -332,8 +372,8 @@ fn ext_get_info(
     ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, BlockidVersion, u64, u64, u64, String), ExtError>
 {
 
-    let fc = es.s_feature_compat;
-    let fi = es.s_feature_incompat;
+    let fc = es.feature_compat();
+    let fi = es.feature_incompat();
     //let frc = es.s_feature_ro_compat;
 
     let label: Option<String> = if es.s_volume_name[0] != 0 {
@@ -354,21 +394,21 @@ fn ext_get_info(
         None
     };
 
-    let version = BlockidVersion::DevT(makedev(es.s_rev_level, es.s_minor_rev_level as u32));
+    let version = BlockidVersion::DevT(makedev(u32::from(es.s_rev_level), u32::from(es.s_minor_rev_level)));
 
-    let log_block_size = u32::from_le(es.s_log_block_size);
+    let log_block_size = u32::from(es.s_log_block_size);
     assert!(log_block_size < 32, "Shift too large"); 
     let block_size: u64 = (1024u32 << log_block_size).into();
     
 
-    let fslastblock: u64 = u64::from(u32::from_le(es.s_blocks_count))
+    let fslastblock: u64 = u64::from(u32::from(es.s_blocks_count))
     | if fi.contains(ExtFeatureIncompat::EXT4_FEATURE_INCOMPAT_64BIT) {
-        (u64::from(u32::from_le(es.s_blocks_count_hi))) << 32
+        (u64::from(u32::from(es.s_blocks_count_hi))) << 32
     } else {
         0
     };
 
-    let fs_size: u64 = block_size * u32::from_le(es.s_blocks_count) as u64; 
+    let fs_size: u64 = block_size * u32::from(es.s_blocks_count) as u64; 
 
     let creator = es.s_creator_os;
 
@@ -382,7 +422,7 @@ pub fn probe_jbd(
 {
     let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
     
-    let fi = es.s_feature_incompat;
+    let fi = es.feature_incompat();
 
     if !fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
         return Err(ExtError::ExtFeatureError("Ext missing \"EXT3_FEATURE_INCOMPAT_JOURNAL_DEV\" to be JBD fs"));
@@ -422,9 +462,9 @@ pub fn probe_ext2(
 
     ext_checksum(es)?;
 
-    let fc = es.s_feature_compat;
-    let fi = es.s_feature_incompat;
-    let frc = es.s_feature_ro_compat;
+    let fc = es.feature_compat();
+    let fi = es.feature_incompat();
+    let frc = es.feature_rocompat();
 
     if fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
         return Err(ExtError::UnknownFilesystem("Block has a journal so its not ext2"))
@@ -470,9 +510,9 @@ pub fn probe_ext3(
 
     ext_checksum(es)?;
 
-    let fc = es.s_feature_compat;
-    let fi = es.s_feature_incompat;
-    let frc = es.s_feature_ro_compat;
+    let fc = es.feature_compat();
+    let fi = es.feature_incompat();
+    let frc = es.feature_rocompat();
 
     if !fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
         return Err(ExtError::ExtFeatureError("Block is missing journal"))
@@ -518,9 +558,9 @@ pub fn probe_ext4(
 
     ext_checksum(es)?;
 
-    let fi = es.s_feature_incompat;
-    let frc = es.s_feature_ro_compat;
-    let flags = es.s_flags;
+    let fi = es.feature_incompat();
+    let frc = es.feature_rocompat();
+    let flags = es.ext_flags();
 
     if fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
         return Err(ExtError::UnknownFilesystem("Block is jbd"));
