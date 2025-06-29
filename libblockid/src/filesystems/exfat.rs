@@ -11,7 +11,7 @@ use crate::{
     probe_get_magic, read_as, read_buffer_vec, read_buffer,
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, ProbeResult,
     FilesystemResults, FsType, UsageType, checksum::CsumAlgorium, BlockidVersion,
-    filesystems::{volume_id::VolumeId32, FsError, vfat::VFAT_ID_INFO},
+    filesystems::{volume_id::VolumeId32, FsError, vfat::VFAT_ID_INFO}, Endianness
 };
 
 #[derive(Error, Debug)]
@@ -392,7 +392,8 @@ pub fn probe_exfat(
                     fs_size: Some(sb.block_size() as u64 * u64::from(sb.volume_length)), 
                     fs_last_block: None, 
                     fs_block_size: Some(sb.block_size() as u64), 
-                    block_size: Some(sb.block_size() as u64) 
+                    block_size: Some(sb.block_size() as u64),
+                    endianness: Some(Endianness::Little),
                 }
             )
         );

@@ -8,9 +8,9 @@ use thiserror::Error;
 
 use crate::{
     probe_get_magic, read_as, read_buffer_vec,
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, ProbeResult,
-    FilesystemResults, FsSecType, FsType, UsageType,
-    filesystems::{volume_id::VolumeId32, FsError},
+    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
+    ProbeResult, FilesystemResults, FsSecType, FsType, UsageType,
+    filesystems::{volume_id::VolumeId32, FsError}, Endianness
 };
 
 #[derive(Error, Debug)]
@@ -508,25 +508,26 @@ pub fn probe_vfat(
     let creator = String::from_utf8_lossy(&ms.ms_sysid).to_string();
 
     probe.push_result(ProbeResult::Filesystem(
-                FilesystemResults { 
-                    fs_type: Some(FsType::Vfat), 
-                    sec_type: Some(sec_type), 
-                    label: label, 
-                    fs_uuid: Some(BlockidUUID::VolumeId32(serno)), 
-                    log_uuid: None, 
-                    ext_journal: None, 
-                    fs_creator: Some(creator), 
-                    usage: Some(UsageType::Filesystem), 
-                    version: None, 
-                    sbmagic: Some(mag.magic), 
-                    sbmagic_offset: Some(mag.b_offset), 
-                    fs_size: Some(u64::from(ms.ms_sector_size) * get_sect_count(ms) as u64), 
-                    fs_last_block: None, 
-                    fs_block_size: Some(vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size)), 
-                    block_size: Some(u64::from(ms.ms_sector_size)),
-                }
-            )
-        );
+            FilesystemResults { 
+                fs_type: Some(FsType::Vfat), 
+                sec_type: Some(sec_type), 
+                label: label, 
+                fs_uuid: Some(BlockidUUID::VolumeId32(serno)), 
+                log_uuid: None, 
+                ext_journal: None, 
+                fs_creator: Some(creator), 
+                usage: Some(UsageType::Filesystem), 
+                version: None, 
+                sbmagic: Some(mag.magic), 
+                sbmagic_offset: Some(mag.b_offset), 
+                fs_size: Some(u64::from(ms.ms_sector_size) * get_sect_count(ms) as u64), 
+                fs_last_block: None, 
+                fs_block_size: Some(vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size)), 
+                block_size: Some(u64::from(ms.ms_sector_size)),
+                endianness: Some(Endianness::Little),
+            }
+        )
+    );
     
     return Ok(());
 }

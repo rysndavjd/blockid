@@ -13,7 +13,7 @@ use crate::{
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe,
     BlockidUUID, BlockidVersion, FsType, ProbeResult, UsageType,
     checksum::{get_crc32c, verify_crc32c, CsumAlgorium},
-    filesystems::FsError,
+    filesystems::FsError, Endianness
 };
 
 /*
@@ -196,6 +196,7 @@ pub struct Ext2SuperBlock {
 }
 
 impl Ext2SuperBlock {
+    /* 
     fn ext_state(
             &self
         ) -> ExtState
@@ -209,6 +210,7 @@ impl Ext2SuperBlock {
     {
         ExtErrors::from_bits_truncate(u16::from(self.s_errors))
     }
+    */
 
     fn feature_compat(
             &self
@@ -445,7 +447,8 @@ pub fn probe_jbd(
                             fs_size: Some(fs_size), 
                             fs_last_block: Some(fs_last_block),
                             fs_block_size: Some(block_size),
-                            block_size: Some(block_size)
+                            block_size: Some(block_size),
+                            endianness: Some(Endianness::Little),
                         }
                     )
                 );
@@ -493,7 +496,8 @@ pub fn probe_ext2(
                                     fs_size: Some(fs_size), 
                                     fs_last_block: Some(fs_last_block),
                                     fs_block_size: Some(block_size),
-                                    block_size: Some(block_size)
+                                    block_size: Some(block_size),
+                                    endianness: Some(Endianness::Little),
                                 }
                             )
                         );
@@ -541,7 +545,8 @@ pub fn probe_ext3(
                                     fs_size: Some(fs_size), 
                                     fs_last_block: Some(fs_last_block),
                                     fs_block_size: Some(block_size),
-                                    block_size: Some(block_size)
+                                    block_size: Some(block_size),
+                                    endianness: Some(Endianness::Little),
                                 }
                             )
                         );
@@ -593,7 +598,8 @@ pub fn probe_ext4(
                                     fs_size: Some(fs_size), 
                                     fs_last_block: Some(fs_last_block),
                                     fs_block_size: Some(block_size),
-                                    block_size: Some(block_size)
+                                    block_size: Some(block_size),
+                                    endianness: Some(Endianness::Little),
                                 }
                             )
                         );

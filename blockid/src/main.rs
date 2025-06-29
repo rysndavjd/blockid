@@ -23,7 +23,6 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
     let file = File::open("/dev/sdb2")?; 
     let mut probe = BlockidProbe::new(&file, 0, 0, ProbeFlags::empty(), ProbeFilter::empty())?;
     
-    pub const LUKS2_MAGIC: [u8; 6] = *b"SKUL\xba\xbe";
 
     let magic =            BlockidMagic {
             magic: b"SWAPSPACE2",
@@ -31,7 +30,7 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
             b_offset: 0xff6,
         };
 
-    let result = probe_vfat(&mut probe, magic)?;
+    let result = probe_swap(&mut probe, magic)?;
     
     println!("{:?}", probe);
 

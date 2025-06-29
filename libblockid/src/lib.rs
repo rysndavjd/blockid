@@ -168,6 +168,12 @@ bitflags!{
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Endianness {
+    Little,
+    Big
+}
+
 #[derive(Debug)]
 pub enum ProbeResult {
     Container(ContainerResults),       // Raid/Encryption containers
@@ -187,6 +193,7 @@ pub struct ContainerResults {
     pub sbmagic_offset: Option<u64>,
     pub cont_size: Option<u64>,
     pub cont_block_size: Option<u64>,
+    pub endianness: Option<Endianness>,
 }
 
 #[derive(Debug)]
@@ -211,7 +218,7 @@ pub struct PartitionResults {
     pub name: Option<String>,
 
     pub entry_type: Option<PartEntryType>,
-    pub entry_attributes: Option<PartEntryAttributes>
+    pub entry_attributes: Option<PartEntryAttributes>,
 }
 
 #[derive(Debug)]
@@ -246,6 +253,7 @@ pub struct FilesystemResults {
     pub fs_last_block: Option<u64>,
     pub fs_block_size: Option<u64>,
     pub block_size: Option<u64>,
+    pub endianness: Option<Endianness>,
 }
 
 #[derive(Debug)]
@@ -297,7 +305,7 @@ pub enum FsType {
     Ext2,
     Ext3,
     Ext4,
-    Swap,
+    LinuxSwap,
 }
 
 impl fmt::Display for FsType {
@@ -308,7 +316,7 @@ impl fmt::Display for FsType {
             Self::Ext2 => write!(f, "Ext2"),
             Self::Ext3 => write!(f, "Ext3"),
             Self::Ext4 => write!(f, "Ext4"),
-            Self::Swap => write!(f, "Swap"),
+            Self::LinuxSwap => write!(f, "Linux Swap"),
         }
     }
 }

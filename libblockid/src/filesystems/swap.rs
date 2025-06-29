@@ -1,4 +1,4 @@
-use std::io;
+use std::{fs::File, io};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
@@ -9,10 +9,9 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    read_as, FilesystemResults,
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe,
-    BlockidUUID, BlockidVersion, FsType, ProbeResult, UsageType,
-    filesystems::FsError,
+    filesystems::FsError, read_as, read_buffer, BlockidError, BlockidIdinfo, 
+    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, Endianness, 
+    FilesystemResults, FsType, ProbeResult, UsageType
 };
 
 /*
@@ -95,11 +94,6 @@ pub const SWAP_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         },
         BlockidMagic {
             magic: b"SWAP-SPACE",
-            len: 10,
-            b_offset: 0xfff6,
-        },
-        BlockidMagic {
-            magic: b"SWAPSPACE2",
             len: 10,
             b_offset: 0xfff6,
         },
@@ -227,13 +221,39 @@ pub const SWSUSPEND_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct SwapHeaderV1 {
-    pub version: U32<LittleEndian>,
-    pub lastpage: U32<LittleEndian>,
-    pub nr_badpages: U32<LittleEndian>,
+    pub version: [u8; 4],
+    pub lastpage: [u8; 4],
+    pub nr_badpages: [u8; 4],
     pub uuid: [u8; 16],
     pub volume: [u8; 16],
     pub padding: [u8; 117],
-    pub badpages: U32<LittleEndian>,
+    pub badpages: [u8; 4],
+}
+
+pub fn swap_get_info(
+        magic: BlockidMagic,
+        header: SwapHeaderV1
+    ) -> Result<(Endianness, u64, u64, u64), SwapError> 
+{
+    let endianness = if u32::from_be_bytes(header.version) == 1 {
+        Endianness::Big
+    } else {
+        Endianness::Little
+    };
+
+    let pagesize = magic.b_offset + magic.len as u64;
+
+    let lastpage = if endianness == Endianness::Little {
+        u32::from_le_bytes(header.lastpage) as u64
+    } else {
+        u32::from_be_bytes(header.lastpage) as u64
+    };
+
+    let fs_size = pagesize * lastpage;
+
+    let fs_last_block = lastpage + 1;
+
+    return Ok((endianness, pagesize, fs_size, fs_last_block));
 }
 
 pub fn probe_swap(
@@ -241,11 +261,79 @@ pub fn probe_swap(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
+    let check = read_buffer::<8, File>(&mut probe.file, 1024)?;
+
+    if check == TOI_MAGIC_STRING {
+        return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
+    }
+
     let header: SwapHeaderV1 = read_as(&mut probe.file, 1024)?;
-
     
+    if magic.magic == b"SWAP-SPACE" {        
+        probe.push_result(ProbeResult::Filesystem(
+                FilesystemResults { 
+                    fs_type: Some(FsType::LinuxSwap), 
+                    sec_type: None, 
+                    label: None, 
+                    fs_uuid: None, 
+                    log_uuid: None, 
+                    ext_journal: None, 
+                    fs_creator: None, 
+                    usage: Some(UsageType::Other("Linux Swap")), 
+                    version: Some(BlockidVersion::Number(0)), 
+                    sbmagic: Some(magic.magic), 
+                    sbmagic_offset: Some(magic.b_offset), 
+                    fs_size: None, 
+                    fs_last_block: None, 
+                    fs_block_size: None, 
+                    block_size: None,
+                    endianness: None,
+                }
+            )
+        );
+    }
 
-    println!("{:X?}", header);
+    if magic.magic == b"SWAPSPACE2" {
+        let (endian, pagesize, fs_size, fs_last_block) = swap_get_info(magic, header)?;
+        
+        let uuid = Uuid::from_bytes(header.uuid);
 
+        let label: Option<String> = if header.volume[0] != 0 {
+            Some(String::from_utf8_lossy(&header.volume).trim_end_matches('\0').to_string())
+        } else {
+            None
+        };
+
+        probe.push_result(ProbeResult::Filesystem(
+                FilesystemResults { 
+                    fs_type: Some(FsType::LinuxSwap), 
+                    sec_type: None, 
+                    label: label, 
+                    fs_uuid: Some(BlockidUUID::Standard(uuid)), 
+                    log_uuid: None, 
+                    ext_journal: None, 
+                    fs_creator: None, 
+                    usage: Some(UsageType::Other("Linux Swap")), 
+                    version: Some(BlockidVersion::Number(1)), 
+                    sbmagic: Some(magic.magic), 
+                    sbmagic_offset: Some(magic.b_offset), 
+                    fs_size: Some(fs_size), 
+                    fs_last_block: Some(fs_last_block), 
+                    fs_block_size: Some(pagesize), 
+                    block_size: None,
+                    endianness: Some(endian),
+                }
+            )
+        );
+    }
+
+    return Ok(());
+}
+
+pub fn probe_swsuspend(
+        probe: &mut BlockidProbe, 
+        magic: BlockidMagic
+    ) -> Result<(), SwapError> 
+{
     return Ok(());
 }
