@@ -9,7 +9,7 @@ use uuid::{Uuid};
 use crate::{
     containers::ContError, read_as, BlockidError, BlockidIdinfo, 
     BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
-    ContainerResults, ProbeResult, UsageType
+    ContainerResults, ProbeResult, UsageType, Endianness
 };
 
 /* 
@@ -216,7 +216,8 @@ pub fn probe_luks1(
                     sbmagic: Some(&LUKS1_MAGIC), 
                     sbmagic_offset: Some(0), 
                     cont_size: None, 
-                    cont_block_size: None 
+                    cont_block_size: None,
+                    endianness: Some(Endianness::Big),
                 }
             )
         );
@@ -246,7 +247,8 @@ pub fn probe_luks2(
                     sbmagic: Some(&LUKS2_MAGIC), 
                     sbmagic_offset: Some(0), 
                     cont_size: None, 
-                    cont_block_size: None 
+                    cont_block_size: None,
+                    endianness: Some(Endianness::Big),
                 }
             )
         );
@@ -282,7 +284,8 @@ pub fn probe_luks_opal(
                     sbmagic: Some(&LUKS2_MAGIC), 
                     sbmagic_offset: Some(0), 
                     cont_size: None, 
-                    cont_block_size: None 
+                    cont_block_size: None,
+                    endianness: Some(Endianness::Big),
                 }
             )
         );
