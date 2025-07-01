@@ -7,7 +7,8 @@ use libblockid::filesystems::exfat::probe_exfat;
 use libblockid::filesystems::ext::probe_ext2;
 use libblockid::filesystems::ext::probe_ext3;
 use libblockid::filesystems::ext::probe_ext4;
-use libblockid::filesystems::swap::probe_swap;
+use libblockid::filesystems::swap::probe_swap_v0;
+use libblockid::filesystems::swap::probe_swap_v1;
 use libblockid::partitions::dos::probe_dos_pt;
 use libblockid::*;
 
@@ -30,7 +31,7 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
             b_offset: 0xff6,
         };
 
-    let result = probe_swap(&mut probe, magic)?;
+    let result = probe_swap_v1(&mut probe, magic)?;
     
     println!("{:?}", probe);
 
