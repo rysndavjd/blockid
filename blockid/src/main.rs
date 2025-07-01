@@ -1,15 +1,5 @@
 use std::fs::File;
-use std::str::from_utf8;
 
-use byteorder::BigEndian;
-use libblockid::containers::luks::probe_luks2;
-use libblockid::filesystems::exfat::probe_exfat;
-use libblockid::filesystems::ext::probe_ext2;
-use libblockid::filesystems::ext::probe_ext3;
-use libblockid::filesystems::ext::probe_ext4;
-use libblockid::filesystems::swap::probe_swap_v0;
-use libblockid::filesystems::swap::probe_swap_v1;
-use libblockid::partitions::dos::probe_dos_pt;
 use libblockid::*;
 
 use rustix::fs::major;
@@ -18,7 +8,6 @@ use rustix::fs::Dev;
 use uuid::Uuid;
 use byteorder::LittleEndian;
 use byteorder::ByteOrder;
-use libblockid::filesystems::vfat::*;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
     let file = File::open("/dev/sdb2")?; 
@@ -31,9 +20,9 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
             b_offset: 0xff6,
         };
 
-    let result = probe_swap_v1(&mut probe, magic)?;
+    //let result = probe_swap_v1(&mut probe, magic)?;
     
-    println!("{:?}", probe);
+   // println!("{:?}", probe);
 
     return Ok(());
 }
