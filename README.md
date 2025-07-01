@@ -22,16 +22,16 @@ This project is a copy of `libblkid` and the `blkid` utility from [util-linux](h
 | ExFAT      | Works  | Filesystem       |
 | Ext2/3/4   | Works  | Filesystem       |
 | LUKS       | Works   | Container        |
-| NTFS       | Todo   | Filesystem       |
+| NTFS       | Next   | Filesystem       |
 | VFat       | Works  | Filesystem       |
 | XFS        | Todo   | Filesystem       |
 | ZFS        | Todo   | Filesystem       |
-| Swap        | Next   | Filesystem       |
+| Swap        | Works   | Filesystem       |
 
 ### Status
 
 - **Todo**: Planned, but not yet started.
-- **Next**: Currently being implemented or thought of.
+- **Next**: Currently being implemented.
 - **Works**: Functionally implemented; successfully identifies and parses most metadata.
 - **Complete**: Fully implemented with complete parsing and edge case handling.
 

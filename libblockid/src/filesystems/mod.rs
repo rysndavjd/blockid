@@ -1,6 +1,7 @@
-pub mod ext;
 pub mod exfat;
+pub mod ext;
 pub mod linux_swap;
+pub mod ntfs;
 pub mod vfat;
 pub mod volume_id;
 
