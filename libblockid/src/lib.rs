@@ -88,8 +88,10 @@ impl BlockidProbe {
     {
         if self.filter.is_empty() {
             for info in PROBES {
-                let magic = probe_get_magic(&mut self.file, info)?;
-                let result = (info.probe_fn)(self, magic);
+                let result = match probe_get_magic(&mut self.file, info) {
+                    Ok(magic) => (info.probe_fn)(self, magic),
+                    Err(_) => continue,
+                };
                 
                 if result.is_ok() {
                     return Ok(());
