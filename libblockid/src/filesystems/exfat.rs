@@ -8,10 +8,10 @@ use rustix::fs::makedev;
 use thiserror::Error;
 
 use crate::{
-    probe_get_magic, read_as, read_buffer_vec, read_buffer,
+    probe_get_magic, from_file, read_vec_at, read_exact_at,
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, ProbeResult,
     FilesystemResults, FsType, UsageType, checksum::CsumAlgorium, BlockidVersion,
-    filesystems::{volume_id::VolumeId32, FsError, vfat::VFAT_ID_INFO}, Endianness
+    filesystems::{volume_id::VolumeId32, FsError, vfat::VFAT_ID_INFO}
 };
 
 #[derive(Error, Debug)]
@@ -144,7 +144,7 @@ impl ExFatSuperBlock {
     {
         let fat_offset = self.block_to_offset(u64::from(self.fat_offset))
                 + (cluster as u64 * 4);
-        let next: [u8; 4] = read_buffer(file, fat_offset)?;
+        let next: [u8; 4] = read_exact_at(file, fat_offset)?;
         
         return Ok(u32::from_le_bytes(next));
     }
@@ -210,7 +210,7 @@ fn verify_exfat_checksum<R: Read + Seek>(
     ) -> Result<(), ExFatError>
 {
     let sector_size = sb.block_size();
-    let data = read_buffer_vec(file, 0, sector_size * 12)?;
+    let data = read_vec_at(file, 0, sector_size * 12)?;
     let checksum = get_exfatcsum(&data, sector_size);
     
     for i in 0..(sector_size / 4) {
@@ -219,7 +219,7 @@ fn verify_exfat_checksum<R: Read + Seek>(
             let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]); // FIX later
 
             if checksum != expected {
-                return Err(ExFatError::ChecksumError { expected: CsumAlgorium::ExfatCsum(expected), got: CsumAlgorium::ExfatCsum(checksum) });
+                return Err(ExFatError::ChecksumError { expected: CsumAlgorium::Exfat(expected), got: CsumAlgorium::Exfat(checksum) });
             }
         } else {
             return Err(ExFatError::ExfatHeaderError("Checksum buffer not big enough to read checksum")); 
@@ -306,7 +306,7 @@ pub fn probe_is_exfat<R: Read+Seek>(
         file: &mut R,
     ) -> Result<(), ExFatError>
 {
-    let sb: ExFatSuperBlock = read_as(file, 0)?;
+    let sb: ExFatSuperBlock = from_file(file, 0)?;
     
     if probe_get_magic(file, &VFAT_ID_INFO).is_ok() {
         return Err(ExFatError::UnknownFilesystem("Block is detected with a VFAT magic"));
@@ -328,7 +328,7 @@ fn find_label<R: Read+Seek>(
     let mut i = 0;
 
     while i < 8388608 { // EXFAT_MAX_DIR_SIZE / EXFAT_ENTRY_SIZE
-        let buf = match read_buffer::<EXFAT_ENTRY_SIZE, R>(file, offset) {
+        let buf = match read_exact_at::<EXFAT_ENTRY_SIZE, R>(file, offset) {
             Ok(t) => t,
             Err(_) => {
                 return Ok(None)
@@ -370,7 +370,7 @@ pub fn probe_exfat(
 {
     let mut file_buf = BufReader::with_capacity(8192, &probe.file);
 
-    let sb: ExFatSuperBlock = read_as(&mut file_buf, 0)?;
+    let sb: ExFatSuperBlock = from_file(&mut file_buf, 0)?;
 
     valid_exfat(&mut file_buf, sb)?;
 
@@ -393,7 +393,7 @@ pub fn probe_exfat(
                     fs_last_block: None, 
                     fs_block_size: Some(sb.block_size() as u64), 
                     block_size: Some(sb.block_size() as u64),
-                    endianness: Some(Endianness::Little),
+                    endianness: None,
                 }
             )
         );

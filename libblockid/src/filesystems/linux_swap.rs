@@ -5,7 +5,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    filesystems::FsError, read_as, read_buffer, BlockidError, BlockidIdinfo, 
+    filesystems::FsError, from_file, read_exact_at, BlockidError, BlockidIdinfo, 
     BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, Endianness, 
     FilesystemResults, FsType, ProbeResult, UsageType
 };
@@ -267,14 +267,14 @@ pub fn probe_swap_v0(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check = read_buffer::<8, File>(&mut probe.file, 1024)?;
+    let check = read_exact_at::<8, File>(&mut probe.file, 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
     }
 
     if magic.magic == b"SWAP-SPACE" {
-        let header: SwapHeaderV1 = read_as(&mut probe.file, 1024)?;
+        let header: SwapHeaderV1 = from_file(&mut probe.file, 1024)?;
         
         let (endian, pagesize, fs_size, fs_last_block, 
             name) = swap_get_info(magic, "Swap V0", header)?;
@@ -311,14 +311,14 @@ pub fn probe_swap_v1(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check = read_buffer::<8, File>(&mut probe.file, 1024)?;
+    let check = read_exact_at::<8, File>(&mut probe.file, 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
     }
 
     if magic.magic == b"SWAPSPACE2" {
-        let header: SwapHeaderV1 = read_as(&mut probe.file, 1024)?;
+        let header: SwapHeaderV1 = from_file(&mut probe.file, 1024)?;
         
         let (endian, pagesize, fs_size, fs_last_block, 
             name) = swap_get_info(magic, "Swap V1", header)?;
@@ -363,7 +363,7 @@ pub fn probe_swsuspend(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let header: SwapHeaderV1 = read_as(&mut probe.file, 1024)?;
+    let header: SwapHeaderV1 = from_file(&mut probe.file, 1024)?;
 
     let (endian, pagesize, fs_size, fs_last_block,
          name) = if magic.magic == b"S1SUSPEND" {

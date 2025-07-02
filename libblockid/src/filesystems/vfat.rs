@@ -7,15 +7,15 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
 use thiserror::Error;
 
 use crate::{
-    probe_get_magic, read_as, read_buffer_vec,
+    probe_get_magic, from_file, read_vec_at,
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
     ProbeResult, FilesystemResults, FsSecType, FsType, UsageType,
-    filesystems::{volume_id::VolumeId32, FsError}, Endianness
+    filesystems::{volume_id::VolumeId32, FsError, is_power_2}
 };
 
 #[derive(Error, Debug)]
 pub enum FatError {
-    #[error("I/O operation failed")]
+    #[error("I/O operation failed, {0}")]
     IoError(#[from] io::Error),
     #[error("Fat Header Error: {0}")]
     FatHeaderError(&'static str),
@@ -214,10 +214,6 @@ const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
 
-fn is_power_2(num: u64) -> bool {
-    return num != 0 && ((num & (num - 1)) == 0); 
-}
-
 fn read_vfat_dir_entry<R: Read+Seek>(
         block: &mut R,
         offset: u64,
@@ -347,8 +343,8 @@ pub fn probe_is_vfat<R: Read+Seek>(
         file: &mut R,
     ) -> Result<(), FatError>
 {
-    let ms: MsDosSuperBlock = read_as(file, 0)?;
-    let vs: VFatSuperBlock = read_as(file, 0)?;
+    let ms: MsDosSuperBlock = from_file(file, 0)?;
+    let vs: VFatSuperBlock = from_file(file, 0)?;
 
     let mag: BlockidMagic = probe_get_magic(file, &VFAT_ID_INFO)?;
     
@@ -448,7 +444,7 @@ fn probe_fat32<R: Read+Seek>(
             },
             None => {
                 let fat_entry_off = (reserved as u64 * u64::from(ms.ms_sector_size)) + (next as u64 * 4);
-                let buf = read_buffer_vec(file, fat_entry_off, buf_size as usize)?;
+                let buf = read_vec_at(file, fat_entry_off, buf_size as usize)?;
                 
                 if buf.len() < 4 {
                     break None;
@@ -464,7 +460,7 @@ fn probe_fat32<R: Read+Seek>(
 
     let fsinfo_sect = u64::from(vs.vs_fsinfo_sector);
     if fsinfo_sect != 0 {
-        let fsinfo: Fat32FsInfo = read_as(file, fsinfo_sect * u64::from(ms.ms_sector_size))?;
+        let fsinfo: Fat32FsInfo = from_file(file, fsinfo_sect * u64::from(ms.ms_sector_size))?;
 
         if &fsinfo.signature1 != b"\x52\x52\x61\x41" &&
            &fsinfo.signature1 != b"\x52\x52\x64\x41" &&
@@ -490,8 +486,8 @@ pub fn probe_vfat(
 {
     let mut file_buf = BufReader::with_capacity(4096, &probe.file);
 
-    let ms: MsDosSuperBlock = read_as(&mut file_buf, 0)?;
-    let vs: VFatSuperBlock = read_as(&mut file_buf, 0)?;
+    let ms: MsDosSuperBlock = from_file(&mut file_buf, 0)?;
+    let vs: VFatSuperBlock = from_file(&mut file_buf, 0)?;
 
     let sec_type = valid_fat(ms, vs, mag)?;
 
@@ -524,7 +520,7 @@ pub fn probe_vfat(
                 fs_last_block: None, 
                 fs_block_size: Some(vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size)), 
                 block_size: Some(u64::from(ms.ms_sector_size)),
-                endianness: Some(Endianness::Little),
+                endianness: None,
             }
         )
     );

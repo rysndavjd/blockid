@@ -5,7 +5,8 @@ use crc::{Crc, CRC_32_CKSUM, CRC_32_ISCSI};
 pub enum CsumAlgorium {
     Crc32(u32),
     Crc32c(u32),
-    ExfatCsum(u32)
+    Exfat(u32),
+    NTFS(u32)
 }
 
 impl fmt::Display for CsumAlgorium {
@@ -13,7 +14,8 @@ impl fmt::Display for CsumAlgorium {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{}", checksum),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{}", checksum),
-            CsumAlgorium::ExfatCsum(checksum) => write!(f, "{}", checksum),
+            CsumAlgorium::Exfat(checksum) => write!(f, "{}", checksum),
+            CsumAlgorium::NTFS(checksum) => write!(f, "{}", checksum),
         }
     }
 }
@@ -23,7 +25,8 @@ impl fmt::UpperHex for CsumAlgorium {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{:X}", checksum),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{:X}", checksum),
-            CsumAlgorium::ExfatCsum(checksum) => write!(f, "{:X}", checksum),
+            CsumAlgorium::Exfat(checksum) => write!(f, "{:X}", checksum),
+            CsumAlgorium::NTFS(checksum) => write!(f, "{:X}", checksum),
         }
     }
 }
@@ -33,7 +36,8 @@ impl fmt::LowerHex for CsumAlgorium {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{:x}", checksum),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{:x}", checksum),
-            CsumAlgorium::ExfatCsum(checksum) => write!(f, "{:x}", checksum),
+            CsumAlgorium::Exfat(checksum) => write!(f, "{:x}", checksum),
+            CsumAlgorium::NTFS(checksum) => write!(f, "{:x}", checksum),
         }
     }
 }

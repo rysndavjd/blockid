@@ -1,10 +1,10 @@
 use std::fmt::{self};
 //use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct VolumeId32([u8; 4]);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct VolumeId64([u8; 8]);
 
 impl VolumeId32 {
