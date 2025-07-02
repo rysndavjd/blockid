@@ -355,6 +355,16 @@ pub enum BlockidUUID {
     VolumeId64(VolumeId64),
 }
 
+impl fmt::Display for BlockidUUID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Standard(t) => write!(f, "{}", t),
+            Self::VolumeId32(t) => write!(f, "{}", t),
+            Self::VolumeId64(t) => write!(f, "{}", t),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BlockidIdinfo {
     pub name: Option<&'static str>,
@@ -394,8 +404,6 @@ pub fn read_exact_at<const S: usize, R: Read+Seek>(
         offset: u64,
     ) -> Result<[u8; S], io::Error> 
 {
-    file.seek(SeekFrom::Start(0))?;
-
     let mut buffer = [0u8; S];
     file.seek(SeekFrom::Start(offset))?;
     file.read_exact(&mut buffer)?;
@@ -465,19 +473,6 @@ pub fn from_file<T: FromBytes, R: Read+Seek>(
     file.read_exact(&mut buffer)?;
 
     let data = T::read_from_bytes(&buffer)
-        .map_err(|_| ErrorKind::UnexpectedEof)?;
-    
-    return Ok(data);
-}
-
-pub fn from_buffer<T: FromBytes>(
-        src: &[u8],
-        offset: usize,
-    ) -> Result<T, io::Error> 
-{
-    assert!(offset > src.len());
-
-    let data = T::read_from_bytes(&src[offset..])
         .map_err(|_| ErrorKind::UnexpectedEof)?;
     
     return Ok(data);
