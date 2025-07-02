@@ -9,11 +9,11 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    read_as, FilesystemResults,
+    from_file, FilesystemResults,
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe,
     BlockidUUID, BlockidVersion, FsType, ProbeResult, UsageType,
     checksum::{get_crc32c, verify_crc32c, CsumAlgorium},
-    filesystems::FsError, Endianness
+    filesystems::FsError
 };
 
 /*
@@ -422,7 +422,7 @@ pub fn probe_jbd(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
     
     let fi = es.feature_incompat();
 
@@ -448,7 +448,7 @@ pub fn probe_jbd(
                             fs_last_block: Some(fs_last_block),
                             fs_block_size: Some(block_size),
                             block_size: Some(block_size),
-                            endianness: Some(Endianness::Little),
+                            endianness: None,
                         }
                     )
                 );
@@ -461,7 +461,7 @@ pub fn probe_ext2(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
 
     ext_checksum(es)?;
 
@@ -497,7 +497,7 @@ pub fn probe_ext2(
                                     fs_last_block: Some(fs_last_block),
                                     fs_block_size: Some(block_size),
                                     block_size: Some(block_size),
-                                    endianness: Some(Endianness::Little),
+                                    endianness: None,
                                 }
                             )
                         );
@@ -510,7 +510,7 @@ pub fn probe_ext3(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
 
     ext_checksum(es)?;
 
@@ -546,7 +546,7 @@ pub fn probe_ext3(
                                     fs_last_block: Some(fs_last_block),
                                     fs_block_size: Some(block_size),
                                     block_size: Some(block_size),
-                                    endianness: Some(Endianness::Little),
+                                    endianness: None,
                                 }
                             )
                         );
@@ -559,7 +559,7 @@ pub fn probe_ext4(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = read_as(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
 
     ext_checksum(es)?;
 
@@ -599,7 +599,7 @@ pub fn probe_ext4(
                                     fs_last_block: Some(fs_last_block),
                                     fs_block_size: Some(block_size),
                                     block_size: Some(block_size),
-                                    endianness: Some(Endianness::Little),
+                                    endianness: None,
                                 }
                             )
                         );

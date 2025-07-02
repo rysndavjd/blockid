@@ -9,9 +9,10 @@ use thiserror::Error;
 use crate::{
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,
     PartEntryAttributes, PartEntryType, PartTableResults, PartitionResults,
-    ProbeResult, PtType, UsageType, read_as, read_sector, filesystems::{
-    exfat::probe_is_exfat, vfat::probe_is_vfat, volume_id::VolumeId32},
-    partitions::{aix::BLKID_AIX_MAGIC_STRING, PtError},
+    ProbeResult, PtType, UsageType, from_file, read_sector_at, filesystems::{
+    exfat::probe_is_exfat, vfat::probe_is_vfat, ntfs::probe_is_ntfs,
+    volume_id::VolumeId32}, partitions::{aix::BLKID_AIX_MAGIC_STRING, 
+    PtError},
 };
 
 /*
@@ -257,7 +258,7 @@ impl MbrPartitionType {
 
 bitflags! {
     #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct MbrAttributes: u8 {
         const ACTIVE = 0x80;
         const INACTIVE = 0x00;
@@ -285,7 +286,9 @@ fn is_valid_dos<R: Read+Seek>(
         return Err(DosPTError::UnknownPartition("probably FAT"));
     }
 
-    // TODO - probe_is_ntfs 
+    if probe_is_ntfs(file).is_ok() {
+        return Err(DosPTError::UnknownPartition("probably NTFS"));
+    }
 
     // TODO - is_lvm(pr) && is_empty_mbr(data)
 
@@ -316,7 +319,7 @@ fn parse_dos_extended<R: Read+Seek>(
     let mut cur_start = ex_start;
 
     for i in 5..133 {
-        let sector = read_sector(file, cur_start)?;
+        let sector = read_sector_at(file, cur_start)?;
 
         let ex_pt: DosTable = transmute!(sector);
 
@@ -371,7 +374,7 @@ pub fn probe_dos_pt(
 
     let mut buffered = BufReader::with_capacity(4096, &probe.file);
     
-    let dos_pt: DosTable = read_as(&mut buffered, 0)?;
+    let dos_pt: DosTable = from_file(&mut buffered, 0)?;
     
     if dos_pt.boot_code1[0..3] == BLKID_AIX_MAGIC_STRING {
         return Err(DosPTError::UnknownPartition("Disk has AIX magic number"));

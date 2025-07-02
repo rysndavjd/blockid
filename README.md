@@ -3,7 +3,7 @@
 **Blockid** is a tool for identifying various types of superblocks like filesystems and partition tables.
 > *NOTE:* `blockid` currently is just a test method for `libblockid` and is unusable for how blkid would be used.
 
-This project is a copy of `libblkid` and the `blkid` utility from [util-linux](https://github.com/util-linux/util-linux/) but written in Rust. It's currently HIGNLY experimental and incomplete.
+This project is a copy of `libblkid` and the `blkid` utility from [util-linux](https://github.com/util-linux/util-linux/) but written in Rust. It's currently HIGHLY experimental and incomplete.
 
 ## Supported Superblocks
 

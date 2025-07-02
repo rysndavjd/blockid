@@ -1,4 +1,5 @@
 #![allow(clippy::needless_return)]
+#![forbid(unsafe_code)]
 
 mod checksum;
 
@@ -6,23 +7,32 @@ pub mod containers;
 pub mod partitions;
 pub mod filesystems;
 
-use std::fmt;
-use std::{fs::File, os::fd::AsFd, path::Path};
-use filesystems::volume_id::{VolumeId32, VolumeId64};
-use uuid::Uuid;
-use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
-use rustix::fs::{ioctl_blksszget, Dev, Mode, fstat, FileType};
+use std::{
+    fmt,
+    fs::File,
+    io::{self, ErrorKind, Read, Seek, SeekFrom},
+    os::fd::AsFd,
+    path::Path,
+};
+
+use bitflags::bitflags;
+use rustix::fs::{ioctl_blksszget, Dev, FileType, Mode, fstat};
 use rustix::io::Errno;
 use thiserror::Error;
-use crate::containers::ContError;
-use crate::filesystems::exfat::EXFAT_ID_INFO;
-use crate::filesystems::FsError;
-use crate::partitions::PtError;
-use crate::filesystems::ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO};
-use crate::filesystems::vfat::VFAT_ID_INFO;
-use bitflags::bitflags;
-use crate::partitions::dos::MbrAttributes;
-use zerocopy::{transmute, FromBytes, KnownLayout, Immutable};
+use uuid::Uuid;
+use zerocopy::{transmute, FromBytes, Immutable, KnownLayout};
+
+use crate::{containers::ContError, partitions::{
+    dos::{MbrAttributes, DOS_PT_ID_INFO}, PtError}};
+
+use crate::filesystems::{
+    exfat::EXFAT_ID_INFO,
+    ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO},
+    vfat::VFAT_ID_INFO,
+    FsError,
+    volume_id::{VolumeId32, VolumeId64},
+};
+
 
 #[derive(Error, Debug)]
 pub enum BlockidError {
@@ -41,8 +51,8 @@ pub enum BlockidError {
 }
 
 pub static PROBES: &[BlockidIdinfo] = &[
-    
-    //Filesystems
+    DOS_PT_ID_INFO,
+
     VFAT_ID_INFO,
     EXFAT_ID_INFO,
     EXT2_ID_INFO,
@@ -147,7 +157,7 @@ pub struct BlockidProbe {
     pub disk_devno: Dev,
     pub sector_size: u64,
     pub mode: Mode,
-    //pub zone_size: u64, //There seems to be no safe function to get zone size so i leave it out
+    //pub zone_size: u64,
 
     pub flags: ProbeFlags,
     pub filter: ProbeFilter,
@@ -155,12 +165,12 @@ pub struct BlockidProbe {
 }
 
 bitflags!{
-    #[derive(Debug)]
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
     pub struct ProbeFlags: u32 {
         const TINY_DEV = 0;
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
     pub struct ProbeFilter: u32 {
         const SKIP_CONT = 0;
         const SKIP_PT = 1;
@@ -170,7 +180,7 @@ bitflags!{
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Endianness {
     Little,
     Big
@@ -178,9 +188,9 @@ pub enum Endianness {
 
 #[derive(Debug)]
 pub enum ProbeResult {
-    Container(ContainerResults),       // Raid/Encryption containers
-    PartTable(PartTableResults),       // Partition Tables
-    Filesystem(FilesystemResults),     // Filesystems
+    Container(ContainerResults),
+    PartTable(PartTableResults),
+    Filesystem(FilesystemResults),
 }
 
 #[derive(Debug)]
@@ -210,7 +220,7 @@ pub struct PartTableResults {
     pub partitions: Option<Vec<PartitionResults>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PartitionResults {
     pub offset: Option<u64>,
     pub size: Option<u64>,
@@ -223,28 +233,24 @@ pub struct PartitionResults {
     pub entry_attributes: Option<PartEntryAttributes>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartEntryType {
     Byte(u8),
     Uuid(Uuid),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartEntryAttributes {
     Mbr(MbrAttributes),
-
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct FilesystemResults {
     pub fs_type: Option<FsType>,
     pub sec_type: Option<FsSecType>,
     pub label: Option<String>,
-    //pub label_raw: Option<BlockidUUID>,
     pub fs_uuid: Option<BlockidUUID>,
-    //pub fs_uuid_raw: Option<BlockidUUID>,
     pub log_uuid: Option<BlockidUUID>,
-    //pub log_uuid_raw: Option<BlockidUUID>,
     pub ext_journal: Option<BlockidUUID>,
     pub fs_creator: Option<String>,
     pub usage: Option<UsageType>,
@@ -258,7 +264,7 @@ pub struct FilesystemResults {
     pub endianness: Option<Endianness>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ContType {
     MD,
     LVM,
@@ -281,7 +287,7 @@ impl fmt::Display for ContType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PtType {
     Dos,
     Gpt,
@@ -300,30 +306,32 @@ impl fmt::Display for PtType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum FsType {
-    Vfat,
     Exfat,
     Ext2,
     Ext3,
     Ext4,
     LinuxSwap,
+    Ntfs,
+    Vfat,
 }
 
 impl fmt::Display for FsType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Vfat => write!(f, "Vfat"),
             Self::Exfat => write!(f, "Exfat"),
             Self::Ext2 => write!(f, "Ext2"),
             Self::Ext3 => write!(f, "Ext3"),
             Self::Ext4 => write!(f, "Ext4"),
+            Self::Ntfs => write!(f, "Ntfs"),
             Self::LinuxSwap => write!(f, "Linux Swap"),
+            Self::Vfat => write!(f, "Vfat"),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum FsSecType {
     Fat12,
     Fat16,
@@ -340,14 +348,14 @@ impl fmt::Display for FsSecType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockidUUID {
     Standard(Uuid),
     VolumeId32(VolumeId32),
     VolumeId64(VolumeId64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BlockidIdinfo {
     pub name: Option<&'static str>,
     pub usage: Option<UsageType>,
@@ -356,7 +364,7 @@ pub struct BlockidIdinfo {
     pub magics: &'static [BlockidMagic],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum UsageType {
     Filesystem,
     PartitionTable,
@@ -365,7 +373,7 @@ pub enum UsageType {
     Other(&'static str),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockidVersion {
     String(String),
     Number(u64),
@@ -374,28 +382,28 @@ pub enum BlockidVersion {
 
 pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<(), BlockidError>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BlockidMagic {
     pub magic: &'static [u8],
     pub len: usize,
     pub b_offset: u64,
 }
 
-pub fn read_buffer<const BUF_SIZE: usize, R: Read+Seek>(
+pub fn read_exact_at<const S: usize, R: Read+Seek>(
         file: &mut R,
         offset: u64,
-    ) -> Result<[u8; BUF_SIZE], io::Error> 
+    ) -> Result<[u8; S], io::Error> 
 {
     file.seek(SeekFrom::Start(0))?;
 
-    let mut buffer = [0u8; BUF_SIZE];
+    let mut buffer = [0u8; S];
     file.seek(SeekFrom::Start(offset))?;
     file.read_exact(&mut buffer)?;
 
     return Ok(buffer);
 }
 
-pub fn read_buffer_vec<R: Read+Seek>(
+pub fn read_vec_at<R: Read+Seek>(
         file: &mut R,
         offset: u64,
         buf_size: usize
@@ -410,12 +418,12 @@ pub fn read_buffer_vec<R: Read+Seek>(
     return Ok(buffer);
 }
 
-pub fn read_sector<R: Read+Seek>(
+pub fn read_sector_at<R: Read+Seek>(
         file: &mut R,
         sector: u64,
     ) -> Result<[u8; 512], io::Error> 
 {
-    return read_buffer::<512, R>(file, sector << 9);
+    return read_exact_at::<512, R>(file, sector << 9);
 }
 
 pub fn get_sectorsize(
@@ -447,7 +455,7 @@ pub fn probe_get_magic<R: Read+Seek>(
     return Err(ErrorKind::NotFound.into());
 }
 
-pub fn read_as<T: FromBytes, R: Read+Seek>(
+pub fn from_file<T: FromBytes, R: Read+Seek>(
         file: &mut R,
         offset: u64,
     ) -> Result<T, io::Error> 
@@ -457,6 +465,19 @@ pub fn read_as<T: FromBytes, R: Read+Seek>(
     file.read_exact(&mut buffer)?;
 
     let data = T::read_from_bytes(&buffer)
+        .map_err(|_| ErrorKind::UnexpectedEof)?;
+    
+    return Ok(data);
+}
+
+pub fn from_buffer<T: FromBytes>(
+        src: &[u8],
+        offset: usize,
+    ) -> Result<T, io::Error> 
+{
+    assert!(offset > src.len());
+
+    let data = T::read_from_bytes(&src[offset..])
         .map_err(|_| ErrorKind::UnexpectedEof)?;
     
     return Ok(data);

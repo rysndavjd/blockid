@@ -44,3 +44,7 @@ pub enum FsError {
         got: CsumAlgorium,
     }
 }
+
+pub fn is_power_2(num: u64) -> bool {
+    return num != 0 && ((num & (num - 1)) == 0); 
+}
