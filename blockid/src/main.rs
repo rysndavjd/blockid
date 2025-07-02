@@ -22,7 +22,7 @@ fn test() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = probe_ntfs(&mut probe, magic)?;
 
-    println!("{:?}", probe);
+    println!("{:X?}", probe);
 
     return Ok(());
 }

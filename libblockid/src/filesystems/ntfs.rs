@@ -1,14 +1,18 @@
 use std::io::{self, Read, Seek, SeekFrom, ErrorKind};
 
 use bitflags::bitflags;
-use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, transmute, FromBytes, Immutable, IntoBytes, Unaligned, Ref, KnownLayout};
+use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, transmute, 
+    FromBytes, Immutable, IntoBytes, Unaligned, KnownLayout};
 use rustix::fs::makedev;
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    checksum::{get_crc32c, 
-    verify_crc32c, CsumAlgorium}, filesystems::{is_power_2, FsError}, from_buffer, from_file, probe_get_magic, read_exact_at, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, Endianness, FilesystemResults, FsType, ProbeResult, UsageType
+    filesystems::{is_power_2, volume_id::VolumeId64, FsError}, 
+    from_file, probe_get_magic, read_exact_at, read_vec_at, 
+    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, 
+    BlockidUUID, BlockidVersion, Endianness, FilesystemResults, 
+    FsType, ProbeResult, UsageType
 };
 
 #[derive(Error, Debug)]
@@ -19,11 +23,13 @@ pub enum NtfsError {
     UnknownFilesystem(&'static str),
     #[error("NTFS Header Error: {0}")]
     NtfsHeaderError(&'static str),
+    /* 
     #[error("NTFS Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
     }
+    */
 }
 
 impl From<NtfsError> for FsError {
@@ -32,7 +38,7 @@ impl From<NtfsError> for FsError {
             NtfsError::IoError(e) => FsError::IoError(e),
             NtfsError::NtfsHeaderError(info) => FsError::InvalidHeader(info),
             NtfsError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
-            NtfsError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
+            //NtfsError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
         }
     }
 }
@@ -74,7 +80,7 @@ pub struct NtfsSuperBlock {
     pub hidden_sectors: U32<LittleEndian>,
     pub large_sectors: U32<LittleEndian>,
 
-    pub unused: [u8; 2],
+    pub unused: [U16<LittleEndian>; 2],
     pub number_of_sectors: U64<LittleEndian>,
     pub mft_cluster_location: U64<LittleEndian>,
     pub mft_mirror_cluster_location: U64<LittleEndian>,
@@ -82,7 +88,7 @@ pub struct NtfsSuperBlock {
     pub reserved1: [u8; 3],
     pub cluster_per_index_record: i8,
     pub reserved2: [u8; 3],
-    pub volume_serial: U64<LittleEndian>,
+    pub volume_serial: [u8; 8],
     pub checksum: U32<LittleEndian>,
 }
 
@@ -118,8 +124,8 @@ struct FileAttribute {
 const MFT_RECORD_VOLUME: u64 = 3;
 const NTFS_MAX_CLUSTER_SIZE: u64 = 2097152; //2 * 1024 * 1024
 
-const MFT_RECORD_ATTR_VOLUME_NAME: u64 = 0x60;
-const MFT_RECORD_ATTR_END: u64 = 0xffffffff;
+const MFT_RECORD_ATTR_VOLUME_NAME: u32 = 0x60;
+const MFT_RECORD_ATTR_END: u32 = 0xffffffff;
 
 
 fn check_ntfs(
@@ -161,25 +167,26 @@ fn check_ntfs(
     return Ok((sector_size, sectors_per_cluster));
 }
 
-
-fn get_id<R: Read+Seek>(
+/* WHY IS GETTING A LABEL SO HARD
+fn find_label<R: Read+Seek>(
         file: &mut R,
         ns: NtfsSuperBlock,
         sector_size: u64,
         sectors_per_cluster: u64,
     ) -> Result<(), NtfsError>
 {
+
     let mft_record_size = if ns.clusters_per_mft_record > 0 {
         ns.clusters_per_mft_record as u64 * sectors_per_cluster * sector_size
     } else {
         let mft_record_size_shift = 0 - ns.clusters_per_mft_record;
         if mft_record_size_shift < 0 || mft_record_size_shift >= 31 {
-            return Err(NtfsError::NtfsHeaderError("mft_record_size_shift is out of range"));
+            return Err(NtfsError::NtfsHeaderError("error 178"));
         }
         1 << mft_record_size_shift
     };
 
-    println!("mft_record_size: getid: {}", mft_record_size);
+    println!("mft_record_size: {}", mft_record_size);
 
     let nr_clusters = u64::from(ns.number_of_sectors) / sectors_per_cluster;
 
@@ -187,16 +194,16 @@ fn get_id<R: Read+Seek>(
 
     if u64::from(ns.mft_cluster_location) > nr_clusters ||
         u64::from(ns.mft_mirror_cluster_location) > nr_clusters {
-        return Err(NtfsError::NtfsHeaderError("Eh some error, look at the source code 1"));
+        return Err(NtfsError::NtfsHeaderError("Error 187"));
     }
 
     let mut off = u64::from(ns.mft_cluster_location) * sector_size * sectors_per_cluster;
 
     if mft_record_size < 4 {
-        return Err(NtfsError::NtfsHeaderError("Eh some error, look at the source code 2"));
+        return Err(NtfsError::NtfsHeaderError("mft_record_size < 4"));
     }
 
-    let mut buf_mft: [u8; 32] = read_exact_at(file, off)?;
+    let mut buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
 
     if &buf_mft[0..3] == b"FILE" {
         return Err(NtfsError::NtfsHeaderError("Eh some error, look at the source code 3"));
@@ -204,38 +211,46 @@ fn get_id<R: Read+Seek>(
 
     off += MFT_RECORD_VOLUME * mft_record_size;
 
-    buf_mft = read_exact_at(file, off)?;
+    buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
+
+    println!("buf_mft: {:?}", buf_mft);
 
     if &buf_mft[0..3] == b"FILE" {
         return Err(NtfsError::NtfsHeaderError("Eh some error, look at the source code 4"));
     }
 
-    let mft: MasterFileTableRecord = transmute!(buf_mft);
+    let mft = MasterFileTableRecord::read_from_bytes(&buf_mft[0..32])
+        .unwrap(); // fix later
+
+    println!("{:?}", mft);
     let mut attr_off = usize::from(mft.attrs_offset);
 
-    while (attr_off + 22) as u64 <= mft_record_size && 
-    attr_off as u64 <= u64::from(mft.bytes_allocated) {
+    while (attr_off + size_of::<FileAttribute>()) as u64 <= mft_record_size &&
+        attr_off as u64 <= u64::from(mft.bytes_allocated) {
         
-        let attr: FileAttribute = from_buffer(&buf_mft, attr_off)?;
+        let attr = FileAttribute::read_from_bytes(&buf_mft[attr_off..attr_off+size_of::<FileAttribute>()])
+            .map_err(|_| io::Error::new(ErrorKind::InvalidData, "226"))?;
+    
         let attr_len = u32::from(attr.len);
 
-        if attr_len == 0 {
+        if attr_len != 0 {
             break;
         }
-
-        if u64::from(attr.file_type) == MFT_RECORD_ATTR_END {
+    
+        if u32::from(attr.file_type) == MFT_RECORD_ATTR_END {
             break;
         }
-
-        if u64::from(attr.file_type) == MFT_RECORD_ATTR_VOLUME_NAME {
+        if u32::from(attr.file_type) == MFT_RECORD_ATTR_VOLUME_NAME {
             let val_off = usize::from(attr.value_offset);
             let val_len = u32::from(attr.value_len);
+
             let val = &attr.as_bytes()[val_off..];
             
             if attr_off as u64 + val_off as u64 + u64::from(val_len) <= mft_record_size {
                 println!("{:X?}", val)
             }
-            break;
+
+            break;        
         }
 
         attr_off += attr_len as usize;
@@ -243,7 +258,7 @@ fn get_id<R: Read+Seek>(
 
     return Ok(());
 }
-
+*/
 
 pub fn probe_is_ntfs<R: Read+Seek>(
         file: &mut R,
@@ -251,9 +266,8 @@ pub fn probe_is_ntfs<R: Read+Seek>(
 {
     let ns: NtfsSuperBlock = from_file(file, 0)?;
     
-    let _ = probe_get_magic(file, &NTFS_ID_INFO)?;
-    
-    let _ = check_ntfs(ns)?;
+    probe_get_magic(file, &NTFS_ID_INFO)?;
+    check_ntfs(ns)?;
 
     return Ok(());
 }
@@ -265,22 +279,14 @@ pub fn probe_ntfs(
 {
     let ns: NtfsSuperBlock = from_file(&mut probe.file, 0)?;
 
-    println!("{:X?}", ns);
-
     let (sector_size, sectors_per_cluster) = check_ntfs(ns)?;
 
-    println!("sector_size: {}", sector_size);
-    println!("sectors_per_cluster: {}", sectors_per_cluster);
-
-    get_id(&mut probe.file, ns, sector_size, sectors_per_cluster)?;
-
-/* 
     probe.push_result(ProbeResult::Filesystem(
             FilesystemResults { 
                 fs_type: Some(FsType::Ntfs), 
                 sec_type: None, 
-                label: label, 
-                fs_uuid: Some(BlockidUUID::VolumeId32(serno)), 
+                label: None, // TODO
+                fs_uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))), 
                 log_uuid: None, 
                 ext_journal: None, 
                 fs_creator: None, 
@@ -296,6 +302,6 @@ pub fn probe_ntfs(
             }
         )
     );
-*/
+
     return Ok(());
 }
