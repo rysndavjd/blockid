@@ -484,19 +484,17 @@ pub fn probe_vfat(
         mag: BlockidMagic,
     ) -> Result<(), FatError> 
 {
-    let mut file_buf = BufReader::with_capacity(4096, &probe.file);
-
-    let ms: MsDosSuperBlock = from_file(&mut file_buf, 0)?;
-    let vs: VFatSuperBlock = from_file(&mut file_buf, 0)?;
+    let ms: MsDosSuperBlock = from_file(&mut probe.buffer, 0)?;
+    let vs: VFatSuperBlock = from_file(&mut probe.buffer, 0)?;
 
     let sec_type = valid_fat(ms, vs, mag)?;
 
     let fat_size = get_fat_size(ms, vs);
 
     let (label, serno) = if ms.ms_fat_length != 0 {
-        probe_fat16(&mut file_buf, ms, vs, fat_size)?
+        probe_fat16(&mut probe.buffer, ms, vs, fat_size)?
     } else if vs.vs_fat32_length != 0 {
-        probe_fat32(&mut file_buf, ms, vs, fat_size)?
+        probe_fat32(&mut probe.buffer, ms, vs, fat_size)?
     } else {
         return Err(FatError::UnknownFilesystem("Block is not fat filesystem"));
     };

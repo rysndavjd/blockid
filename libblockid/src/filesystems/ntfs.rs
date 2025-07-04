@@ -264,9 +264,9 @@ pub fn probe_is_ntfs(
         probe: &mut BlockidProbe
     ) -> Result<(), NtfsError>
 {
-    let ns: NtfsSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let ns: NtfsSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
     
-    probe_get_magic(&mut probe.file, &NTFS_ID_INFO)?;
+    probe_get_magic(&mut probe.buffer, &NTFS_ID_INFO)?;
     check_ntfs(ns)?;
 
     return Ok(());
@@ -277,7 +277,7 @@ pub fn probe_ntfs(
         magic: BlockidMagic
     ) -> Result<(), NtfsError> 
 {
-    let ns: NtfsSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let ns: NtfsSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
 
     let (sector_size, sectors_per_cluster) = check_ntfs(ns)?;
 
