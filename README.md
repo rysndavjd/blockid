@@ -1,11 +1,16 @@
-# Blockid
+Blockid
+=======
 
 **Blockid** is a tool for identifying various types of superblocks like filesystems and partition tables.
 > *NOTE:* `blockid` currently is just a test method for `libblockid` and is unusable for how blkid would be used.
 
 This project is a copy of `libblkid` and the `blkid` utility from [util-linux](https://github.com/util-linux/util-linux/) but written in Rust. It's currently HIGHLY experimental and incomplete.
 
-## Supported Superblocks
+Libblockid
+======
+[![Latest version](https://img.shields.io/crates/v/libblockid.svg)](https://crates.io/crates/libblockid)
+[![Documentation](https://docs.rs/libblockid/badge.svg)](https://docs.rs/libblockid)
+![License](https://img.shields.io/crates/l/libblockid.svg)
 
 `libblockid` serves as the core library for superblock detection. Below is a list of supported and inprogress block types.
 
