@@ -267,7 +267,7 @@ pub fn probe_swap_v0(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check = read_exact_at::<8, File>(&mut probe.file, probe.offset + 1024)?;
+    let check: [u8; 8] = read_exact_at(&mut probe.buffer, probe.offset + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));

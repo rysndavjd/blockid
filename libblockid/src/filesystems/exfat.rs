@@ -306,13 +306,13 @@ pub fn probe_is_exfat(
         probe: &mut BlockidProbe
     ) -> Result<(), ExFatError>
 {
-    let sb: ExFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let sb: ExFatSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
     
-    if probe_get_magic(&mut probe.file, &VFAT_ID_INFO).is_ok() {
+    if probe_get_magic(&mut probe.buffer, &VFAT_ID_INFO).is_ok() {
         return Err(ExFatError::UnknownFilesystem("Block is detected with a VFAT magic"));
     }
 
-    valid_exfat(&mut probe.file, sb)?;
+    valid_exfat(&mut probe.buffer, sb)?;
 
     return Ok(());
 }
@@ -368,13 +368,11 @@ pub fn probe_exfat(
         _mag: BlockidMagic,
     ) -> Result<(), ExFatError> 
 {
-    let mut file_buf = BufReader::with_capacity(8192, &probe.file);
+    let sb: ExFatSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
 
-    let sb: ExFatSuperBlock = from_file(&mut file_buf, probe.offset)?;
+    valid_exfat(&mut probe.buffer, sb)?;
 
-    valid_exfat(&mut file_buf, sb)?;
-
-    let label= find_label(&mut file_buf, sb)?; 
+    let label= find_label(&mut probe.buffer, sb)?; 
 
     probe.push_result(ProbeResult::Filesystem(
                 FilesystemResults { 

@@ -2,7 +2,7 @@
 //#![forbid(unsafe_code)]
 
 pub(crate) mod checksum;
-pub(crate) mod ioctl;
+pub mod ioctl;
 
 pub mod containers;
 pub mod partitions;
@@ -11,7 +11,7 @@ pub mod filesystems;
 use std::{
     fmt,
     fs::File,
-    io::{self, ErrorKind, Read, Seek, SeekFrom},
+    io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom},
     os::fd::AsFd,
     path::Path,
 };
@@ -77,7 +77,7 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
 
 impl BlockidProbe {
     pub fn new(
-            file: &File,
+            file: File,
             offset: u64,
             flags: ProbeFlags,
             filter: ProbeFilter,
@@ -97,9 +97,11 @@ impl BlockidProbe {
             stat.st_size as u64
         };
 
-        
+        let buffer = BufReader::with_capacity(stat.st_blksize as usize, file.try_clone()?);
+
         Ok( Self { 
-            file: file.try_clone()?, 
+            file: file,
+            buffer: buffer,
             offset: offset, 
             size: size, 
             io_size: stat.st_blksize, 
@@ -123,7 +125,7 @@ impl BlockidProbe {
                     Ok(magic) => (info.2.probe_fn)(self, magic),
                     Err(_) => continue,
                 };
-                
+
                 if result.is_ok() {
                     return Ok(());
                 }
@@ -175,7 +177,7 @@ impl BlockidProbe {
     {
         let file = File::open(filename)?;
 
-        let probe = BlockidProbe::new(&file, offset, flags, filter)?;
+        let probe = BlockidProbe::new(file, offset, flags, filter)?;
 
         return Ok(probe);
     }
@@ -185,6 +187,7 @@ impl BlockidProbe {
 #[derive(Debug)]
 pub struct BlockidProbe {
     pub file: File,
+    pub buffer: BufReader<File>,
     pub offset: u64,
     pub size: u64,
     pub io_size: i64, 
@@ -477,8 +480,6 @@ fn read_vec_at<R: Read+Seek>(
         buf_size: usize
     ) -> Result<Vec<u8>, io::Error> 
 {
-    file.seek(SeekFrom::Start(0))?;
-
     let mut buffer = vec![0u8; buf_size];
     file.seek(SeekFrom::Start(offset))?;
     file.read_exact(&mut buffer)?;

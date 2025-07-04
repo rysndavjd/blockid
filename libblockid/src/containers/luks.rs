@@ -199,7 +199,7 @@ pub fn probe_luks1(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks1Header = from_file(&mut probe.file, probe.offset)?;
+    let header: Luks1Header = from_file(&mut probe.buffer, probe.offset)?;
     
     if !header.luks_valid() {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks1 container"));
@@ -230,9 +230,9 @@ pub fn probe_luks2(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks2Header = from_file(&mut probe.file, probe.offset)?;
+    let header: Luks2Header = from_file(&mut probe.buffer, probe.offset)?;
 
-    if !header.luks_valid(&mut probe.file) {
+    if !header.luks_valid(&mut probe.buffer) {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks2 container"));
     }
 
@@ -261,7 +261,7 @@ pub fn probe_luks_opal(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks2Header = from_file(&mut probe.file, probe.offset)?;
+    let header: Luks2Header = from_file(&mut probe.buffer, probe.offset)?;
 
     if !header.luks_valid(&mut probe.file) {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks2 opal container"));
