@@ -1,5 +1,4 @@
 use std::{io::{self, Read, Seek}, string};
-use std::io::BufReader;
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 

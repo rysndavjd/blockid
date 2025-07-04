@@ -1,4 +1,4 @@
-use std::{io::{self, Read, Seek}, str::{self, FromStr, Utf8Error}};
+use std::{io::{self, ErrorKind, Read, Seek}, str::{self, FromStr, Utf8Error}};
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
@@ -30,6 +30,9 @@ pub enum LuksError {
     LuksHeaderError(&'static str),
     #[error("Not an LUKS superblock: {0}")]
     UnknownFilesystem(&'static str),
+    #[error("*Nix operation failed: {0}")]
+    NixError(#[from] rustix::io::Errno),
+
 }
 
 impl From<LuksError> for ContError {
@@ -40,6 +43,7 @@ impl From<LuksError> for ContError {
             LuksError::UTF8ErrorError(_) => ContError::InvalidHeader("Invalid utf8 to convert to string"),
             LuksError::LuksHeaderError(info) => ContError::InvalidHeader(info),
             LuksError::UnknownFilesystem(info) => ContError::UnknownContainer(info),
+            LuksError::NixError(e) => ContError::NixError(e),
         }
     }
 }
@@ -271,7 +275,9 @@ pub fn probe_luks_opal(
         return Err(LuksError::LuksHeaderError("Luks2 does not contain opal subsystem to be opal"));
     }
 
-    // TODO probe_is_opal_locked
+    if probe.is_opal_locked()? {
+        return Err(LuksError::IoError(ErrorKind::PermissionDenied.into()));
+    }
 
     probe.push_result(ProbeResult::Container(
                 ContainerResults { 
