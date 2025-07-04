@@ -16,5 +16,7 @@ pub enum ContError {
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
-    }
+    },
+    #[error("*Nix operation failed: {0}")]
+    NixError(#[from] rustix::io::Errno),
 }

@@ -20,8 +20,8 @@ use bitflags::bitflags;
 use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::FromBytes;
-use rustix::fs::{fstat, ioctl_blksszget, Dev, FileType, Mode};
-use crate::ioctl::ioctl_blkgetsize64;
+use rustix::{fs::{fstat, ioctl_blksszget, Dev, FileType, Mode}, io::Errno};
+use crate::ioctl::{ioctl_blkgetsize64, ioctl_ioc_opal_get_status, OpalStatusFlags};
 
 use crate::{
     containers::{
@@ -182,6 +182,22 @@ impl BlockidProbe {
         return Ok(probe);
     }
 
+    fn is_opal_locked(
+            &mut self
+        ) -> Result<bool, Errno>
+    {
+        if !self.flags.contains(ProbeFlags::OPAL_CHECKED) {
+            let status = ioctl_ioc_opal_get_status(self.file.as_fd())?;
+        
+            if status.flags.contains(OpalStatusFlags::OPAL_FL_LOCKED) {
+                self.flags.insert(ProbeFlags::OPAL_LOCKED);
+            }
+        
+            self.flags.insert(ProbeFlags::OPAL_CHECKED);
+        }
+    
+        Ok(self.flags.contains(ProbeFlags::OPAL_LOCKED))
+    }
 }
 
 #[derive(Debug)]
@@ -207,6 +223,8 @@ bitflags!{
     #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ProbeFlags: u64 {
         const TINY_DEV = 1 << 0;
+        const OPAL_CHECKED = 1 << 1;
+        const OPAL_LOCKED = 1 << 2;
     }
 
     #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
