@@ -1,6 +1,8 @@
 use std::fs::File;
+use std::os::fd::AsFd;
 
 use libblockid::filesystems::ntfs::probe_ntfs;
+use libblockid::ioctl::ioctl_blkgetsize64;
 use libblockid::*;
 
 use byteorder::ByteOrder;
@@ -12,17 +14,16 @@ use uuid::Uuid;
 
 fn test() -> Result<(), Box<dyn std::error::Error>> {
     let file = File::open("/dev/sdb3")?;
-    let mut probe = BlockidProbe::new(&file, 0, 0, ProbeFlags::empty(), ProbeFilter::empty())?;
 
-    let magic =         BlockidMagic {
-            magic: b"NTFS    ",
-            len: 8,
-            b_offset: 3,
-        };
+    let mut result = BlockidProbe::probe_from_filename("/dev/sdb3", ProbeFlags::empty(), ProbeFilter::empty(), 0)?;
 
-    let result = probe_ntfs(&mut probe, magic)?;
+    result.probe_values()?;
 
-    println!("{:X?}", probe);
+    println!("{:?}", result);
+
+    //let value = ioctl_blkgetsize64(file.as_fd())?;
+
+    //println!("{}", value);
 
     return Ok(());
 }
