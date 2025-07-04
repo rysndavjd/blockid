@@ -2,16 +2,19 @@
 name = "libblockid"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+description = "Block device identification library"
 repository = "https://github.com/rysndavjd/blockid"
+keywords = ["partition", "filesystem", "superblock"]
+categories = ["filesystem"]
+license = "MIT OR Apache-2.0"
 
 [features]
 default = []
 
 [dependencies]
 bitflags = { version = "2.9.1"}
-byteorder = "1.5.0"
 crc = "3.3.0"
+linux-raw-sys = { version = "0.10.0", features = ["ioctl"] }
 rustix = { version = "1.0.7", features = ["fs"] }
 thiserror = "2.0.12"
 uuid = "1.16.0"

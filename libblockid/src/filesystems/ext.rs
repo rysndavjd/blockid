@@ -422,7 +422,7 @@ pub fn probe_jbd(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
     
     let fi = es.feature_incompat();
 
@@ -461,7 +461,7 @@ pub fn probe_ext2(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
 
     ext_checksum(es)?;
 
@@ -510,7 +510,7 @@ pub fn probe_ext3(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
 
     ext_checksum(es)?;
 
@@ -559,7 +559,7 @@ pub fn probe_ext4(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
 
     ext_checksum(es)?;
 

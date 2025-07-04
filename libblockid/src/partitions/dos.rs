@@ -1,4 +1,4 @@
-use std::io::{self, Read, Seek, BufReader};
+use std::io::{self, Read, Seek};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
@@ -266,9 +266,9 @@ bitflags! {
     }
 }
 
-fn is_valid_dos<R: Read+Seek>(
+fn is_valid_dos(
+        probe: &mut BlockidProbe,
         pt: DosTable,
-        file: &mut R,
     ) -> Result<(), DosPTError>
 {
     for entry in pt.partition_entries {
@@ -282,11 +282,11 @@ fn is_valid_dos<R: Read+Seek>(
         }
     }
 
-    if probe_is_vfat(file).is_ok() && probe_is_exfat(file).is_ok() {
+    if probe_is_vfat(probe).is_ok() && probe_is_exfat(probe).is_ok() {
         return Err(DosPTError::UnknownPartition("probably FAT"));
     }
 
-    if probe_is_ntfs(file).is_ok() {
+    if probe_is_ntfs(probe).is_ok() {
         return Err(DosPTError::UnknownPartition("probably NTFS"));
     }
 
@@ -371,16 +371,14 @@ pub fn probe_dos_pt(
     ) -> Result<(), DosPTError> 
 {
     let mut partitions: Vec<PartitionResults> = Vec::new();
-
-    let mut buffered = BufReader::with_capacity(4096, &probe.file);
     
-    let dos_pt: DosTable = from_file(&mut buffered, 0)?;
+    let dos_pt: DosTable = from_file(&mut probe.file, probe.offset)?;
     
     if dos_pt.boot_code1[0..3] == BLKID_AIX_MAGIC_STRING {
         return Err(DosPTError::UnknownPartition("Disk has AIX magic number"));
     }
 
-    is_valid_dos(dos_pt, &mut buffered)?;
+    is_valid_dos(probe, dos_pt)?;
 
     let ssf = probe.sector_size / 512;
 
@@ -411,7 +409,7 @@ pub fn probe_dos_pt(
     partitions.extend(primary_partitions);
 
     if let Some(ex_entry) = dos_pt.get_extended_partition() {
-        let ex = parse_dos_extended(&mut buffered, ex_entry, ssf)?;
+        let ex = parse_dos_extended(&mut probe.file, ex_entry, ssf)?;
         partitions.extend(ex);
     };
     

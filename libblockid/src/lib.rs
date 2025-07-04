@@ -1,7 +1,8 @@
 #![allow(clippy::needless_return)]
-#![forbid(unsafe_code)]
+//#![forbid(unsafe_code)]
 
-mod checksum;
+pub(crate) mod checksum;
+pub(crate) mod ioctl;
 
 pub mod containers;
 pub mod partitions;
@@ -16,23 +17,31 @@ use std::{
 };
 
 use bitflags::bitflags;
-use rustix::fs::{ioctl_blksszget, Dev, FileType, Mode, fstat};
-use rustix::io::Errno;
 use thiserror::Error;
 use uuid::Uuid;
-use zerocopy::{transmute, FromBytes, Immutable, KnownLayout};
+use zerocopy::FromBytes;
+use rustix::fs::{fstat, ioctl_blksszget, Dev, FileType, Mode};
+use crate::ioctl::ioctl_blkgetsize64;
 
-use crate::{containers::ContError, partitions::{
-    dos::{MbrAttributes, DOS_PT_ID_INFO}, PtError}};
-
-use crate::filesystems::{
-    exfat::EXFAT_ID_INFO,
-    ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO},
-    vfat::VFAT_ID_INFO,
-    FsError,
-    volume_id::{VolumeId32, VolumeId64},
+use crate::{
+    containers::{
+        ContError, 
+        luks::{LUKS1_ID_INFO, LUKS2_ID_INFO}
+    }, 
+    partitions::{
+        PtError, 
+        dos::{MbrAttributes, DOS_PT_ID_INFO}
+    },
+    filesystems::{
+        FsError,
+        exfat::EXFAT_ID_INFO,
+        ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO},
+        linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO}, 
+        ntfs::NTFS_ID_INFO,
+        vfat::VFAT_ID_INFO,
+        volume_id::{VolumeId32, VolumeId64},
+    }, 
 };
-
 
 #[derive(Error, Debug)]
 pub enum BlockidError {
@@ -47,24 +56,29 @@ pub enum BlockidError {
     #[error("I/O operation failed: {0}")]
     IoError(#[from] io::Error),
     #[error("*Nix operation failed: {0}")]
-    NixError(#[from] Errno),
+    NixError(#[from] rustix::io::Errno),
 }
 
-pub static PROBES: &[BlockidIdinfo] = &[
-    DOS_PT_ID_INFO,
+static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS1, LUKS1_ID_INFO),
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS2, LUKS2_ID_INFO),
 
-    VFAT_ID_INFO,
-    EXFAT_ID_INFO,
-    EXT2_ID_INFO,
-    EXT3_ID_INFO,
-    EXT4_ID_INFO,
+    (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_DOS, DOS_PT_ID_INFO),
+
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXFAT, EXFAT_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT2, EXT2_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT3, EXT3_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT4, EXT4_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V0, LINUX_SWAP_V0_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V1, LINUX_SWAP_V1_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_NTFS, NTFS_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_VFAT, VFAT_ID_INFO),
 ];
 
 impl BlockidProbe {
     pub fn new(
             file: &File,
             offset: u64,
-            size: u64,
             flags: ProbeFlags,
             filter: ProbeFilter,
         ) -> Result<BlockidProbe, BlockidError>
@@ -76,11 +90,18 @@ impl BlockidProbe {
         } else {
             512
         };
+        
+        let size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
+            ioctl_blkgetsize64(file.as_fd())?
+        } else {
+            stat.st_size as u64
+        };
 
+        
         Ok( Self { 
             file: file.try_clone()?, 
             offset: offset, 
-            size, 
+            size: size, 
             io_size: stat.st_blksize, 
             devno: stat.st_rdev, 
             disk_devno: stat.st_dev, 
@@ -98,8 +119,8 @@ impl BlockidProbe {
     {
         if self.filter.is_empty() {
             for info in PROBES {
-                let result = match probe_get_magic(&mut self.file, info) {
-                    Ok(magic) => (info.probe_fn)(self, magic),
+                let result = match probe_get_magic(&mut self.file, &info.2) {
+                    Ok(magic) => (info.2.probe_fn)(self, magic),
                     Err(_) => continue,
                 };
                 
@@ -110,15 +131,29 @@ impl BlockidProbe {
             return Err(BlockidError::ProbeError("All probe functions exhasted"));
         }
         
-        let mut filtered_probe: BlockidIdinfo;
-
-        if !self.filter.contains(ProbeFilter::SKIP_CONT) {
-
-        } else {
+        let filtered_probe: Vec<BlockidIdinfo> = PROBES
+            .iter()
+            .filter_map(|&(catagory, item, id_info)| {
+                if !self.filter.contains(catagory) && !self.filter.contains(item) {
+                    return Some(id_info);
+                } else {
+                    return None;
+                }
+            })
+            .collect();
+        
+        for info in filtered_probe {
+            let result = match probe_get_magic(&mut self.file, &info) {
+                Ok(magic) => (info.probe_fn)(self, magic),
+                Err(_) => continue,
+            };
             
+            if result.is_ok() {
+                return Ok(());
+            }
         }
 
-        Ok(())
+        return Err(BlockidError::ProbeError("All probe filtered functions exhasted"));
     }
 
     pub fn push_result(
@@ -130,16 +165,17 @@ impl BlockidProbe {
             .get_or_insert_with(Vec::new)
             .push(result)
     }
-
-    fn probe_from_filename(
-            filename: &Path,
+    
+    pub fn probe_from_filename<P: AsRef<Path>>(
+            filename: P,
+            flags: ProbeFlags,
+            filter: ProbeFilter,
             offset: u64,
-            size: u64,
         ) -> Result<BlockidProbe, BlockidError>
     {
         let file = File::open(filename)?;
 
-        let probe = BlockidProbe::new(&file, offset, size, ProbeFlags::empty(), ProbeFilter::empty())?;
+        let probe = BlockidProbe::new(&file, offset, flags, filter)?;
 
         return Ok(probe);
     }
@@ -165,18 +201,27 @@ pub struct BlockidProbe {
 }
 
 bitflags!{
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
-    pub struct ProbeFlags: u32 {
-        const TINY_DEV = 0;
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct ProbeFlags: u64 {
+        const TINY_DEV = 1 << 0;
     }
 
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
-    pub struct ProbeFilter: u32 {
-        const SKIP_CONT = 0;
-        const SKIP_PT = 1;
-        const SKIP_FS = 2;
-        const SKIP_VFAT = 3;
-        const SKIP_EXT = 4; 
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct ProbeFilter: u64 {
+        const SKIP_CONT = 1 << 0;
+        const SKIP_PT = 1 << 1;
+        const SKIP_FS = 1 << 2;
+        const SKIP_LUKS1 = 1 << 3;
+        const SKIP_LUKS2 = 1 << 4;
+        const SKIP_DOS = 1 << 5;
+        const SKIP_EXFAT = 1 << 6;
+        const SKIP_EXT2 = 1 << 7;
+        const SKIP_EXT3 = 1 << 8;
+        const SKIP_EXT4 = 1 << 9;
+        const SKIP_LINUX_SWAP_V0 = 1 << 10;
+        const SKIP_LINUX_SWAP_V1 = 1 << 11;
+        const SKIP_NTFS = 1 << 12;
+        const SKIP_VFAT = 1 << 13;
     }
 }
 
@@ -264,14 +309,14 @@ pub struct FilesystemResults {
     pub endianness: Option<Endianness>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ContType {
     MD,
     LVM,
     DM,
     LUKS1,
     LUKS2,
-    Other(String)
+    Other(&'static str)
 }
 
 impl fmt::Display for ContType {
@@ -390,7 +435,7 @@ pub enum BlockidVersion {
     DevT(Dev),
 }
 
-pub type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<(), BlockidError>;
+type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<(), BlockidError>;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BlockidMagic {
@@ -399,7 +444,22 @@ pub struct BlockidMagic {
     pub b_offset: u64,
 }
 
-pub fn read_exact_at<const S: usize, R: Read+Seek>(
+fn from_file<T: FromBytes, R: Read+Seek>(
+        file: &mut R,
+        offset: u64,
+    ) -> Result<T, io::Error> 
+{
+    let mut buffer = vec![0u8; std::mem::size_of::<T>()];
+    file.seek(SeekFrom::Start(offset))?;
+    file.read_exact(&mut buffer)?;
+
+    let data = T::read_from_bytes(&buffer)
+        .map_err(|_| ErrorKind::UnexpectedEof)?;
+    
+    return Ok(data);
+}
+
+fn read_exact_at<const S: usize, R: Read+Seek>(
         file: &mut R,
         offset: u64,
     ) -> Result<[u8; S], io::Error> 
@@ -411,7 +471,7 @@ pub fn read_exact_at<const S: usize, R: Read+Seek>(
     return Ok(buffer);
 }
 
-pub fn read_vec_at<R: Read+Seek>(
+fn read_vec_at<R: Read+Seek>(
         file: &mut R,
         offset: u64,
         buf_size: usize
@@ -426,7 +486,7 @@ pub fn read_vec_at<R: Read+Seek>(
     return Ok(buffer);
 }
 
-pub fn read_sector_at<R: Read+Seek>(
+fn read_sector_at<R: Read+Seek>(
         file: &mut R,
         sector: u64,
     ) -> Result<[u8; 512], io::Error> 
@@ -434,14 +494,7 @@ pub fn read_sector_at<R: Read+Seek>(
     return read_exact_at::<512, R>(file, sector << 9);
 }
 
-pub fn get_sectorsize(
-        probe: &mut BlockidProbe
-    ) -> Result<u32, io::Error> 
-{
-    return Ok(ioctl_blksszget(probe.file.as_fd())?);
-}
-
-pub fn probe_get_magic<R: Read+Seek>(
+fn probe_get_magic<R: Read+Seek>(
         file: &mut R, 
         id_info: &BlockidIdinfo
     ) -> Result<BlockidMagic, io::Error>
@@ -463,17 +516,3 @@ pub fn probe_get_magic<R: Read+Seek>(
     return Err(ErrorKind::NotFound.into());
 }
 
-pub fn from_file<T: FromBytes, R: Read+Seek>(
-        file: &mut R,
-        offset: u64,
-    ) -> Result<T, io::Error> 
-{
-    let mut buffer = vec![0u8; std::mem::size_of::<T>()];
-    file.seek(SeekFrom::Start(offset))?;
-    file.read_exact(&mut buffer)?;
-
-    let data = T::read_from_bytes(&buffer)
-        .map_err(|_| ErrorKind::UnexpectedEof)?;
-    
-    return Ok(data);
-}

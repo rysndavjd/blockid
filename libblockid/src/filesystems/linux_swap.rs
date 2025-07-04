@@ -34,7 +34,7 @@ impl From<SwapError> for FsError {
 //const PAGESIZE_MAX: u32 = 0xfff6;
 const TOI_MAGIC_STRING: [u8; 8] = *b"\xed\xc3\x02\xe9\x98\x56\xe5\x0c";
 
-pub const SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+pub const LINUX_SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("swap"),
     usage: Some(UsageType::Other("swap")),
     probe_fn: |probe, magic| {
@@ -72,7 +72,7 @@ pub const SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     ]
 };
 
-pub const SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("swap"),
     usage: Some(UsageType::Other("swap")),
     probe_fn: |probe, magic| {
@@ -267,7 +267,7 @@ pub fn probe_swap_v0(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check = read_exact_at::<8, File>(&mut probe.file, 1024)?;
+    let check = read_exact_at::<8, File>(&mut probe.file, probe.offset + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
@@ -311,14 +311,14 @@ pub fn probe_swap_v1(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check = read_exact_at::<8, File>(&mut probe.file, 1024)?;
+    let check = read_exact_at::<8, File>(&mut probe.file, probe.offset + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
     }
 
     if magic.magic == b"SWAPSPACE2" {
-        let header: SwapHeaderV1 = from_file(&mut probe.file, 1024)?;
+        let header: SwapHeaderV1 = from_file(&mut probe.file, probe.offset + 1024)?;
         
         let (endian, pagesize, fs_size, fs_last_block, 
             name) = swap_get_info(magic, "Swap V1", header)?;
@@ -363,7 +363,7 @@ pub fn probe_swsuspend(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let header: SwapHeaderV1 = from_file(&mut probe.file, 1024)?;
+    let header: SwapHeaderV1 = from_file(&mut probe.file, probe.offset + 1024)?;
 
     let (endian, pagesize, fs_size, fs_last_block,
          name) = if magic.magic == b"S1SUSPEND" {
