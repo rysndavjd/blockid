@@ -2,7 +2,7 @@
 //#![forbid(unsafe_code)]
 
 pub(crate) mod checksum;
-pub mod ioctl;
+pub(crate) mod ioctl;
 
 pub mod containers;
 pub mod partitions;
