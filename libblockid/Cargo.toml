@@ -18,6 +18,5 @@ bitflags = { version = "2.9.1", default-features = false }
 crc = "3.3.0"
 zerocopy = { version = "0.8.26", default-features = false, features = ["derive", "alloc"] }
 uuid = { version = "1.16.0", features = ["zerocopy"] }
-thiserror = { version = "2.0.12" }
 linux-raw-sys = { version = "0.10.0", default-features = false, features = ["ioctl"] }
 rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc"] }

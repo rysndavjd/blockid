@@ -1,10 +1,10 @@
+use core::fmt;
 use std::io::{self, Read, Seek};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U32, byteorder::LittleEndian,
     transmute, Immutable};
-use thiserror::Error;
 
 use crate::{
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,
@@ -19,25 +19,41 @@ use crate::{
 Info from https://en.wikipedia.org/wiki/Master_boot_record
 */
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum DosPTError {
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("Not an Dos table superblock: {0}")]
-    UnknownPartition(&'static str),
-    #[error("Dos table header error: {0}")]
+    IoError(std::io::Error),
+    UnknownPartitionTable(&'static str),
     DosPTHeaderError(&'static str),
+}
+
+impl fmt::Display for DosPTError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(feature = "std")]
+            DosPTError::IoError(e) => write!(f, "std::I/O operation failed: {}", e),
+            DosPTError::UnknownPartitionTable(e) => write!(f, "Not an Dos table superblock: {}", e),
+            DosPTError::DosPTHeaderError(e) => write!(f, "Dos table header error: {}", e),
+        }
+    }
 }
 
 impl From<DosPTError> for PtError {
     fn from(err: DosPTError) -> Self {
         match err {
             DosPTError::IoError(e) => PtError::IoError(e),
+            DosPTError::UnknownPartitionTable(pt) => PtError::UnknownPartition(pt),
             DosPTError::DosPTHeaderError(pt) => PtError::InvalidHeader(pt),
-            DosPTError::UnknownPartition(pt) => PtError::UnknownPartition(pt),
         }
     }
 }
+
+impl From<std::io::Error> for DosPTError {
+    fn from(err: std::io::Error) -> Self {
+        DosPTError::IoError(err)
+    }
+}
+
+
 
 pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("dos"),
@@ -278,16 +294,16 @@ fn is_valid_dos(
         }
 
         if entry.sys_ind == MbrPartitionType::MBR_GPT_PARTITION {
-            return Err(DosPTError::UnknownPartition("probably GPT"));
+            return Err(DosPTError::UnknownPartitionTable("probably GPT"));
         }
     }
 
     if probe_is_vfat(probe).is_ok() && probe_is_exfat(probe).is_ok() {
-        return Err(DosPTError::UnknownPartition("probably FAT"));
+        return Err(DosPTError::UnknownPartitionTable("probably FAT"));
     }
 
     if probe_is_ntfs(probe).is_ok() {
-        return Err(DosPTError::UnknownPartition("probably NTFS"));
+        return Err(DosPTError::UnknownPartitionTable("probably NTFS"));
     }
 
     // TODO - is_lvm(pr) && is_empty_mbr(data)
@@ -375,7 +391,7 @@ pub fn probe_dos_pt(
     let dos_pt: DosTable = from_file(&mut probe.file, probe.offset)?;
     
     if dos_pt.boot_code1[0..3] == BLKID_AIX_MAGIC_STRING {
-        return Err(DosPTError::UnknownPartition("Disk has AIX magic number"));
+        return Err(DosPTError::UnknownPartitionTable("Disk has AIX magic number"));
     }
 
     is_valid_dos(probe, dos_pt)?;

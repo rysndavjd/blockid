@@ -23,7 +23,6 @@ use std::{
 };
 
 use bitflags::bitflags;
-use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::FromBytes;
 use rustix::{fs::{fstat, ioctl_blksszget, Dev, FileType, Mode}, io::Errno};
@@ -149,7 +148,7 @@ impl BlockidProbe {
             buffer: buffer,
             offset: offset, 
             size: size, 
-            io_size: stat.st_blksize, 
+            io_size: i64::from(stat.st_blksize), 
             devno: stat.st_rdev, 
             disk_devno: stat.st_dev, 
             sector_size, 
