@@ -1,8 +1,6 @@
-use std::os::fd::AsFd;
-
 use bitflags::bitflags;
 use linux_raw_sys::ioctl::BLKGETSIZE64;
-use rustix::{io, ioctl::{ioctl, Getter}};
+use rustix::{io, ioctl::{ioctl, Getter}, fd::AsFd};
 
 const IOC_OPAL_GET_STATUS: u32 = 2148036844;
 

@@ -2,14 +2,20 @@
 //#![forbid(unsafe_code)]
 
 pub(crate) mod checksum;
+#[cfg(feature = "std")]
 pub(crate) mod ioctl;
+//#[cfg(feature = "no_std")]
+mod nostd_io;
 
 pub mod containers;
 pub mod partitions;
 pub mod filesystems;
 
+use core::fmt;
+use core::fmt::Debug;
+
+#[cfg(feature = "std")]
 use std::{
-    fmt,
     fs::File,
     io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom},
     os::fd::AsFd,
@@ -43,6 +49,7 @@ use crate::{
     }, 
 };
 
+/* 
 #[derive(Error, Debug)]
 pub enum BlockidError {
     #[error("Probe failed: {0}")]
@@ -55,8 +62,46 @@ pub enum BlockidError {
     ContError(#[from] ContError),
     #[error("I/O operation failed: {0}")]
     IoError(#[from] io::Error),
-    #[error("*Nix operation failed: {0}")]
+    #[error("*Nix operation failed: {}", 0)]
     NixError(#[from] rustix::io::Errno),
+}
+*/
+
+#[derive(Debug)]
+pub enum BlockidError {
+    ProbeError(&'static str),
+    FsError(FsError),
+    PtError(PtError),
+    ContError(ContError),
+    #[cfg(feature = "std")]
+    IoError(io::Error),
+    NixError(rustix::io::Errno),
+}
+
+impl fmt::Display for BlockidError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BlockidError::ProbeError(e) => write!(f, "Probe failed: {}", e),
+            BlockidError::FsError(e) => write!(f, "Filesystem probe failed: {}", e),
+            BlockidError::PtError(e) => write!(f, "Partition Table probe failed: {}", e),
+            BlockidError::ContError(e) => write!(f, "Container probe failed: {}", e),
+            #[cfg(feature = "std")]
+            BlockidError::IoError(e) => write!(f, "std::I/O operation failed: {}", e),
+            BlockidError::NixError(e) => write!(f, "*Nix operation failed: {}", e),
+        }
+    }
+}
+
+impl From<std::io::Error> for BlockidError {
+    fn from(err: std::io::Error) -> Self {
+        BlockidError::IoError(err)
+    }
+}
+
+impl From<rustix::io::Errno> for BlockidError {
+    fn from(err: rustix::io::Errno) -> Self {
+        BlockidError::NixError(err)
+    }
 }
 
 static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
