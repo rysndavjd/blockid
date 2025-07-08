@@ -3,7 +3,6 @@ use std::io::{self, Read, Seek};
 use bitflags::bitflags;
 use zerocopy::{byteorder::LittleEndian, byteorder::U32, byteorder::U16, 
     transmute, FromBytes, Immutable, IntoBytes, Unaligned};
-use thiserror::Error;
 
 use crate::{
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,

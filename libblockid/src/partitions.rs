@@ -7,9 +7,10 @@ pub mod aix;
 //pub mod unixware;
 //pub mod minix;
 
+use core::fmt;
+
+use crate::BlockidError;
 use crate::{checksum::CsumAlgorium};
-use thiserror::Error;
-use std::io;
 
 /*
   PTTYPE:               partition table type (dos, gpt, etc.).
@@ -25,17 +26,33 @@ use std::io;
   PART_ENTRY_DISK:      whole-disk maj:min
 */
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum PtError {
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("Invalid Header: {0}")]
+    IoError(std::io::Error),
     InvalidHeader(&'static str),
-    #[error("Unknown Partition: {0}")]
     UnknownPartition(&'static str),
-    #[error("Checksum failed, expected: \"{expected:?}\" and got: \"{got:?})\"")]
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
+    }
+}
+
+impl fmt::Display for PtError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(feature = "std")]
+            PtError::IoError(e) => write!(f, "std::I/O operation failed: {}", e),
+            PtError::InvalidHeader(e) => write!(f, "Invalid Header: {}", e),
+            PtError::UnknownPartition(e) => write!(f, "Unknown Partition: {}", e),
+            PtError::ChecksumError{expected, got} => {
+                write!(f, "Partition Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")
+            },
+        }
+    }
+}
+
+impl From<PtError> for BlockidError {
+    fn from(err: PtError) -> Self {
+        BlockidError::PtError(err)
     }
 }
