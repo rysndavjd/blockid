@@ -1,10 +1,16 @@
-use std::{io::{self, Read, Seek}, string};
+use core::fmt::{self, Debug};
+use alloc::{vec::Vec, string::{String, FromUtf16Error}};
+
+#[cfg(feature = "std")]
+use std::{io::{Error as IoError, Read, Seek}};
+
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::{NoStdIoError as IoError, Read, Seek};
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
     byteorder::LittleEndian, Immutable, transmute};
 use rustix::fs::makedev;
-use thiserror::Error;
 
 use crate::{
     probe_get_magic, from_file, read_vec_at, read_exact_at,
@@ -13,20 +19,27 @@ use crate::{
     filesystems::{volume_id::VolumeId32, FsError, vfat::VFAT_ID_INFO}
 };
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum ExFatError {
-    #[error("I/O operation failed")]
-    IoError(#[from] io::Error),
-    #[error("Not an Exfat superblock: {0}")]
+    IoError(IoError),
     UnknownFilesystem(&'static str),
-    #[error("Exfat header error: {0}")]
     ExfatHeaderError(&'static str),
-    #[error("Unable to convert exfat utf16 to utf8")]
-    UtfError(#[from] string::FromUtf16Error),
-    #[error("Exfat Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
+    UtfError(FromUtf16Error),
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
+    }
+}
+
+impl fmt::Display for ExFatError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExFatError::IoError(e) => write!(f, "I/O operation failed: {}", e),
+            ExFatError::ExfatHeaderError(e) => write!(f, "Not an Exfat superblock: {}", e),
+            ExFatError::UnknownFilesystem(e) => write!(f, "Exfat header error: {}", e),
+            ExFatError::UtfError(e) => write!(f, "Unable to convert exfat utf16 to utf8: {}", e),
+            ExFatError::ChecksumError{expected, got} => write!(f, "Exfat Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\""),
+        }
     }
 }
 
@@ -39,6 +52,18 @@ impl From<ExFatError> for FsError {
             ExFatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
             ExFatError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
         }
+    }
+}
+
+impl From<IoError> for ExFatError {
+    fn from(err: IoError) -> Self {
+        ExFatError::IoError(err)
+    }
+}
+
+impl From<FromUtf16Error> for ExFatError {
+    fn from(err: FromUtf16Error) -> Self {
+        ExFatError::UtfError(err)
     }
 }
 
@@ -305,13 +330,13 @@ pub fn probe_is_exfat(
         probe: &mut BlockidProbe
     ) -> Result<(), ExFatError>
 {
-    let sb: ExFatSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
+    let sb: ExFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
     
-    if probe_get_magic(&mut probe.buffer, &VFAT_ID_INFO).is_ok() {
+    if probe_get_magic(&mut probe.file, &VFAT_ID_INFO).is_ok() {
         return Err(ExFatError::UnknownFilesystem("Block is detected with a VFAT magic"));
     }
 
-    valid_exfat(&mut probe.buffer, sb)?;
+    valid_exfat(&mut probe.file, sb)?;
 
     return Ok(());
 }
@@ -367,11 +392,11 @@ pub fn probe_exfat(
         _mag: BlockidMagic,
     ) -> Result<(), ExFatError> 
 {
-    let sb: ExFatSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
+    let sb: ExFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
 
-    valid_exfat(&mut probe.buffer, sb)?;
+    valid_exfat(&mut probe.file, sb)?;
 
-    let label= find_label(&mut probe.buffer, sb)?; 
+    let label= find_label(&mut probe.file, sb)?; 
 
     probe.push_result(ProbeResult::Filesystem(
                 FilesystemResults { 

@@ -8,6 +8,11 @@ pub mod volume_id;
 use core::fmt;
 use core::fmt::Debug;
 
+#[cfg(feature = "std")]
+use std::io::Error as IoError;
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::NoStdIoError as IoError;
+
 use crate::BlockidError;
 use crate::checksum::CsumAlgorium;
 
@@ -34,8 +39,7 @@ BLOCK_SIZE:     block size of phyical disk
 
 #[derive(Debug)]
 pub enum FsError {
-    #[cfg(feature = "std")]
-    IoError(std::io::Error),
+    IoError(IoError),
     InvalidHeader(&'static str),
     UnknownFilesystem(&'static str),
     ChecksumError {
@@ -47,8 +51,7 @@ pub enum FsError {
 impl fmt::Display for FsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(feature = "std")]
-            FsError::IoError(e) => write!(f, "std::I/O operation failed: {}", e),
+            FsError::IoError(e) => write!(f, "I/O operation failed: {}", e),
             FsError::InvalidHeader(e) => write!(f, "Invalid Header: {}", e),
             FsError::UnknownFilesystem(e) => write!(f, "Unknown Filesystem: {}", e),
             FsError::ChecksumError{expected, got} => {

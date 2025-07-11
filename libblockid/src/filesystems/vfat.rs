@@ -1,10 +1,16 @@
-use std::io::{self, Read, Seek, SeekFrom};
+use core::fmt::{self, Debug};
+use alloc::string::{String, ToString};
+
+#[cfg(feature = "std")]
+use std::io::{Error as IoError, Seek, Read, SeekFrom};
+
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, SeekFrom};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U32, byteorder::U16, byteorder::LittleEndian,
     transmute, Immutable};
-use thiserror::Error;
 
 use crate::{
     probe_get_magic, from_file, read_vec_at,
@@ -13,14 +19,21 @@ use crate::{
     filesystems::{volume_id::VolumeId32, FsError, is_power_2}
 };
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum FatError {
-    #[error("I/O operation failed, {0}")]
-    IoError(#[from] io::Error),
-    #[error("Fat Header Error: {0}")]
+    IoError(IoError),
     FatHeaderError(&'static str),
-    #[error("Not an Fat superblock: {0}")]
     UnknownFilesystem(&'static str),
+}
+
+impl fmt::Display for FatError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FatError::IoError(e) => write!(f, "I/O operation failed: {}", e),
+            FatError::FatHeaderError(e) => write!(f, "Fat Header Error: {}", e),
+            FatError::UnknownFilesystem(e) => write!(f, "Not an Fat superblock: {}", e),
+        }
+    }
 }
 
 impl From<FatError> for FsError {
@@ -30,6 +43,12 @@ impl From<FatError> for FsError {
             FatError::FatHeaderError(info) => FsError::InvalidHeader(info),
             FatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
         }
+    }
+}
+
+impl From<IoError> for FatError {
+    fn from(err: IoError) -> Self {
+        FatError::IoError(err)
     }
 }
 
@@ -484,17 +503,17 @@ pub fn probe_vfat(
         mag: BlockidMagic,
     ) -> Result<(), FatError> 
 {
-    let ms: MsDosSuperBlock = from_file(&mut probe.buffer, 0)?;
-    let vs: VFatSuperBlock = from_file(&mut probe.buffer, 0)?;
+    let ms: MsDosSuperBlock = from_file(&mut probe.file, 0)?;
+    let vs: VFatSuperBlock = from_file(&mut probe.file, 0)?;
 
     let sec_type = valid_fat(ms, vs, mag)?;
 
     let fat_size = get_fat_size(ms, vs);
 
     let (label, serno) = if ms.ms_fat_length != 0 {
-        probe_fat16(&mut probe.buffer, ms, vs, fat_size)?
+        probe_fat16(&mut probe.file, ms, vs, fat_size)?
     } else if vs.vs_fat32_length != 0 {
-        probe_fat32(&mut probe.buffer, ms, vs, fat_size)?
+        probe_fat32(&mut probe.file, ms, vs, fat_size)?
     } else {
         return Err(FatError::UnknownFilesystem("Block is not fat filesystem"));
     };

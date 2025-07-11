@@ -1,7 +1,13 @@
-use std::{fs::File, io};
+use core::fmt::{self, Debug};
+use alloc::string::{String, ToString};
+
+#[cfg(feature = "std")]
+use std::io::{Error as IoError};
+
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::{NoStdIoError as IoError};
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, Immutable};
-use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
@@ -10,14 +16,21 @@ use crate::{
     FilesystemResults, FsType, ProbeResult, UsageType
 };
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum SwapError {
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("Swap header error: {0}")]
+    IoError(IoError),
     SwapHeaderError(&'static str),
-    #[error("Not an Swap superblock: {0}")]
     UnknownFilesystem(&'static str),
+}
+
+impl fmt::Display for SwapError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SwapError::IoError(e) => write!(f, "I/O operation failed: {}", e),
+            SwapError::SwapHeaderError(e) => write!(f, "Swap header error: {}", e),
+            SwapError::UnknownFilesystem(e) => write!(f, "Not an Swap superblock: {}", e),
+        }
+    }
 }
 
 impl From<SwapError> for FsError {
@@ -27,6 +40,12 @@ impl From<SwapError> for FsError {
             SwapError::SwapHeaderError(e) => FsError::InvalidHeader(e),
             SwapError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
         }
+    }
+}
+
+impl From<IoError> for SwapError {
+    fn from(err: IoError) -> Self {
+        SwapError::IoError(err)
     }
 }
 
@@ -267,7 +286,7 @@ pub fn probe_swap_v0(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check: [u8; 8] = read_exact_at(&mut probe.buffer, probe.offset + 1024)?;
+    let check: [u8; 8] = read_exact_at(&mut probe.file, probe.offset + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
@@ -311,7 +330,7 @@ pub fn probe_swap_v1(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check = read_exact_at::<8, File>(&mut probe.file, probe.offset + 1024)?;
+    let check: [u8; 8] = read_exact_at(&mut probe.file, probe.offset + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));

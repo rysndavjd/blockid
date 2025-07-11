@@ -1,4 +1,11 @@
-use std::io::{self, Read, Seek};
+use core::fmt::{self, Debug};
+use alloc::{vec::Vec};
+
+#[cfg(feature = "std")]
+use std::io::{Error as IoError, Seek, Read};
+
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::{NoStdIoError as IoError, Read, Seek};
 
 use bitflags::bitflags;
 use zerocopy::{byteorder::LittleEndian, byteorder::U32, byteorder::U16, 
@@ -11,14 +18,21 @@ use crate::{
     volume_id::VolumeId32}, partitions::PtError,
 };
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum BsdError {
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("BSD disklabel header error: {0}")]
+    IoError(IoError),
     BsdHeaderError(&'static str),
-    #[error("Not an BSD disklabel: {0}")]
     UnknownFilesystem(&'static str),
+}
+
+impl fmt::Display for BsdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BsdError::IoError(e) => write!(f, "I/O operation failed: {}", e),
+            BsdError::BsdHeaderError(e) => write!(f, "BSD disklabel header error: {}", e),
+            BsdError::UnknownFilesystem(e) => write!(f, "Not an BSD disklabel: {}", e),
+        }
+    }
 }
 
 impl From<BsdError> for PtError {
@@ -28,6 +42,12 @@ impl From<BsdError> for PtError {
             BsdError::BsdHeaderError(e) => PtError::InvalidHeader(e),
             BsdError::UnknownFilesystem(e) => PtError::UnknownPartition(e),
         }
+    }
+}
+
+impl From<IoError> for BsdError {
+    fn from(err: IoError) -> Self {
+        BsdError::IoError(err)
     }
 }
 
@@ -178,9 +198,9 @@ fn bsd_checksum(
 pub fn probe_bsd_pt(
         probe: &mut BlockidProbe,
         mag: BlockidMagic,
-    ) -> Result<(), PtError> 
+    ) -> Result<(), BsdError> 
 {
-    let data = read_sector_at(&mut probe.buffer, mag.b_offset >> 9)?;
+    let data = read_sector_at(&mut probe.file, mag.b_offset >> 9)?;
 
     todo!()
 }

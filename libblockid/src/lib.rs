@@ -1,18 +1,21 @@
 #![allow(clippy::needless_return)]
-//#![forbid(unsafe_code)]
+
+#![cfg_attr(not(feature = "std"), no_std)]
 
 pub(crate) mod checksum;
-#[cfg(feature = "std")]
 pub(crate) mod ioctl;
-//#[cfg(feature = "no_std")]
-mod nostd_io;
+#[cfg(not(feature = "std"))]
+pub mod nostd_io;
 
 pub mod containers;
 pub mod partitions;
 pub mod filesystems;
 
+extern crate alloc;
+
 use core::fmt;
 use core::fmt::Debug;
+use alloc::{vec, vec::Vec, string::String};
 
 #[cfg(feature = "std")]
 use std::{
@@ -20,12 +23,18 @@ use std::{
     io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom},
     os::fd::AsFd,
     path::Path,
+    io::Error as IoError,
 };
+
+#[cfg(not(feature = "std"))]
+use nostd_io::{File, NoStdIoError as IoError, SeekFrom, Seek, Read, ErrorKind};
+#[cfg(not(feature = "std"))]
+use rustix::{path::Arg, fd::AsFd};
 
 use bitflags::bitflags;
 use uuid::Uuid;
 use zerocopy::FromBytes;
-use rustix::{fs::{fstat, ioctl_blksszget, Dev, FileType, Mode}, io::Errno};
+use rustix::fs::{fstat, ioctl_blksszget, Dev, FileType, Mode};
 use crate::ioctl::{ioctl_blkgetsize64, ioctl_ioc_opal_get_status, OpalStatusFlags};
 
 use crate::{
@@ -72,8 +81,7 @@ pub enum BlockidError {
     FsError(FsError),
     PtError(PtError),
     ContError(ContError),
-    #[cfg(feature = "std")]
-    IoError(io::Error),
+    IoError(IoError),
     NixError(rustix::io::Errno),
 }
 
@@ -84,15 +92,17 @@ impl fmt::Display for BlockidError {
             BlockidError::FsError(e) => write!(f, "Filesystem probe failed: {}", e),
             BlockidError::PtError(e) => write!(f, "Partition Table probe failed: {}", e),
             BlockidError::ContError(e) => write!(f, "Container probe failed: {}", e),
-            #[cfg(feature = "std")]
-            BlockidError::IoError(e) => write!(f, "std::I/O operation failed: {}", e),
+            BlockidError::IoError(e) => write!(f, "I/O operation failed: {}", e),
             BlockidError::NixError(e) => write!(f, "*Nix operation failed: {}", e),
         }
     }
 }
 
-impl From<std::io::Error> for BlockidError {
-    fn from(err: std::io::Error) -> Self {
+#[cfg(feature = "std")]
+impl std::error::Error for BlockidError {}
+
+impl From<IoError> for BlockidError {
+    fn from(err: IoError) -> Self {
         BlockidError::IoError(err)
     }
 }
@@ -141,11 +151,11 @@ impl BlockidProbe {
             stat.st_size as u64
         };
 
-        let buffer = BufReader::with_capacity(stat.st_blksize as usize, file.try_clone()?);
+        //let buffer = BufReader::with_capacity(stat.st_blksize as usize, file.try_clone()?);
 
         Ok( Self { 
             file: file,
-            buffer: buffer,
+            //buffer: buffer,
             offset: offset, 
             size: size, 
             io_size: i64::from(stat.st_blksize), 
@@ -167,11 +177,16 @@ impl BlockidProbe {
             for info in PROBES {
                 let result = match probe_get_magic(&mut self.file, &info.2) {
                     Ok(magic) => (info.2.probe_fn)(self, magic),
-                    Err(_) => continue,
+                    Err(e) => {
+                        eprintln!("Wrong Magic\nInfo: \"{:?}\",\nError: {:?}", info.2, e);
+                        continue
+                    },
                 };
 
                 if result.is_ok() {
                     return Ok(());
+                } else {
+                    eprintln!("Wrong FS: {:?}", result.unwrap_err());
                 }
             }
             return Err(BlockidError::ProbeError("All probe functions exhasted"));
@@ -211,8 +226,24 @@ impl BlockidProbe {
             .get_or_insert_with(Vec::new)
             .push(result)
     }
-    
+
+    #[cfg(feature = "std")]
     pub fn probe_from_filename<P: AsRef<Path>>(
+            filename: P,
+            flags: ProbeFlags,
+            filter: ProbeFilter,
+            offset: u64,
+        ) -> Result<BlockidProbe, BlockidError>
+    {
+        let file = File::open(filename)?;
+
+        let probe = BlockidProbe::new(file, offset, flags, filter)?;
+
+        return Ok(probe);
+    }
+    
+    #[cfg(not(feature = "std"))]
+    pub fn probe_from_filename<P: Arg>(
             filename: P,
             flags: ProbeFlags,
             filter: ProbeFilter,
@@ -228,7 +259,7 @@ impl BlockidProbe {
 
     fn is_opal_locked(
             &mut self
-        ) -> Result<bool, Errno>
+        ) -> Result<bool, rustix::io::Errno>
     {
         if !self.flags.contains(ProbeFlags::OPAL_CHECKED) {
             let status = ioctl_ioc_opal_get_status(self.file.as_fd())?;
@@ -247,7 +278,7 @@ impl BlockidProbe {
 #[derive(Debug)]
 pub struct BlockidProbe {
     pub file: File,
-    pub buffer: BufReader<File>,
+    //pub buffer: BufReader<File>, // Need to implement later when i get bufreader for my own file
     pub offset: u64,
     pub size: u64,
     pub io_size: i64, 
@@ -475,7 +506,7 @@ impl fmt::Display for BlockidUUID {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Copy, Clone, Hash)]
 pub struct BlockidIdinfo {
     pub name: Option<&'static str>,
     pub usage: Option<UsageType>,
@@ -512,9 +543,9 @@ pub struct BlockidMagic {
 fn from_file<T: FromBytes, R: Read+Seek>(
         file: &mut R,
         offset: u64,
-    ) -> Result<T, io::Error> 
+    ) -> Result<T, IoError> 
 {
-    let mut buffer = vec![0u8; std::mem::size_of::<T>()];
+    let mut buffer = vec![0u8; core::mem::size_of::<T>()];
     file.seek(SeekFrom::Start(offset))?;
     file.read_exact(&mut buffer)?;
 
@@ -527,7 +558,7 @@ fn from_file<T: FromBytes, R: Read+Seek>(
 fn read_exact_at<const S: usize, R: Read+Seek>(
         file: &mut R,
         offset: u64,
-    ) -> Result<[u8; S], io::Error> 
+    ) -> Result<[u8; S], IoError>
 {
     let mut buffer = [0u8; S];
     file.seek(SeekFrom::Start(offset))?;
@@ -540,7 +571,7 @@ fn read_vec_at<R: Read+Seek>(
         file: &mut R,
         offset: u64,
         buf_size: usize
-    ) -> Result<Vec<u8>, io::Error> 
+    ) -> Result<Vec<u8>, IoError>
 {
     let mut buffer = vec![0u8; buf_size];
     file.seek(SeekFrom::Start(offset))?;
@@ -552,7 +583,7 @@ fn read_vec_at<R: Read+Seek>(
 fn read_sector_at<R: Read+Seek>(
         file: &mut R,
         sector: u64,
-    ) -> Result<[u8; 512], io::Error> 
+    ) -> Result<[u8; 512], IoError>
 {
     return read_exact_at::<512, R>(file, sector << 9);
 }
@@ -560,7 +591,7 @@ fn read_sector_at<R: Read+Seek>(
 fn probe_get_magic<R: Read+Seek>(
         file: &mut R, 
         id_info: &BlockidIdinfo
-    ) -> Result<BlockidMagic, io::Error>
+    ) -> Result<BlockidMagic, IoError>
 {
     for magic in id_info.magics {
         let b_offset: u64 = magic.b_offset;
@@ -578,4 +609,3 @@ fn probe_get_magic<R: Read+Seek>(
     }
     return Err(ErrorKind::NotFound.into());
 }
-

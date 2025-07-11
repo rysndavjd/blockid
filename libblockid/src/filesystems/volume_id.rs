@@ -1,5 +1,4 @@
-use std::fmt::{self};
-//use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use core::fmt;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct VolumeId32([u8; 4]);

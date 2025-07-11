@@ -1,9 +1,15 @@
-use std::{io::{self, ErrorKind, Read, Seek}, str::{self, FromStr, Utf8Error}};
+use core::fmt::{self, Debug};
+use alloc::str::{Utf8Error, FromStr};
+
+#[cfg(feature = "std")]
+use std::{io::{Error as IoError, Read, Seek, ErrorKind}};
+
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, ErrorKind};
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
     byteorder::BigEndian, Immutable};
-use thiserror::Error;
 use uuid::{Uuid};
 
 use crate::{
@@ -18,21 +24,28 @@ use crate::{
  * https://gitlab.com/cryptsetup/LUKS2-docs
 */
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum LuksError {
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("Converting uuid from disk failed: {0}")]
-    UuidConversionError(#[from] uuid::Error),
-    #[error("UTF-8 error: {0}")]
-    UTF8ErrorError(#[from] Utf8Error),
-    #[error("Luks Header Error: {0}")]
+    IoError(IoError),
+    UuidConversionError(uuid::Error),
+    UTF8ErrorError(Utf8Error),
     LuksHeaderError(&'static str),
-    #[error("Not an LUKS superblock: {0}")]
     UnknownFilesystem(&'static str),
-    #[error("*Nix operation failed: {0}")]
-    NixError(#[from] rustix::io::Errno),
+    NixError(rustix::io::Errno),
 
+}
+
+impl fmt::Display for LuksError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LuksError::IoError(e) => write!(f, "I/O operation failed: {}", e),
+            LuksError::UuidConversionError(e) => write!(f, "Converting uuid from disk failed: {}", e),
+            LuksError::UTF8ErrorError(e) => write!(f, "UTF-8 error: {}", e),
+            LuksError::LuksHeaderError(e) => write!(f, "Luks Header Error: {}", e),
+            LuksError::UnknownFilesystem(e) => write!(f, "Not an LUKS superblock: {}", e),
+            LuksError::NixError(e) => write!(f, "*Nix operation failed: {}", e),
+        }
+    }
 }
 
 impl From<LuksError> for ContError {
@@ -45,6 +58,30 @@ impl From<LuksError> for ContError {
             LuksError::UnknownFilesystem(info) => ContError::UnknownContainer(info),
             LuksError::NixError(e) => ContError::NixError(e),
         }
+    }
+}
+
+impl From<IoError> for LuksError {
+    fn from(err: IoError) -> Self {
+        LuksError::IoError(err)
+    }
+}
+
+impl From<uuid::Error> for LuksError {
+    fn from(err: uuid::Error) -> Self {
+        LuksError::UuidConversionError(err)
+    }
+}
+
+impl From<Utf8Error> for LuksError {
+    fn from(err: Utf8Error) -> Self {
+        LuksError::UTF8ErrorError(err)
+    }
+}
+
+impl From<rustix::io::Errno> for LuksError {
+    fn from(err: rustix::io::Errno) -> Self {
+        LuksError::NixError(err)
     }
 }
 
@@ -203,7 +240,7 @@ pub fn probe_luks1(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks1Header = from_file(&mut probe.buffer, probe.offset)?;
+    let header: Luks1Header = from_file(&mut probe.file, probe.offset)?;
     
     if !header.luks_valid() {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks1 container"));
@@ -234,9 +271,9 @@ pub fn probe_luks2(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks2Header = from_file(&mut probe.buffer, probe.offset)?;
+    let header: Luks2Header = from_file(&mut probe.file, probe.offset)?;
 
-    if !header.luks_valid(&mut probe.buffer) {
+    if !header.luks_valid(&mut probe.file) {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks2 container"));
     }
 
@@ -265,7 +302,7 @@ pub fn probe_luks_opal(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks2Header = from_file(&mut probe.buffer, probe.offset)?;
+    let header: Luks2Header = from_file(&mut probe.file, probe.offset)?;
 
     if !header.luks_valid(&mut probe.file) {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks2 opal container"));
