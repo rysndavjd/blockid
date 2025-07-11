@@ -1,10 +1,10 @@
 [package]
 name = "libblockid"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Block device identification library"
 repository = "https://github.com/rysndavjd/blockid"
-keywords = ["partition", "filesystem", "superblock"]
+keywords = ["partition", "filesystem", "superblock", "no_std"]
 categories = ["filesystem"]
 license = "MIT OR Apache-2.0"
 
