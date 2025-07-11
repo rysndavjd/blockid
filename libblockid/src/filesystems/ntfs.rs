@@ -1,10 +1,15 @@
-use std::io::{self, Read, Seek, SeekFrom, ErrorKind};
+use core::fmt::{self, Debug};
+
+#[cfg(feature = "std")]
+use std::io::{Error as IoError, Seek, Read, SeekFrom, ErrorKind};
+
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, SeekFrom, ErrorKind};
 
 use bitflags::bitflags;
 use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, transmute, 
     FromBytes, Immutable, IntoBytes, Unaligned, KnownLayout};
 use rustix::fs::makedev;
-use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
@@ -15,13 +20,10 @@ use crate::{
     FsType, ProbeResult, UsageType
 };
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum NtfsError {
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("Not an NTFS superblock: {0}")]
+    IoError(IoError),
     UnknownFilesystem(&'static str),
-    #[error("NTFS Header Error: {0}")]
     NtfsHeaderError(&'static str),
     /* 
     #[error("NTFS Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
@@ -32,6 +34,16 @@ pub enum NtfsError {
     */
 }
 
+impl fmt::Display for NtfsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NtfsError::IoError(e) => write!(f, "I/O operation failed: {}", e),
+            NtfsError::NtfsHeaderError(e) => write!(f, "NTFS Header Error: {}", e),
+            NtfsError::UnknownFilesystem(e) => write!(f, "Not an NTFS superblock: {}", e),
+        }
+    }
+}
+
 impl From<NtfsError> for FsError {
     fn from(err: NtfsError) -> Self {
         match err {
@@ -40,6 +52,12 @@ impl From<NtfsError> for FsError {
             NtfsError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
             //NtfsError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
         }
+    }
+}
+
+impl From<IoError> for NtfsError {
+    fn from(err: IoError) -> Self {
+        NtfsError::IoError(err)
     }
 }
 
@@ -264,9 +282,9 @@ pub fn probe_is_ntfs(
         probe: &mut BlockidProbe
     ) -> Result<(), NtfsError>
 {
-    let ns: NtfsSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
+    let ns: NtfsSuperBlock = from_file(&mut probe.file, probe.offset)?;
     
-    probe_get_magic(&mut probe.buffer, &NTFS_ID_INFO)?;
+    probe_get_magic(&mut probe.file, &NTFS_ID_INFO)?;
     check_ntfs(ns)?;
 
     return Ok(());
@@ -277,7 +295,7 @@ pub fn probe_ntfs(
         magic: BlockidMagic
     ) -> Result<(), NtfsError> 
 {
-    let ns: NtfsSuperBlock = from_file(&mut probe.buffer, probe.offset)?;
+    let ns: NtfsSuperBlock = from_file(&mut probe.file, probe.offset)?;
 
     let (sector_size, sectors_per_cluster) = check_ntfs(ns)?;
 

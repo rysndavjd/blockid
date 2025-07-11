@@ -1,4 +1,4 @@
-use std::fmt;
+use core::fmt;
 use crc::{Crc, CRC_32_CKSUM, CRC_32_ISCSI};
 
 #[derive(Debug)]

@@ -1,11 +1,17 @@
-use std::io;
+use core::fmt::{self, Debug};
+use alloc::string::{String, ToString};
+
+#[cfg(feature = "std")]
+use std::io::{Error as IoError};
+
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::{NoStdIoError as IoError};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
     byteorder::LittleEndian, Immutable};
 use rustix::fs::makedev;
-use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
@@ -20,18 +26,25 @@ use crate::{
 https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 */
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum ExtError {
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("Ext Feature Error: {0}")]
+    IoError(IoError),
     ExtFeatureError(&'static str),
-    #[error("Not an Ext superblock: {0}")]
     UnknownFilesystem(&'static str),
-    #[error("Crc32c Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
+    }
+}
+
+impl fmt::Display for ExtError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExtError::IoError(e) => write!(f, "I/O operation failed: {}", e),
+            ExtError::ExtFeatureError(e) => write!(f, "{}", e),
+            ExtError::UnknownFilesystem(e) => write!(f, "{}", e),
+            ExtError::ChecksumError{expected, got} => write!(f, "Crc32c Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\""),
+        }
     }
 }
 
@@ -46,8 +59,14 @@ impl From<ExtError> for FsError {
     }
 }
 
+impl From<IoError> for ExtError {
+    fn from(err: IoError) -> Self {
+        ExtError::IoError(err)
+    }
+}
+
 const EXT_MAGIC: [u8; 2] = [0x53, 0xEF];
-const EXT_OFFSET: u64 = 0x38;
+const EXT_OFFSET: u64 = 0x438;
 
 pub const JBD_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("jbd"),
@@ -422,7 +441,7 @@ pub fn probe_jbd(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.buffer, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
     
     let fi = es.feature_incompat();
 
@@ -461,7 +480,7 @@ pub fn probe_ext2(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.buffer, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
 
     ext_checksum(es)?;
 
@@ -510,7 +529,7 @@ pub fn probe_ext3(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.buffer, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
 
     ext_checksum(es)?;
 
@@ -559,7 +578,7 @@ pub fn probe_ext4(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.buffer, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
 
     ext_checksum(es)?;
 

@@ -9,6 +9,11 @@ pub mod aix;
 
 use core::fmt;
 
+#[cfg(feature = "std")]
+use std::io::Error as IoError;
+#[cfg(not(feature = "std"))]
+use crate::nostd_io::NoStdIoError as IoError;
+
 use crate::BlockidError;
 use crate::{checksum::CsumAlgorium};
 
@@ -28,7 +33,7 @@ use crate::{checksum::CsumAlgorium};
 
 #[derive(Debug)]
 pub enum PtError {
-    IoError(std::io::Error),
+    IoError(IoError),
     InvalidHeader(&'static str),
     UnknownPartition(&'static str),
     ChecksumError {
@@ -40,8 +45,7 @@ pub enum PtError {
 impl fmt::Display for PtError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(feature = "std")]
-            PtError::IoError(e) => write!(f, "std::I/O operation failed: {}", e),
+            PtError::IoError(e) => write!(f, "I/O operation failed: {}", e),
             PtError::InvalidHeader(e) => write!(f, "Invalid Header: {}", e),
             PtError::UnknownPartition(e) => write!(f, "Unknown Partition: {}", e),
             PtError::ChecksumError{expected, got} => {
