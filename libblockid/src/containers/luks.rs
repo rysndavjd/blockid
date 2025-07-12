@@ -250,7 +250,7 @@ pub fn probe_luks1(
                 ContainerResults { 
                     cont_type: Some(crate::ContType::LUKS1), 
                     label: None, 
-                    cont_uuid: Some(BlockidUUID::Standard(header.get_uuid()?)), 
+                    cont_uuid: Some(BlockidUUID::Uuid(header.get_uuid()?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
                     version: Some(BlockidVersion::Number(u64::from(header.version))), 
@@ -281,7 +281,7 @@ pub fn probe_luks2(
                 ContainerResults { 
                     cont_type: Some(crate::ContType::LUKS1), 
                     label: None, 
-                    cont_uuid: Some(BlockidUUID::Standard(header.get_uuid()?)), 
+                    cont_uuid: Some(BlockidUUID::Uuid(header.get_uuid()?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
                     version: Some(BlockidVersion::Number(u64::from(header.version))), 
@@ -320,7 +320,7 @@ pub fn probe_luks_opal(
                 ContainerResults { 
                     cont_type: Some(crate::ContType::LUKS1), 
                     label: None, 
-                    cont_uuid: Some(BlockidUUID::Standard(header.get_uuid()?)), 
+                    cont_uuid: Some(BlockidUUID::Uuid(header.get_uuid()?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
                     version: Some(BlockidVersion::Number(u64::from(header.version))), 

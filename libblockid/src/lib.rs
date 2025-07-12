@@ -6,6 +6,7 @@ pub(crate) mod checksum;
 pub(crate) mod ioctl;
 #[cfg(not(feature = "std"))]
 pub mod nostd_io;
+mod util;
 
 pub mod containers;
 pub mod partitions;
@@ -56,24 +57,6 @@ use crate::{
         volume_id::{VolumeId32, VolumeId64},
     }, 
 };
-
-/* 
-#[derive(Error, Debug)]
-pub enum BlockidError {
-    #[error("Probe failed: {0}")]
-    ProbeError(&'static str),
-    #[error("Filesystem probe failed: {0}")]
-    FsError(#[from] FsError),
-    #[error("Partition Table probe failed: {0}")]
-    PtError(#[from] PtError),
-    #[error("Container probe failed: {0}")]
-    ContError(#[from] ContError),
-    #[error("I/O operation failed: {0}")]
-    IoError(#[from] io::Error),
-    #[error("*Nix operation failed: {}", 0)]
-    NixError(#[from] rustix::io::Errno),
-}
-*/
 
 #[derive(Debug)]
 pub enum BlockidError {
@@ -140,7 +123,7 @@ impl BlockidProbe {
         let stat = fstat(file.as_fd())?;
 
         let sector_size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
-            ioctl_blksszget(file.as_fd())?.into()
+            u64::from(ioctl_blksszget(file.as_fd())?)
         } else {
             512
         };
@@ -158,11 +141,11 @@ impl BlockidProbe {
             //buffer: buffer,
             offset: offset, 
             size: size, 
-            io_size: i64::from(stat.st_blksize), 
+            io_size: stat.st_blksize, 
             devno: stat.st_rdev, 
             disk_devno: stat.st_dev, 
             sector_size, 
-            mode: stat.st_mode.into(), 
+            mode: Mode::from(stat.st_mode), 
             flags,
             filter,
             values: None 
@@ -491,7 +474,7 @@ impl fmt::Display for FsSecType {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockidUUID {
-    Standard(Uuid),
+    Uuid(Uuid),
     VolumeId32(VolumeId32),
     VolumeId64(VolumeId64),
 }
@@ -499,7 +482,7 @@ pub enum BlockidUUID {
 impl fmt::Display for BlockidUUID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Standard(t) => write!(f, "{}", t),
+            Self::Uuid(t) => write!(f, "{}", t),
             Self::VolumeId32(t) => write!(f, "{}", t),
             Self::VolumeId64(t) => write!(f, "{}", t),
         }
@@ -594,12 +577,9 @@ fn probe_get_magic<R: Read+Seek>(
     ) -> Result<BlockidMagic, IoError>
 {
     for magic in id_info.magics {
-        let b_offset: u64 = magic.b_offset;
-        let magic_len: usize = magic.len;
+        file.seek(SeekFrom::Start(magic.b_offset))?;
 
-        file.seek(SeekFrom::Start(b_offset))?;
-
-        let mut buffer = vec![0; magic_len];
+        let mut buffer = vec![0; magic.len];
 
         file.read_exact(&mut buffer)?;
 

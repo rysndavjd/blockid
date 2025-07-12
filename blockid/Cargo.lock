@@ -59,6 +59,7 @@ dependencies = [
  "linux-raw-sys 0.10.0",
  "rustix",
  "uuid",
+ "widestring",
  "zerocopy",
 ]
 
@@ -136,6 +137,12 @@ checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
 dependencies = [
  "zerocopy",
 ]
+
+[[package]]
+name = "widestring"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd7cf3379ca1aac9eea11fba24fd7e315d621f8dfe35c8d7d2be8b793726e07d"
 
 [[package]]
 name = "windows-sys"

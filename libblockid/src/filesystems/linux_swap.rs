@@ -355,7 +355,7 @@ pub fn probe_swap_v1(
                     fs_type: Some(FsType::LinuxSwap), 
                     sec_type: None, 
                     label: label, 
-                    fs_uuid: Some(BlockidUUID::Standard(uuid)), 
+                    fs_uuid: Some(BlockidUUID::Uuid(uuid)), 
                     log_uuid: None, 
                     ext_journal: None, 
                     fs_creator: None, 

@@ -20,14 +20,14 @@ Libblockid
 |------------|--------|------------------|
 | APFS       | Todo   | Filesystem       |
 | Btrfs      | Todo   | Filesystem       |
-| BSD        | Todo   | Partition Table  |
+| BSD        | Next   | Partition Table  |
 | DOS        | Works   | Partition Table  |
 | GPT        | Todo   | Partition Table  |
 | Mac        | Todo   | Partition Table  |
 | ExFAT      | Works  | Filesystem       |
 | Ext2/3/4   | Works  | Filesystem       |
 | LUKS       | Works   | Container        |
-| NTFS       | Next   | Filesystem       |
+| NTFS       | Works   | Filesystem       |
 | VFat       | Works  | Filesystem       |
 | XFS        | Todo   | Filesystem       |
 | ZFS        | Todo   | Filesystem       |

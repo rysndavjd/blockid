@@ -50,6 +50,52 @@ pub enum ErrorKind {
     Other,
 }
 
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFound => write!(f, "Not Found"),
+            Self::PermissionDenied => write!(f, "Permission Denied"),
+            Self::ConnectionRefused => write!(f, "Connection Refused"),
+            Self::ConnectionReset => write!(f, "Connection Reset"),
+            Self::HostUnreachable => write!(f, "Host Unreachable"),
+            Self::NetworkUnreachable => write!(f, "Network Unreachable"),
+            Self::ConnectionAborted => write!(f, "Connection Aborted"),
+            Self::NotConnected => write!(f, "Not Connected"),
+            Self::AddrInUse => write!(f, "Addr In Use"),
+            Self::AddrNotAvailable => write!(f, "Addr Not Available"),
+            Self::NetworkDown => write!(f, "Network Down"),
+            Self::BrokenPipe => write!(f, "Broken Pipe"),
+            Self::AlreadyExists => write!(f, "Already Exists"),
+            Self::WouldBlock => write!(f, "Would Block"),
+            Self::NotADirectory => write!(f, "Not A Directory"),
+            Self::IsADirectory => write!(f, "Is A Directory"),
+            Self::DirectoryNotEmpty => write!(f, "Directory Not Empty"),
+            Self::ReadOnlyFilesystem => write!(f, "Read Only Filesystem"),
+            Self::StaleNetworkFileHandle => write!(f, "Stale Network File Handle"),
+            Self::InvalidInput => write!(f, "Invalid Input"),
+            Self::InvalidData => write!(f, "Invalid Data"),
+            Self::TimedOut => write!(f, "Timed Out"),
+            Self::WriteZero => write!(f, "Write Zero"),
+            Self::StorageFull => write!(f, "Storage Full"),
+            Self::NotSeekable => write!(f, "Not Seekable"),
+            Self::QuotaExceeded => write!(f, "Quota Exceeded"),
+            Self::FileTooLarge => write!(f, "File Too Large"),
+            Self::ResourceBusy => write!(f, "Resource Busy"),
+            Self::ExecutableFileBusy => write!(f, "Executable File Busy"),
+            Self::Deadlock => write!(f, "Deadlock"),
+            Self::CrossesDevices => write!(f, "Crosses Devices"),
+            Self::TooManyLinks => write!(f, "Too Many Links"),
+            Self::InvalidFilename => write!(f, "Invalid Filename"),
+            Self::ArgumentListTooLong => write!(f, "Argument List Too Long"),
+            Self::Interrupted => write!(f, "Interrupted"),
+            Self::Unsupported => write!(f, "Unsupported"),
+            Self::UnexpectedEof => write!(f, "Unexpected End of File"),
+            Self::OutOfMemory => write!(f, "Out Of Memory"),
+            Self::Other => write!(f, "Other"),
+        }
+    }   
+}   
+
 #[cfg(feature = "std")]
 impl From<ErrorKind> for std::io::ErrorKind {
     fn from(err: ErrorKind) -> Self {
@@ -366,13 +412,27 @@ impl AsFd for File {
 pub enum NoStdIoError {
     Kind(ErrorKind),
     NixError(Errno),
+    Custom{
+        kind: ErrorKind,
+        error: &'static str
+    },
+}
+
+impl NoStdIoError {
+    pub fn new(kind: ErrorKind, error: &'static str) -> Self {
+        NoStdIoError::Custom { 
+            kind: kind, 
+            error: error,
+        }
+    }
 }
 
 impl fmt::Display for NoStdIoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NoStdIoError::Kind(e) => write!(f, "no_std I/O error: {:?}", e),
-            NoStdIoError::NixError(e) => write!(f, "*Nix error code: {}", e)
+            NoStdIoError::NixError(e) => write!(f, "*Nix error code: {}", e),
+            NoStdIoError::Custom{ kind, error } => write!(f, "Kind: {}, Error: {}", kind, error),
         }
     }
 }
