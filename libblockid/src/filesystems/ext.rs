@@ -403,13 +403,13 @@ fn ext_get_info(
         None
     };
     
-    let uuid = BlockidUUID::Standard(Uuid::from_bytes(es.s_uuid));
+    let uuid = BlockidUUID::Uuid(Uuid::from_bytes(es.s_uuid));
     
     let journal_uuid: Option<BlockidUUID> = if fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
         if es.s_journal_uuid == [0; 16] {
             None //Journal is internal to the filesystem   
         } else {
-            Some(BlockidUUID::Standard(Uuid::from_bytes(es.s_journal_uuid)))
+            Some(BlockidUUID::Uuid(Uuid::from_bytes(es.s_journal_uuid)))
         }
     } else {
         None

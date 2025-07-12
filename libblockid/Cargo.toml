@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 
 [features]
 default = ["std"]
-std = ["zerocopy/std", "bitflags/std", "rustix/std", "linux-raw-sys/std"]
+std = ["zerocopy/std", "bitflags/std", "rustix/std", "linux-raw-sys/std", "widestring/std"]
 
 [dependencies]
 bitflags = { version = "2.9.1", default-features = false }
@@ -19,6 +19,7 @@ zerocopy = { version = "0.8.26", default-features = false, features = ["derive",
 uuid = { version = "1.16.0", features = ["zerocopy"] }
 linux-raw-sys = { version = "0.10.0", default-features = false, features = ["ioctl"] }
 rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc"] }
+widestring = { version = "1.2.0", default-features = false, features = ["alloc"] }
 
 [toolchain]
 channel = "stable"

@@ -13,6 +13,7 @@ use std::io::Error as IoError;
 #[cfg(not(feature = "std"))]
 use crate::nostd_io::NoStdIoError as IoError;
 
+use crate::util::UtfError;
 use crate::BlockidError;
 use crate::checksum::CsumAlgorium;
 
@@ -42,6 +43,7 @@ pub enum FsError {
     IoError(IoError),
     InvalidHeader(&'static str),
     UnknownFilesystem(&'static str),
+    UtfError(UtfError),
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
@@ -54,6 +56,7 @@ impl fmt::Display for FsError {
             FsError::IoError(e) => write!(f, "I/O operation failed: {}", e),
             FsError::InvalidHeader(e) => write!(f, "Invalid Header: {}", e),
             FsError::UnknownFilesystem(e) => write!(f, "Unknown Filesystem: {}", e),
+            FsError::UtfError(e) => write!(f, "UTF Error: {}", e),
             FsError::ChecksumError{expected, got} => {
                 write!(f, "Filesystem Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")
             },
@@ -65,8 +68,4 @@ impl From<FsError> for BlockidError {
     fn from(err: FsError) -> Self {
         BlockidError::FsError(err)
     }
-}
-
-pub fn is_power_2(num: u64) -> bool {
-    return num != 0 && ((num & (num - 1)) == 0); 
 }

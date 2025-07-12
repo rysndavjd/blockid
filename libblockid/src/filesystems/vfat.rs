@@ -16,7 +16,7 @@ use crate::{
     probe_get_magic, from_file, read_vec_at,
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
     ProbeResult, FilesystemResults, FsSecType, FsType, UsageType,
-    filesystems::{volume_id::VolumeId32, FsError, is_power_2}
+    filesystems::{volume_id::VolumeId32, FsError}, util::is_power_2,
 };
 
 #[derive(Debug)]
