@@ -77,13 +77,13 @@ pub const JBD_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: &[0x53, 0xEF],
             len: 2,
             b_offset: 0x38,
         },
-    ]
+    ])
 };
 
 pub const EXT2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -95,13 +95,13 @@ pub const EXT2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: &EXT_MAGIC,
             len: 2,
             b_offset: EXT_OFFSET,
         },
-    ]
+    ])
 };
 
 pub const EXT3_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -113,13 +113,13 @@ pub const EXT3_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: &EXT_MAGIC,
             len: 2,
             b_offset: EXT_OFFSET,
         },
-    ]
+    ])
 };
 
 pub const EXT4_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -131,13 +131,13 @@ pub const EXT4_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: &EXT_MAGIC,
             len: 2,
             b_offset: EXT_OFFSET,
         },
-    ]
+    ])
 };
 
 //pub const EXT4DEV_ID_INFO: BlockidIdinfo = BlockidIdinfo {

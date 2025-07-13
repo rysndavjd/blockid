@@ -61,7 +61,7 @@ pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: b"MSWIN",
             len: 5,
@@ -109,7 +109,7 @@ pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 2,
             b_offset: 0x1fe,
         },
-    ]
+    ])
 };
 
 #[repr(C)]

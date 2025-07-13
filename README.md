@@ -20,9 +20,9 @@ Libblockid
 |------------|--------|------------------|
 | APFS       | Todo   | Filesystem       |
 | Btrfs      | Todo   | Filesystem       |
-| BSD        | Next   | Partition Table  |
+| BSD        | Todo   | Partition Table  |
 | DOS        | Works   | Partition Table  |
-| GPT        | Todo   | Partition Table  |
+| GPT        | Next   | Partition Table  |
 | Mac        | Todo   | Partition Table  |
 | ExFAT      | Works  | Filesystem       |
 | Ext2/3/4   | Works  | Filesystem       |

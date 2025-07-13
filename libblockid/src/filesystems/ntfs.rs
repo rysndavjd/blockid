@@ -76,13 +76,13 @@ pub const NTFS_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: b"NTFS    ",
             len: 8,
             b_offset: 3,
         },
-    ]
+    ])
 };
 
 #[repr(C)]
@@ -237,7 +237,7 @@ fn find_label<R: Read+Seek>(
     }
 
     let mft = MasterFileTableRecord::read_from_bytes(&buf_mft[..size_of::<MasterFileTableRecord>()])
-        .map_err(|_| IoError::new(ErrorKind::InvalidInput, "Unable to map bytes to Master File Table Record"))?;
+        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to Master File Table Record"))?;
 
     let mut attr_off = usize::from(mft.attrs_offset);
 
@@ -245,7 +245,7 @@ fn find_label<R: Read+Seek>(
         attr_off as u64 <= u64::from(mft.bytes_allocated) {
         
         let attr = FileAttribute::read_from_bytes(&buf_mft[attr_off..attr_off + size_of::<FileAttribute>()])
-            .map_err(|_| IoError::new(ErrorKind::InvalidInput, "Unable to map bytes to File Attribute"))?;
+            .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to File Attribute"))?;
         
         let attr_len = u32::from(attr.len) as usize;
 

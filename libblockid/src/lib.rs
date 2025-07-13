@@ -58,6 +58,8 @@ use crate::{
     }, 
 };
 
+const EMPTY_MAGIC: BlockidMagic = BlockidMagic{magic: &[0], len: 0, b_offset: 0};
+
 #[derive(Debug)]
 pub enum BlockidError {
     ProbeError(&'static str),
@@ -159,7 +161,12 @@ impl BlockidProbe {
         if self.filter.is_empty() {
             for info in PROBES {
                 let result = match probe_get_magic(&mut self.file, &info.2) {
-                    Ok(magic) => (info.2.probe_fn)(self, magic),
+                    Ok(magic) => {
+                        match magic {
+                            Some(t) => (info.2.probe_fn)(self, t),
+                            None => (info.2.probe_fn)(self, EMPTY_MAGIC)
+                        }
+                    },
                     Err(e) => {
                         eprintln!("Wrong Magic\nInfo: \"{:?}\",\nError: {:?}", info.2, e);
                         continue
@@ -188,7 +195,12 @@ impl BlockidProbe {
         
         for info in filtered_probe {
             let result = match probe_get_magic(&mut self.file, &info) {
-                Ok(magic) => (info.probe_fn)(self, magic),
+                Ok(magic) => {
+                    match magic {
+                        Some(t) => (info.probe_fn)(self, t),
+                        None => (info.probe_fn)(self, EMPTY_MAGIC)
+                    }
+                },
                 Err(_) => continue,
             };
             
@@ -495,7 +507,7 @@ pub struct BlockidIdinfo {
     pub usage: Option<UsageType>,
     pub minsz: Option<u64>,
     pub probe_fn: ProbeFn,
-    pub magics: &'static [BlockidMagic],
+    pub magics: Option<&'static [BlockidMagic]>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -574,18 +586,26 @@ fn read_sector_at<R: Read+Seek>(
 fn probe_get_magic<R: Read+Seek>(
         file: &mut R, 
         id_info: &BlockidIdinfo
-    ) -> Result<BlockidMagic, IoError>
+    ) -> Result<Option<BlockidMagic>, IoError>
 {
-    for magic in id_info.magics {
-        file.seek(SeekFrom::Start(magic.b_offset))?;
+    match id_info.magics {
+        Some(magics) => {
+            for magic in magics {
+                file.seek(SeekFrom::Start(magic.b_offset))?;
 
-        let mut buffer = vec![0; magic.len];
+                let mut buffer = vec![0; magic.len];
 
-        file.read_exact(&mut buffer)?;
+                file.read_exact(&mut buffer)?;
 
-        if buffer == magic.magic {
-            return Ok(*magic);
-        }
+                if buffer == magic.magic {
+                    return Ok(Some(*magic));
+                }
+            }
+        },
+        None => {
+            return Ok(None);
+        },
     }
+
     return Err(ErrorKind::NotFound.into());
 }
