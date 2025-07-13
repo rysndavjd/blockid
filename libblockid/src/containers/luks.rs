@@ -101,13 +101,13 @@ pub const LUKS1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: &LUKS1_MAGIC,
             len: 6,
             b_offset: 0,
         },
-    ]
+    ])
 };
 
 pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -119,13 +119,13 @@ pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: &LUKS2_MAGIC,
             len: 6,
             b_offset: 0,
         },
-    ]
+    ])
 };
 
 pub const LUKS_OPAL_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -137,7 +137,7 @@ pub const LUKS_OPAL_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[]
+    magics: None
 };
 
 #[repr(C)]

@@ -76,13 +76,13 @@ pub const EXFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: b"EXFAT   ",
             len: 8,
             b_offset: 3,
         },
-    ]
+    ])
 };
 
 #[repr(C)]

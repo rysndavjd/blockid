@@ -67,7 +67,7 @@ pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(PtError::from)
         .map_err(BlockidError::from)
     },
-    magics: &[
+    magics: Some(&[
         /* DOS master boot sector:
 		 *
 		 *     0 | Code Area
@@ -81,7 +81,7 @@ pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 2,
             b_offset: 510,
         },
-    ]
+    ])
 };
 
 #[repr(C)]

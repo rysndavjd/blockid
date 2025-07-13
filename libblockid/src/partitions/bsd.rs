@@ -2,10 +2,10 @@ use core::fmt::{self, Debug};
 use alloc::{vec::Vec};
 
 #[cfg(feature = "std")]
-use std::io::{Error as IoError, Seek, Read};
+use std::io::{Error as IoError, Seek, Read, ErrorKind};
 
 #[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek};
+use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, ErrorKind};
 
 use bitflags::bitflags;
 use zerocopy::{byteorder::LittleEndian, byteorder::U32, byteorder::U16, 
@@ -17,6 +17,18 @@ use crate::{
     ProbeResult, PtType, UsageType, from_file, read_sector_at, filesystems::{
     volume_id::VolumeId32}, partitions::PtError,
 };
+
+fn mag_sector(mag: &BlockidMagic) -> u64 {
+    (0 / 2) + (mag.b_offset >> 9)
+}
+
+fn mag_offset(mag: &BlockidMagic) -> u64 {
+    (0 << 10) + mag.b_offset
+}
+
+fn mag_lastoffset(mag: &BlockidMagic) -> u64 {
+    mag_offset(mag) - (mag_sector(mag) << 9)
+}
 
 #[derive(Debug)]
 pub enum BsdError {
@@ -60,7 +72,7 @@ pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: b"\x57\x45\x56\x82",
             len: 4,
@@ -76,7 +88,7 @@ pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
             len: 4,
             b_offset: 128,
         },
-    ]
+    ])
 };
 
 const BSD_MAXPARTITIONS: usize = 16;
@@ -195,12 +207,20 @@ fn bsd_checksum(
     return result ^ u16::from(label.d_checksum);
 }
 
-pub fn probe_bsd_pt(
+/*
+ * BSD disk label is pain in the ass to develop on linux and
+ * will finish this when I figure out a workflow of creating
+ * correct disk labels as Gnu Parted seems to make invaild bsd 
+ * disk labels
+ */
+
+ pub fn probe_bsd_pt(
         probe: &mut BlockidProbe,
         mag: BlockidMagic,
     ) -> Result<(), BsdError> 
 {
-    let data = read_sector_at(&mut probe.file, mag.b_offset >> 9)?;
+    //let data = read_sector_at(&mut probe.file, mag_sector(&mag))?;
 
-    todo!()
+    todo!();
+    //return Ok(());
 }

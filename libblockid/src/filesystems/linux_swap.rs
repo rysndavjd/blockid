@@ -62,7 +62,7 @@ pub const LINUX_SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: Some(40960), // 10 * 4096
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: b"SWAP-SPACE",
             len: 10,
@@ -88,7 +88,7 @@ pub const LINUX_SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 10,
             b_offset: 0xfff6,
         },
-    ]
+    ])
 };
 
 pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -100,7 +100,7 @@ pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: Some(40960), // 10 * 4096
-    magics: &[
+    magics: Some(&[
         BlockidMagic {
             magic: b"SWAPSPACE2",
             len: 10,
@@ -121,7 +121,7 @@ pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 10,
             b_offset: 0x7ff6,
         },
-    ]
+    ])
 };
 
 pub const SWSUSPEND_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -133,7 +133,7 @@ pub const SWSUSPEND_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     minsz: Some(40960), // 10 * 4096
-    magics: &[
+    magics: Some(&[
         //BlockidMagic {
         //    magic: &TOI_MAGIC_STRING,
         //    len: 8,
@@ -239,7 +239,7 @@ pub const SWSUSPEND_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 9,
             b_offset: 0xfff6,
         },
-    ]
+    ])
 };
 
 #[repr(C)]
