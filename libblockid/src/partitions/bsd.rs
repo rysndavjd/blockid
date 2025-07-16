@@ -40,9 +40,9 @@ pub enum BsdError {
 impl fmt::Display for BsdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BsdError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            BsdError::BsdHeaderError(e) => write!(f, "BSD disklabel header error: {}", e),
-            BsdError::UnknownFilesystem(e) => write!(f, "Not an BSD disklabel: {}", e),
+            BsdError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            BsdError::BsdHeaderError(e) => write!(f, "BSD disklabel header error: {e}"),
+            BsdError::UnknownFilesystem(e) => write!(f, "Not an BSD disklabel: {e}"),
         }
     }
 }

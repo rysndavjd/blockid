@@ -53,10 +53,10 @@ pub enum FsError {
 impl fmt::Display for FsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FsError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            FsError::InvalidHeader(e) => write!(f, "Invalid Header: {}", e),
-            FsError::UnknownFilesystem(e) => write!(f, "Unknown Filesystem: {}", e),
-            FsError::UtfError(e) => write!(f, "UTF Error: {}", e),
+            FsError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            FsError::InvalidHeader(e) => write!(f, "Invalid Header: {e}"),
+            FsError::UnknownFilesystem(e) => write!(f, "Unknown Filesystem: {e}"),
+            FsError::UtfError(e) => write!(f, "UTF Error: {e}"),
             FsError::ChecksumError{expected, got} => {
                 write!(f, "Filesystem Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")
             },

@@ -1,7 +1,7 @@
 pub mod dos;
 pub mod gpt;
 //pub mod mac;
-pub mod bsd;
+//pub mod bsd;
 pub mod aix;
 //pub mod solaris_x86;
 //pub mod unixware;
@@ -45,9 +45,9 @@ pub enum PtError {
 impl fmt::Display for PtError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PtError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            PtError::InvalidHeader(e) => write!(f, "Invalid Header: {}", e),
-            PtError::UnknownPartition(e) => write!(f, "Unknown Partition: {}", e),
+            PtError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            PtError::InvalidHeader(e) => write!(f, "Invalid Header: {e}"),
+            PtError::UnknownPartition(e) => write!(f, "Unknown Partition: {e}"),
             PtError::ChecksumError{expected, got} => {
                 write!(f, "Partition Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")
             },
