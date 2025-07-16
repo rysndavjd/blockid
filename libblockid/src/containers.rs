@@ -26,13 +26,13 @@ pub enum ContError {
 impl fmt::Display for ContError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ContError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            ContError::InvalidHeader(e) => write!(f, "Invalid Header: {}", e),
-            ContError::UnknownContainer(e) => write!(f, "Unknown Container: {}", e),
+            ContError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            ContError::InvalidHeader(e) => write!(f, "Invalid Header: {e}"),
+            ContError::UnknownContainer(e) => write!(f, "Unknown Container: {e}"),
             ContError::ChecksumError{expected, got} => {
                 write!(f, "Container Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")
             },
-            ContError::NixError(e) => write!(f, "*NIX error code: {}", e),
+            ContError::NixError(e) => write!(f, "*NIX error code: {e}"),
         }
     }
 }

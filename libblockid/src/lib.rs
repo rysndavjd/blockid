@@ -58,8 +58,6 @@ use crate::{
     }, 
 };
 
-const EMPTY_MAGIC: BlockidMagic = BlockidMagic{magic: &[0], len: 0, b_offset: 0};
-
 #[derive(Debug)]
 pub enum BlockidError {
     ProbeError(&'static str),
@@ -73,12 +71,12 @@ pub enum BlockidError {
 impl fmt::Display for BlockidError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BlockidError::ProbeError(e) => write!(f, "Probe failed: {}", e),
-            BlockidError::FsError(e) => write!(f, "Filesystem probe failed: {}", e),
-            BlockidError::PtError(e) => write!(f, "Partition Table probe failed: {}", e),
-            BlockidError::ContError(e) => write!(f, "Container probe failed: {}", e),
-            BlockidError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            BlockidError::NixError(e) => write!(f, "*Nix operation failed: {}", e),
+            BlockidError::ProbeError(e) => write!(f, "Probe failed: {e}"),
+            BlockidError::FsError(e) => write!(f, "Filesystem probe failed: {e}"),
+            BlockidError::PtError(e) => write!(f, "Partition Table probe failed: {e}"),
+            BlockidError::ContError(e) => write!(f, "Container probe failed: {e}"),
+            BlockidError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            BlockidError::NixError(e) => write!(f, "*Nix operation failed: {e}"),
         }
     }
 }
@@ -139,13 +137,16 @@ impl BlockidProbe {
         //let buffer = BufReader::with_capacity(stat.st_blksize as usize, file.try_clone()?);
 
         Ok( Self { 
-            file: file,
+            file,
             //buffer: buffer,
-            offset: offset, 
-            size: size, 
-            io_size: stat.st_blksize, 
+            offset, 
+            size, 
+            #[cfg(target_arch = "aarch64")]
+            io_size: i64::from(stat.st_blksize), 
+            #[cfg(target_arch = "x86_64")]
+            io_size: stat.st_blksize,
             devno: stat.st_rdev, 
-            disk_devno: stat.st_dev, 
+            disk_devno: stat.st_dev,
             sector_size, 
             mode: Mode::from(stat.st_mode), 
             flags,
@@ -164,7 +165,7 @@ impl BlockidProbe {
                     Ok(magic) => {
                         match magic {
                             Some(t) => (info.2.probe_fn)(self, t),
-                            None => (info.2.probe_fn)(self, EMPTY_MAGIC)
+                            None => (info.2.probe_fn)(self, BlockidMagic::EMPTY_MAGIC)
                         }
                     },
                     Err(e) => {
@@ -198,7 +199,7 @@ impl BlockidProbe {
                 Ok(magic) => {
                     match magic {
                         Some(t) => (info.probe_fn)(self, t),
-                        None => (info.probe_fn)(self, EMPTY_MAGIC)
+                        None => (info.probe_fn)(self, BlockidMagic::EMPTY_MAGIC)
                     }
                 },
                 Err(_) => continue,
@@ -295,6 +296,7 @@ bitflags!{
         const TINY_DEV = 1 << 0;
         const OPAL_CHECKED = 1 << 1;
         const OPAL_LOCKED = 1 << 2;
+        const FORCE_GPT_PMBR = 1 << 3;
     }
 
     #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -494,9 +496,9 @@ pub enum BlockidUUID {
 impl fmt::Display for BlockidUUID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Uuid(t) => write!(f, "{}", t),
-            Self::VolumeId32(t) => write!(f, "{}", t),
-            Self::VolumeId64(t) => write!(f, "{}", t),
+            Self::Uuid(t) => write!(f, "{t}"),
+            Self::VolumeId32(t) => write!(f, "{t}"),
+            Self::VolumeId64(t) => write!(f, "{t}"),
         }
     }
 }
@@ -533,6 +535,10 @@ pub struct BlockidMagic {
     pub magic: &'static [u8],
     pub len: usize,
     pub b_offset: u64,
+}
+
+impl BlockidMagic {
+    pub const EMPTY_MAGIC: BlockidMagic = BlockidMagic{magic: &[0], len: 0, b_offset: 0};
 }
 
 fn from_file<T: FromBytes, R: Read+Seek>(

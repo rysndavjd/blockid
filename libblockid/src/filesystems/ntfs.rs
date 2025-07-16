@@ -14,7 +14,7 @@ use crate::{
     from_file, probe_get_magic, read_vec_at, BlockidError, BlockidIdinfo, 
     BlockidMagic, BlockidProbe, BlockidUUID, Endianness, 
     FilesystemResults, FsType, ProbeResult, UsageType, 
-    util::{decode_utf16_from, is_power_2, UtfError},
+    util::{decode_utf16_lossy_from, is_power_2, UtfError},
 };
 
 #[derive(Debug)]
@@ -35,10 +35,10 @@ pub enum NtfsError {
 impl fmt::Display for NtfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NtfsError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            NtfsError::NtfsHeaderError(e) => write!(f, "NTFS Header Error: {}", e),
-            NtfsError::UnknownFilesystem(e) => write!(f, "Not an NTFS superblock: {}", e),
-            NtfsError::UtfError(e) => write!(f, "UTF Error: {}", e),
+            NtfsError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            NtfsError::NtfsHeaderError(e) => write!(f, "NTFS Header Error: {e}"),
+            NtfsError::UnknownFilesystem(e) => write!(f, "Not an NTFS superblock: {e}"),
+            NtfsError::UtfError(e) => write!(f, "UTF Error: {e}"),
         }
     }
 }
@@ -158,7 +158,7 @@ fn check_ntfs(
 {    
     let sector_size = u64::from(ns.sector_size);
 
-    if sector_size < 256 || sector_size > 4096 || !is_power_2(sector_size) {
+    if !(256..=4096).contains(&sector_size) || !is_power_2(sector_size) {
         return Err(NtfsError::NtfsHeaderError("Sector size is wrong"));
     }
 
@@ -177,15 +177,14 @@ fn check_ntfs(
     || u16::from(ns.sectors) != 0
     || u16::from(ns.sectors_per_fat) != 0
     || u32::from(ns.large_sectors) != 0
-    || u8::from(ns.fats) != 0 {
+    || ns.fats != 0 {
         return Err(NtfsError::NtfsHeaderError("Unused fields must be zero"));
     }
 
     if (ns.clusters_per_mft_record as u8) < 0xe1
-    || (ns.clusters_per_mft_record as u8) > 0xf7 {
-        if matches!(ns.clusters_per_mft_record, 1 | 2 | 4 | 8 | 16 | 32 | 64) {
-            return Err(NtfsError::NtfsHeaderError("wrong value: clusters_per_mft_record"))
-        }
+    || (ns.clusters_per_mft_record as u8) > 0xf7 
+    && matches!(ns.clusters_per_mft_record, 1 | 2 | 4 | 8 | 16 | 32 | 64) {
+        return Err(NtfsError::NtfsHeaderError("wrong value: clusters_per_mft_record"));
     }
 
     return Ok((sector_size, sectors_per_cluster));
@@ -203,7 +202,7 @@ fn find_label<R: Read+Seek>(
         ns.clusters_per_mft_record as u64 * sectors_per_cluster * sector_size
     } else {
         let mft_record_size_shift = 0 - ns.clusters_per_mft_record;
-        if mft_record_size_shift < 0 || mft_record_size_shift >= 31 {
+        if !(0..31).contains(&mft_record_size_shift) {
             return Err(NtfsError::NtfsHeaderError("error 178"));
         }
         1 << mft_record_size_shift
@@ -266,7 +265,7 @@ fn find_label<R: Read+Seek>(
             if attr_off as u64 + val_off as u64 + val_len <= mft_record_size {
                 let val = &attr_bytes[val_off..val_off + val_len as usize];
                 
-                if val.len() == 0 {
+                if val.is_empty() {
                     return Ok(
                         None
                     );
@@ -274,7 +273,7 @@ fn find_label<R: Read+Seek>(
 
                 return Ok(
                     Some(
-                        decode_utf16_from(val, Endianness::Little)?
+                        decode_utf16_lossy_from(val, Endianness::Little)
                         .to_string()
                     )
                 );

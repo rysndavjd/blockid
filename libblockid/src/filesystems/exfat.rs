@@ -1,5 +1,5 @@
 use core::fmt::{self, Debug};
-use alloc::{vec::Vec, string::{String, FromUtf16Error}};
+use alloc::string::String;
 
 #[cfg(feature = "std")]
 use std::{io::{Error as IoError, Read, Seek}};
@@ -13,10 +13,12 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
 use rustix::fs::makedev;
 
 use crate::{
-    probe_get_magic, from_file, read_vec_at, read_exact_at,
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, ProbeResult,
-    FilesystemResults, FsType, UsageType, checksum::CsumAlgorium, BlockidVersion,
-    filesystems::{volume_id::VolumeId32, FsError, vfat::VFAT_ID_INFO}
+    checksum::CsumAlgorium, filesystems::{vfat::VFAT_ID_INFO, 
+    volume_id::VolumeId32, FsError}, from_file, probe_get_magic, 
+    read_exact_at, read_vec_at, util::{decode_utf16_lossy_from, UtfError}, 
+    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
+    BlockidVersion, FilesystemResults, FsType, ProbeResult, UsageType,
+    Endianness,
 };
 
 #[derive(Debug)]
@@ -24,7 +26,7 @@ pub enum ExFatError {
     IoError(IoError),
     UnknownFilesystem(&'static str),
     ExfatHeaderError(&'static str),
-    UtfError(FromUtf16Error),
+    UtfError(UtfError),
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
@@ -34,10 +36,10 @@ pub enum ExFatError {
 impl fmt::Display for ExFatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExFatError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            ExFatError::ExfatHeaderError(e) => write!(f, "Not an Exfat superblock: {}", e),
-            ExFatError::UnknownFilesystem(e) => write!(f, "Exfat header error: {}", e),
-            ExFatError::UtfError(e) => write!(f, "Unable to convert exfat utf16 to utf8: {}", e),
+            ExFatError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            ExFatError::ExfatHeaderError(e) => write!(f, "Not an Exfat superblock: {e}"),
+            ExFatError::UnknownFilesystem(e) => write!(f, "Exfat header error: {e}"),
+            ExFatError::UtfError(e) => write!(f, "Unable to get UTF-16 string: {e}"),
             ExFatError::ChecksumError{expected, got} => write!(f, "Exfat Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\""),
         }
     }
@@ -61,8 +63,8 @@ impl From<IoError> for ExFatError {
     }
 }
 
-impl From<FromUtf16Error> for ExFatError {
-    fn from(err: FromUtf16Error) -> Self {
+impl From<UtfError> for ExFatError {
+    fn from(err: UtfError) -> Self {
         ExFatError::UtfError(err)
     }
 }
@@ -183,19 +185,6 @@ struct ExfatEntryLabel {
     reserved: [u8; 8],
 }
 
-impl ExfatEntryLabel {
-    fn get_label_utf8(&self) -> Result<String, ExFatError> {
-        let utf16_units: Vec<u16> = self.name
-            .chunks_exact(2)
-            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
-            .collect();
-
-        let utf16_units = &utf16_units[..self.length as usize];
-
-        Ok(String::from_utf16(utf16_units)?)
-    }
-}
-
 const EXFAT_FIRST_DATA_CLUSTER: u32 = 2;
 const EXFAT_LAST_DATA_CLUSTER: u32 = 0x0FFFFFF6;
 const EXFAT_ENTRY_SIZE: usize = 32;
@@ -216,13 +205,13 @@ pub fn get_exfatcsum(
 
     let mut checksum: u32 = 0;
 
-    for i in 0..n_bytes {
+    for (i, byte) in sectors.iter().enumerate().take(n_bytes) {
         if i == 106 || i == 107 || i == 112 {
             continue;
         }
 
-        checksum = ((checksum >> 1) | (checksum << 31))
-            .wrapping_add(sectors[i] as u32);
+        checksum = checksum.rotate_right(1)
+            .wrapping_add(*byte as u32);
     }
 
     return checksum;
@@ -365,13 +354,14 @@ fn find_label<R: Read+Seek>(
             return Ok(None);
         }
         if entry.label_type == EXFAT_ENTRY_LABEL {
-            return Ok(Some(entry.get_label_utf8()?));
+            let label = decode_utf16_lossy_from(&entry.name, Endianness::Little);
+            return Ok(Some(label.to_string()));
         }
 
         offset += EXFAT_ENTRY_SIZE as u64;
 
 
-        if sb.cluster_size() != 0 && (offset % sb.cluster_size() as u64) == 0 {
+        if sb.cluster_size() != 0 && offset.is_multiple_of(sb.cluster_size() as u64) {
             cluster = sb.next_cluster(file, cluster)?;
             if cluster < EXFAT_FIRST_DATA_CLUSTER {
                 return Ok(None);
@@ -402,7 +392,7 @@ pub fn probe_exfat(
                 FilesystemResults { 
                     fs_type: Some(FsType::Exfat), 
                     sec_type: None, 
-                    label: label, 
+                    label, 
                     fs_uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(sb.volume_serial))), 
                     log_uuid: None, 
                     ext_journal: None, 

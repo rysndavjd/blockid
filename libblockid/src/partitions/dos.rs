@@ -35,9 +35,9 @@ pub enum DosPTError {
 impl fmt::Display for DosPTError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DosPTError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            DosPTError::UnknownPartitionTable(e) => write!(f, "Not an Dos table superblock: {}", e),
-            DosPTError::DosPTHeaderError(e) => write!(f, "Dos table header error: {}", e),
+            DosPTError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            DosPTError::UnknownPartitionTable(e) => write!(f, "Not an Dos table superblock: {e}"),
+            DosPTError::DosPTHeaderError(e) => write!(f, "Dos table header error: {e}"),
         }
     }
 }

@@ -7,6 +7,7 @@ repository = "https://github.com/rysndavjd/blockid"
 keywords = ["partition", "filesystem", "superblock", "no_std"]
 categories = ["filesystem"]
 license = "MIT OR Apache-2.0"
+build = "build.rs"
 
 [features]
 default = ["std"]
@@ -20,8 +21,3 @@ uuid = { version = "1.16.0", features = ["zerocopy"] }
 linux-raw-sys = { version = "0.10.0", default-features = false, features = ["ioctl"] }
 rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc"] }
 widestring = { version = "1.2.0", default-features = false, features = ["alloc"] }
-
-[toolchain]
-channel = "stable"
-components = ["rustc", "rust-std", "cargo", "rust-src", "rustc-dev", "llvm-tools"]
-profile = "minimal"

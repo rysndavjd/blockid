@@ -12,8 +12,8 @@ pub enum UtfError {
 impl fmt::Display for UtfError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UtfError::Utf8Error(e) => write!(f, "UTF-8 Error: {}", e),
-            UtfError::Utf16Error(e) => write!(f, "UTF-16 Error: {}", e),
+            UtfError::Utf8Error(e) => write!(f, "UTF-8 Error: {e}"),
+            UtfError::Utf16Error(e) => write!(f, "UTF-16 Error: {e}"),
         }
     }
 }
@@ -30,7 +30,7 @@ impl From<Utf16Error> for UtfError {
     }
 }
 
-pub fn decode_utf16_from(bytes: &[u8], endian: Endianness) -> Result<Utf16String, UtfError> {
+pub fn decode_utf16_lossy_from(bytes: &[u8], endian: Endianness) -> Utf16String {
     let data: Vec<u16> = bytes
         .chunks(2)
         .filter_map(|chunk| {
@@ -45,7 +45,13 @@ pub fn decode_utf16_from(bytes: &[u8], endian: Endianness) -> Result<Utf16String
         })
         .collect();
 
-    return Ok(Utf16String::from_vec(data)?);
+    return Utf16String::from_slice_lossy(&data).into();
+}
+
+pub fn decode_utf8_lossy_from(bytes: &[u8]) -> String {
+    return String::from_utf8_lossy(bytes)
+        .trim_end_matches('\0')
+        .to_string();
 }
 
 pub fn is_power_2(num: u64) -> bool {

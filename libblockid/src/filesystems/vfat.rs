@@ -16,7 +16,8 @@ use crate::{
     probe_get_magic, from_file, read_vec_at,
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
     ProbeResult, FilesystemResults, FsSecType, FsType, UsageType,
-    filesystems::{volume_id::VolumeId32, FsError}, util::is_power_2,
+    filesystems::{volume_id::VolumeId32, FsError}, util::{is_power_2, 
+    decode_utf8_lossy_from},
 };
 
 #[derive(Debug)]
@@ -29,9 +30,9 @@ pub enum FatError {
 impl fmt::Display for FatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FatError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            FatError::FatHeaderError(e) => write!(f, "Fat Header Error: {}", e),
-            FatError::UnknownFilesystem(e) => write!(f, "Not an Fat superblock: {}", e),
+            FatError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            FatError::FatHeaderError(e) => write!(f, "Fat Header Error: {e}"),
+            FatError::UnknownFilesystem(e) => write!(f, "Not an Fat superblock: {e}"),
         }
     }
 }
@@ -270,12 +271,12 @@ pub fn get_cluster_count (
     ) -> u32
 {
     let sect_count: u32 = if ms.ms_sectors == 0 {
-        ms.ms_total_sect.into()
+        u32::from(ms.ms_total_sect)
     } else {
-        ms.ms_sectors.into()
+        u32::from(ms.ms_sectors)
     };
 
-    let sector_size: u32 = ms.ms_sector_size.into();
+    let sector_size: u32 = u32::from(ms.ms_sector_size);
     let cluster_count: u32 = (sect_count - (u32::from(ms.ms_reserved) + 
         get_fat_size(ms, vs) + ((u32::from(ms.ms_dir_entries) * 32) + 
         (sector_size - 1) / sector_size))) / ms.ms_cluster_size as u32;
@@ -288,9 +289,9 @@ pub fn get_sect_count (
     ) -> u32
 {
     let sect_count: u32 = if ms.ms_sectors == 0 {
-        ms.ms_total_sect.into()
+        u32::from(ms.ms_total_sect)
     } else {
-        ms.ms_sectors.into()
+        u32::from(ms.ms_sectors)
     };
 
     return sect_count;
@@ -365,7 +366,10 @@ pub fn probe_is_vfat(
     let ms: MsDosSuperBlock = from_file(&mut probe.file, probe.offset)?;
     let vs: VFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
 
-    let mag: BlockidMagic = probe_get_magic(&mut probe.file, &VFAT_ID_INFO)?;
+    let mag: BlockidMagic = match probe_get_magic(&mut probe.file, &VFAT_ID_INFO)? {
+        Some(t) => t,
+        None => return Err(FatError::UnknownFilesystem("Invalid magic sig"))
+    };
     
     valid_fat(ms, vs, mag)?;
 
@@ -401,7 +405,7 @@ pub fn search_fat_label<R: Read+Seek>(
             if label[0] == 0x05 {
                 label[0] = 0xE5;
             }
-            return Ok(Some(String::from_utf8_lossy(&label).to_string()));
+            return Ok(Some(decode_utf8_lossy_from(&label)));
         }
     }
 

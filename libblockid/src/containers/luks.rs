@@ -38,12 +38,12 @@ pub enum LuksError {
 impl fmt::Display for LuksError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LuksError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            LuksError::UuidConversionError(e) => write!(f, "Converting uuid from disk failed: {}", e),
-            LuksError::UTF8ErrorError(e) => write!(f, "UTF-8 error: {}", e),
-            LuksError::LuksHeaderError(e) => write!(f, "Luks Header Error: {}", e),
-            LuksError::UnknownFilesystem(e) => write!(f, "Not an LUKS superblock: {}", e),
-            LuksError::NixError(e) => write!(f, "*Nix operation failed: {}", e),
+            LuksError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            LuksError::UuidConversionError(e) => write!(f, "Converting uuid from disk failed: {e}"),
+            LuksError::UTF8ErrorError(e) => write!(f, "UTF-8 error: {e}"),
+            LuksError::LuksHeaderError(e) => write!(f, "Luks Header Error: {e}"),
+            LuksError::UnknownFilesystem(e) => write!(f, "Not an LUKS superblock: {e}"),
+            LuksError::NixError(e) => write!(f, "*Nix operation failed: {e}"),
         }
     }
 }
@@ -161,6 +161,7 @@ impl Luks1Header {
             self
         ) -> Result<Uuid, LuksError>
     {
+        // This is janky
         let uuid_str = str::from_utf8(&self.uuid)?;
         let uuid = Uuid::from_str(&uuid_str.trim_end_matches('\0'))?;
 

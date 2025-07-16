@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     filesystems::FsError, from_file, read_exact_at, BlockidError, BlockidIdinfo, 
     BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, Endianness, 
-    FilesystemResults, FsType, ProbeResult, UsageType
+    FilesystemResults, FsType, ProbeResult, UsageType, util::decode_utf8_lossy_from
 };
 
 #[derive(Debug)]
@@ -26,9 +26,9 @@ pub enum SwapError {
 impl fmt::Display for SwapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SwapError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            SwapError::SwapHeaderError(e) => write!(f, "Swap header error: {}", e),
-            SwapError::UnknownFilesystem(e) => write!(f, "Not an Swap superblock: {}", e),
+            SwapError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            SwapError::SwapHeaderError(e) => write!(f, "Swap header error: {e}"),
+            SwapError::UnknownFilesystem(e) => write!(f, "Not an Swap superblock: {e}"),
         }
     }
 }
@@ -345,7 +345,7 @@ pub fn probe_swap_v1(
         let uuid = Uuid::from_bytes(header.uuid);
 
         let label: Option<String> = if header.volume[0] != 0 {
-            Some(String::from_utf8_lossy(&header.volume).trim_end_matches('\0').to_string())
+            Some(decode_utf8_lossy_from(&header.volume))
         } else {
             None
         };
@@ -354,7 +354,7 @@ pub fn probe_swap_v1(
                 FilesystemResults { 
                     fs_type: Some(FsType::LinuxSwap), 
                     sec_type: None, 
-                    label: label, 
+                    label, 
                     fs_uuid: Some(BlockidUUID::Uuid(uuid)), 
                     log_uuid: None, 
                     ext_journal: None, 

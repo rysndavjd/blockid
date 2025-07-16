@@ -19,7 +19,7 @@ use crate::{
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe,
     BlockidUUID, BlockidVersion, FsType, ProbeResult, UsageType,
     checksum::{get_crc32c, verify_crc32c, CsumAlgorium},
-    filesystems::FsError
+    filesystems::FsError, util::decode_utf8_lossy_from
 };
 
 /*
@@ -40,9 +40,9 @@ pub enum ExtError {
 impl fmt::Display for ExtError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExtError::IoError(e) => write!(f, "I/O operation failed: {}", e),
-            ExtError::ExtFeatureError(e) => write!(f, "{}", e),
-            ExtError::UnknownFilesystem(e) => write!(f, "{}", e),
+            ExtError::IoError(e) => write!(f, "I/O operation failed: {e}"),
+            ExtError::ExtFeatureError(e) => write!(f, "{e}"),
+            ExtError::UnknownFilesystem(e) => write!(f, "{e}"),
             ExtError::ChecksumError{expected, got} => write!(f, "Crc32c Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\""),
         }
     }
@@ -320,15 +320,15 @@ bitflags! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct ExtCreator(U32<LittleEndian>);
 
-impl ToString for ExtCreator {
-    fn to_string(&self) -> String {
+impl fmt::Display for ExtCreator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match u32::from(self.0) {
-            0 => String::from("Linux"),
-            1 => String::from("Hurd"),
-            2 => String::from("Masix"),
-            3 => String::from("FreeBSD"),
-            4 => String::from("Lites"),
-            _ => String::from("Unknown"),
+            0 => write!(f, "Linux"),
+            1 => write!(f, "Hurd"),
+            2 => write!(f, "Masix"),
+            3 => write!(f, "FreeBSD"),
+            4 => write!(f, "Lites"),
+            _ => write!(f, "Unknown"),
         }
     }
 }
@@ -360,9 +360,6 @@ const EXT3_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat =
         ExtFeatureRoCompat::EXT2_FEATURE_RO_COMPAT_BTREE_DIR.bits())
     );
 
-// u32::from_le() == le32_to_cpu()
-// .to_le() == cpu_to_le32()
-
 /*
  * reads superblock and returns:
  *	fc = feature_compat
@@ -388,6 +385,7 @@ fn ext_checksum(
     return Ok(());
 }
 
+#[allow(clippy::type_complexity)]
 fn ext_get_info(
         es: Ext2SuperBlock,
     ) -> Result<(Option<String>, BlockidUUID, Option<BlockidUUID>, BlockidVersion, u64, u64, u64, String), ExtError>
@@ -398,7 +396,7 @@ fn ext_get_info(
     //let frc = es.s_feature_ro_compat;
 
     let label: Option<String> = if es.s_volume_name[0] != 0 {
-        Some(String::from_utf8_lossy(&es.s_volume_name).to_string())
+        Some(decode_utf8_lossy_from(&es.s_volume_name))
     } else {
         None
     };
