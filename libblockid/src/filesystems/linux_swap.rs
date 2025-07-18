@@ -1,5 +1,5 @@
 use core::fmt::{self, Debug};
-use alloc::string::{String, ToString};
+use alloc::string::String;
 
 #[cfg(feature = "std")]
 use std::io::{Error as IoError};

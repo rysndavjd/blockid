@@ -3,8 +3,9 @@ use libblockid::{partitions::gpt::probe_gpt_pt, *};
 fn test() -> Result<(), Box<dyn std::error::Error>> {
     //let file = File::open("/dev/sdb")?;
 
-    let mut result = BlockidProbe::probe_from_filename("/dev/sdb", ProbeFlags::empty(), ProbeFilter::empty(), 0)?;
-
+    let mut result = BlockidProbe::probe_from_filename("/dev/sdb", ProbeFlags::empty(), ProbeFilter::empty(), 0)
+        .unwrap();
+    
     //result.probe_values()?;
     match probe_gpt_pt(&mut result, BlockidMagic::EMPTY_MAGIC) {
         Ok(_) => println!("Ok"),

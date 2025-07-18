@@ -281,7 +281,6 @@ bitflags! {
     pub struct MbrAttributes: u8 {
         const ACTIVE = 0x80;
         const INACTIVE = 0x00;
-
     }
 }
 
@@ -364,7 +363,7 @@ fn parse_dos_extended<R: Read+Seek>(
             part_uuid: None,
             name: None,
             entry_type: Some(PartEntryType::Byte(data_entry.sys_ind.as_byte())),
-            entry_attributes: Some(PartEntryAttributes::Mbr(data_entry.flags())),
+            entry_attributes: Some(PartEntryAttributes::Mbr(data_entry.flags().bits())),
         });
 
         let next_ebr = ex_pt.partition_entries[1];
@@ -420,7 +419,7 @@ pub fn probe_dos_pt(
                 part_uuid: None,
                 name: None,
                 entry_type: Some(PartEntryType::Byte(entry.sys_ind.as_byte())),
-                entry_attributes: Some(PartEntryAttributes::Mbr(entry.flags())),
+                entry_attributes: Some(PartEntryAttributes::Mbr(entry.flags().bits())),
             })
         }
     ).collect();
