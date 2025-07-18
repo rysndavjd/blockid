@@ -1,4 +1,5 @@
 use core::{str::Utf8Error, fmt::{self, Debug}};
+use alloc::{vec::Vec, string::{String, ToString}};
 
 use widestring::{utfstring::Utf16String, error::Utf16Error};
 use crate::Endianness;
@@ -35,10 +36,15 @@ pub fn decode_utf16_lossy_from(bytes: &[u8], endian: Endianness) -> Utf16String 
         .chunks(2)
         .filter_map(|chunk| {
             if chunk.len() == 2 {
-                Some(match endian {
+                let val = match endian {
                     Endianness::Big => u16::from_be_bytes([chunk[0], chunk[1]]),
                     Endianness::Little => u16::from_le_bytes([chunk[0], chunk[1]]),
-                })
+                };
+                if val == 0 {
+                    None
+                } else {
+                    Some(val)
+                }
             } else {
                 None
             }

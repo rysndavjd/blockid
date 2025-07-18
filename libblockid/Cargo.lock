@@ -62,6 +62,7 @@ dependencies = [
  "bitflags",
  "crc",
  "linux-raw-sys 0.10.0",
+ "log",
  "rustix",
  "uuid",
  "widestring",

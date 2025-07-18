@@ -19,5 +19,6 @@ crc = "3.3.0"
 zerocopy = { version = "0.8.26", default-features = false, features = ["derive", "alloc"] }
 uuid = { version = "1.16.0", features = ["zerocopy"] }
 linux-raw-sys = { version = "0.10.0", default-features = false, features = ["ioctl"] }
-rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc"] }
+rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc", "stdio"] }
 widestring = { version = "1.2.0", default-features = false, features = ["alloc"] }
+log = "0.4.27"

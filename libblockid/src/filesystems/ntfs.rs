@@ -1,4 +1,5 @@
 use core::{fmt::{self, Debug}, mem::size_of};
+use alloc::string::String;
 
 #[cfg(feature = "std")]
 use std::io::{Error as IoError, Seek, Read, ErrorKind};

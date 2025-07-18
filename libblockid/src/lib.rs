@@ -36,7 +36,8 @@ use bitflags::bitflags;
 use uuid::Uuid;
 use zerocopy::FromBytes;
 use rustix::fs::{fstat, ioctl_blksszget, Dev, FileType, Mode};
-use crate::ioctl::{ioctl_blkgetsize64, ioctl_ioc_opal_get_status, OpalStatusFlags};
+use crate::{ioctl::{ioctl_blkgetsize64, ioctl_ioc_opal_get_status, 
+    OpalStatusFlags}};
 
 use crate::{
     containers::{
@@ -169,7 +170,7 @@ impl BlockidProbe {
                         }
                     },
                     Err(e) => {
-                        eprintln!("Wrong Magic\nInfo: \"{:?}\",\nError: {:?}", info.2, e);
+                        log::error!("Wrong Magic\nInfo: \"{:?}\",\nError: {:?}", info.2, e);
                         continue
                     },
                 };
@@ -177,7 +178,7 @@ impl BlockidProbe {
                 if result.is_ok() {
                     return Ok(());
                 } else {
-                    eprintln!("Wrong FS: {:?}", result.unwrap_err());
+                    log::error!("Wrong FS: {:?}", result.unwrap_err());
                 }
             }
             return Err(BlockidError::ProbeError("All probe functions exhasted"));
@@ -379,7 +380,8 @@ pub enum PartEntryType {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartEntryAttributes {
-    Mbr(MbrAttributes),
+    Mbr(u8),
+    Gpt(u64)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
