@@ -1,11 +1,4 @@
-use core::fmt::{self, Debug};
-use alloc::string::{String, ToString};
-
-#[cfg(feature = "std")]
 use std::io::{Error as IoError};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
@@ -37,8 +30,8 @@ pub enum ExtError {
     }
 }
 
-impl fmt::Display for ExtError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ExtError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExtError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             ExtError::ExtFeatureError(e) => write!(f, "{e}"),
@@ -320,8 +313,8 @@ bitflags! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct ExtCreator(U32<LittleEndian>);
 
-impl fmt::Display for ExtCreator {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ExtCreator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match u32::from(self.0) {
             0 => write!(f, "Linux"),
             1 => write!(f, "Hurd"),

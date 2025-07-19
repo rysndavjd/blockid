@@ -1,11 +1,4 @@
-use core::fmt::{self, Debug};
-use alloc::string::String;
-
-#[cfg(feature = "std")]
 use std::io::{Error as IoError};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError};
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, Immutable};
 use uuid::Uuid;
@@ -23,8 +16,8 @@ pub enum SwapError {
     UnknownFilesystem(&'static str),
 }
 
-impl fmt::Display for SwapError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for SwapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SwapError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             SwapError::SwapHeaderError(e) => write!(f, "Swap header error: {e}"),

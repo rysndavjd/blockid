@@ -1,21 +1,11 @@
-use core::fmt;
-use alloc::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::io::{Error as IoError, ErrorKind};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, ErrorKind};
+use std::io::{Error as IoError, ErrorKind, Seek, Read};
 
 use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, 
-    FromBytes, Immutable, IntoBytes, Unaligned};
+    FromBytes, Immutable, IntoBytes, Unaligned, KnownLayout};
 use uuid::Uuid;
 
 use crate::{
-    checksum::{verify_crc32_iso_hdlc}, partitions::PtError, read_vec_at, 
-    util::decode_utf16_lossy_from, BlockidError, BlockidIdinfo, BlockidMagic, 
-    BlockidProbe, BlockidUUID, PartEntryAttributes, PartEntryType, PartTableResults, 
-    PartitionResults, ProbeResult, PtType, UsageType, Endianness
+    checksum::verify_crc32_iso_hdlc, partitions::{dos::{DosTable, MbrPartitionType}, PtError}, read_sector_at, read_vec_at, util::decode_utf16_lossy_from, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, Endianness, PartEntryAttributes, PartEntryType, PartTableResults, PartitionResults, ProbeFlags, ProbeResult, PtType, UsageType
 };
 
 #[derive(Debug)]
@@ -25,8 +15,8 @@ pub enum GptPtError {
     GptPTHeaderError(&'static str),
 }
 
-impl fmt::Display for GptPtError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for GptPtError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GptPtError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             GptPtError::UnknownPartitionTable(e) => write!(f, "Not an GPT table superblock: {e}"),
@@ -61,6 +51,24 @@ pub const GPT_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
         .map_err(BlockidError::from)
     },
     magics: None
+};
+
+pub const PMBR_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
+    name: Some("pmbr"),
+    usage: Some(UsageType::PartitionTable),
+    minsz: None,
+    probe_fn: |probe, magic| {
+        probe_pmbr_pt(probe, magic)
+        .map_err(PtError::from)
+        .map_err(BlockidError::from)
+    },
+    magics: Some(&[
+        BlockidMagic {
+            magic: b"\x55\xAA",
+            len: 2,
+            b_offset: 510,
+        }
+    ])
 };
 
 #[repr(C)]
@@ -103,7 +111,7 @@ impl From<EfiGuid> for Uuid {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 pub struct GptTable {
     pub signature: U64<LittleEndian>,
     pub revision: U32<LittleEndian>,
@@ -126,7 +134,7 @@ pub struct GptTable {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 pub struct GptEntry {
     partition_type_guid: EfiGuid,
     unique_partition_guid: EfiGuid,
@@ -142,8 +150,8 @@ impl GptTable {
     const HEADER_SIGNATURE_STR: &[u8] = b"EFI PART";
 }
 
-fn get_lba_buffer(probe: &mut BlockidProbe, lba: u64, size: usize) -> Result<Vec<u8>, IoError> {
-    return Ok(read_vec_at(&mut probe.file, lba * probe.sector_size, size)?)
+fn get_lba_buffer<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, offset: u64) -> Result<Vec<u8>, IoError> {
+    return Ok(read_vec_at(file, (lba * ssz) + offset, ssz as usize)?)
 }
 
 fn last_lba(probe: &mut BlockidProbe) -> Option<u64> {
@@ -157,16 +165,29 @@ fn last_lba(probe: &mut BlockidProbe) -> Option<u64> {
     return Some((sz / ssz) - 1);
 }
 
-fn is_pmbr_valid(probe: &mut BlockidProbe) -> bool {
-    false
+fn is_pmbr_valid(probe: &mut BlockidProbe) -> Result<bool, GptPtError> {
+    if probe.flags.contains(ProbeFlags::FORCE_GPT_PMBR) {
+        return Ok(true);
+    }
+
+    let data = read_sector_at(&mut probe.file, probe.offset / 512)?;
+    
+    let mbr = DosTable::ref_from_bytes(&data)
+        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to MBR partition table"))?;
+
+    for partition in mbr.partition_entries {
+        if partition.sys_ind == MbrPartitionType::MBR_GPT_PARTITION {
+            return Ok(true);
+        }
+    }
+
+    return Ok(false);
 }
 
-fn get_gpt_header(probe: &mut BlockidProbe, lba: u64, last_lba: u64) -> Result<(),GptPtError>{
-    let ssz = probe.sector_size;
-
-    let raw = get_lba_buffer(probe, lba, ssz as usize)?;
+fn get_gpt_header<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, last_lba: u64, offset: u64) -> Result<ProbeResult, GptPtError>{
+    let raw = get_lba_buffer(file, ssz, lba, offset)?;
     
-    let header: GptTable = GptTable::read_from_bytes(&raw[..92])
+    let header = GptTable::ref_from_bytes(&raw[..92])
         .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to GPT partition table"))?;
 
     if u64::from(header.signature) != GptTable::HEADER_SIGNATURE {
@@ -211,7 +232,7 @@ fn get_gpt_header(probe: &mut BlockidProbe, lba: u64, last_lba: u64) -> Result<(
         return Err(GptPtError::GptPTHeaderError("GPT entries undefined"));
     }
 
-    let entry_buffers: &[u8] = &get_lba_buffer(probe, u64::from(header.partition_entries_lba), esz as usize)?;
+    let entry_buffers: &[u8] = &get_lba_buffer(file, u64::from(header.partition_entries_lba), esz, offset)?;
     let count = entry_buffers.len() / size_of::<GptEntry>();
     
     if count as u32 != u32::from(header.num_partition_entries) {
@@ -225,7 +246,7 @@ fn get_gpt_header(probe: &mut BlockidProbe, lba: u64, last_lba: u64) -> Result<(
             let start_off = (partno - 1) * 128;
             let end_off = partno * 128;
 
-            let entry = GptEntry::read_from_bytes(&entry_buffers[start_off..end_off]).ok()?;
+            let entry = GptEntry::ref_from_bytes(&entry_buffers[start_off..end_off]).ok()?;
 
             if entry.unique_partition_guid.is_zero() {
                 return None;
@@ -236,7 +257,7 @@ fn get_gpt_header(probe: &mut BlockidProbe, lba: u64, last_lba: u64) -> Result<(
         .filter_map(|(entry_no, entry)| {
             let start = u64::from(entry.starting_lba);
             let size = u64::from(entry.ending_lba) -
-            u64::from(entry.starting_lba) + 1;
+                u64::from(entry.starting_lba) + 1;
 
             if start < fu || start + size - 1 > lu {
                 return None;
@@ -262,10 +283,10 @@ fn get_gpt_header(probe: &mut BlockidProbe, lba: u64, last_lba: u64) -> Result<(
         })
     .collect();
 
-    probe.push_result(
+    return Ok(
         ProbeResult::PartTable(
             PartTableResults { 
-                offset: Some(probe.offset), 
+                offset: Some(offset), 
                 pt_type: Some(PtType::Gpt), 
                 pt_uuid: Some(BlockidUUID::Uuid(Uuid::from(header.disk_guid))), 
                 sbmagic: Some(GptTable::HEADER_SIGNATURE_STR), 
@@ -274,8 +295,6 @@ fn get_gpt_header(probe: &mut BlockidProbe, lba: u64, last_lba: u64) -> Result<(
             }
         )
     );
-    
-    return Ok(());
 }
 
 pub fn probe_gpt_pt(
@@ -288,7 +307,36 @@ pub fn probe_gpt_pt(
         None => return Err(GptPtError::GptPTHeaderError("Unable to get last lba"))
     };
 
-    get_gpt_header(probe, 1, lastlba)?;
+    let result = match get_gpt_header(&mut probe.file, probe.sector_size, 1, lastlba, probe.offset) {
+        Ok(t) => t,
+        Err(_) => {
+            get_gpt_header(&mut probe.file, probe.sector_size, lastlba, lastlba, probe.offset)?
+        }
+    };
+
+    probe.push_result(result);
 
     return Ok(());
+}
+
+pub fn probe_pmbr_pt(
+        probe: &mut BlockidProbe, 
+        _mag: BlockidMagic
+    ) -> Result<(), GptPtError> 
+{
+    let lastlba = match last_lba(probe) {
+        Some(t) => t,
+        None => return Err(GptPtError::GptPTHeaderError("Unable to get last lba"))
+    };
+
+    if !is_pmbr_valid(probe)? {
+        return Err(GptPtError::UnknownPartitionTable("PT does not contain PMBR"));
+    }
+    
+    if get_gpt_header(&mut probe.file, probe.sector_size, 1, lastlba, probe.offset).is_err() &&
+        get_gpt_header(&mut probe.file, probe.sector_size, lastlba, lastlba, probe.offset).is_err() {
+        return Ok(());
+    }
+
+    return Err(GptPtError::UnknownPartitionTable("Not a GPT+PMBR"));
 }

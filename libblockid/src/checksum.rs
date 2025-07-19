@@ -1,4 +1,3 @@
-use core::fmt;
 use crc::{Crc, CRC_32_ISO_HDLC, CRC_32_ISCSI};
 
 #[derive(Debug)]
@@ -9,8 +8,8 @@ pub enum CsumAlgorium {
     Ntfs(u32)
 }
 
-impl fmt::Display for CsumAlgorium {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for CsumAlgorium {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{checksum}"),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{checksum}"),
@@ -20,8 +19,8 @@ impl fmt::Display for CsumAlgorium {
     }
 }
 
-impl fmt::UpperHex for CsumAlgorium {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::UpperHex for CsumAlgorium {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{checksum:X}"),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{checksum:X}"),
@@ -31,8 +30,8 @@ impl fmt::UpperHex for CsumAlgorium {
     }
 }
 
-impl fmt::LowerHex for CsumAlgorium {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::LowerHex for CsumAlgorium {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CsumAlgorium::Crc32(checksum) => write!(f, "{checksum:x}"),
             CsumAlgorium::Crc32c(checksum) => write!(f, "{checksum:x}"),

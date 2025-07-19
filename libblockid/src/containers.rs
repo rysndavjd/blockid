@@ -3,17 +3,12 @@ pub mod luks;
 use core::fmt;
 use core::fmt::Debug;
 
-#[cfg(feature = "std")]
-use std::io::Error as IoError;
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::NoStdIoError as IoError;
-
 use crate::BlockidError;
 use crate::checksum::CsumAlgorium;
 
 #[derive(Debug)]
 pub enum ContError {
-    IoError(IoError),
+    IoError(std::io::Error),
     InvalidHeader(&'static str),
     UnknownContainer(&'static str),
     ChecksumError {
@@ -23,8 +18,8 @@ pub enum ContError {
     NixError(rustix::io::Errno),
 }
 
-impl fmt::Display for ContError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ContError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ContError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             ContError::InvalidHeader(e) => write!(f, "Invalid Header: {e}"),

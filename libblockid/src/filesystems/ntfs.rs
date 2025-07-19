@@ -1,11 +1,4 @@
-use core::{fmt::{self, Debug}, mem::size_of};
-use alloc::string::String;
-
-#[cfg(feature = "std")]
 use std::io::{Error as IoError, Seek, Read, ErrorKind};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, ErrorKind};
 
 use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, FromBytes, 
     Immutable, IntoBytes, Unaligned, KnownLayout};
@@ -33,8 +26,8 @@ pub enum NtfsError {
     */
 }
 
-impl fmt::Display for NtfsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for NtfsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NtfsError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             NtfsError::NtfsHeaderError(e) => write!(f, "NTFS Header Error: {e}"),

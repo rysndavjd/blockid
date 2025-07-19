@@ -1,41 +1,29 @@
 #![allow(clippy::needless_return)]
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(test)]
+mod tests;
 
 pub(crate) mod checksum;
 pub(crate) mod ioctl;
-#[cfg(not(feature = "std"))]
-pub mod nostd_io;
 mod util;
 
 pub mod containers;
 pub mod partitions;
 pub mod filesystems;
 
-extern crate alloc;
-
-use core::fmt;
-use core::fmt::Debug;
-use alloc::{vec, vec::Vec, string::String};
-
-#[cfg(feature = "std")]
 use std::{
+    fmt::{self, Debug},
     fs::File,
-    io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom},
+    io::{ErrorKind, Read, Seek, SeekFrom, BufReader},
     os::fd::AsFd,
-    path::Path,
+    path::{Path, PathBuf},
     io::Error as IoError,
 };
-
-#[cfg(not(feature = "std"))]
-use nostd_io::{File, NoStdIoError as IoError, SeekFrom, Seek, Read, ErrorKind};
-#[cfg(not(feature = "std"))]
-use rustix::{path::Arg, fd::AsFd};
 
 use bitflags::bitflags;
 use uuid::Uuid;
 use zerocopy::FromBytes;
-use rustix::fs::{fstat, ioctl_blksszget, Dev, FileType, Mode};
+use rustix::fs::{fstat, ioctl_blksszget, major, minor, Dev, FileType, Mode};
 use crate::{ioctl::{ioctl_blkgetsize64, ioctl_ioc_opal_get_status, 
     OpalStatusFlags}};
 
@@ -46,7 +34,8 @@ use crate::{
     }, 
     partitions::{
         PtError, 
-        dos::{MbrAttributes, DOS_PT_ID_INFO}
+        dos::DOS_PT_ID_INFO,
+        gpt::GPT_PT_ID_INFO
     },
     filesystems::{
         FsError,
@@ -61,6 +50,7 @@ use crate::{
 
 #[derive(Debug)]
 pub enum BlockidError {
+    ArgumentError(&'static str),
     ProbeError(&'static str),
     FsError(FsError),
     PtError(PtError),
@@ -72,6 +62,7 @@ pub enum BlockidError {
 impl fmt::Display for BlockidError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            BlockidError::ArgumentError(e) => write!(f, "Invalid Arguments given: {e}"),
             BlockidError::ProbeError(e) => write!(f, "Probe failed: {e}"),
             BlockidError::FsError(e) => write!(f, "Filesystem probe failed: {e}"),
             BlockidError::PtError(e) => write!(f, "Partition Table probe failed: {e}"),
@@ -82,7 +73,6 @@ impl fmt::Display for BlockidError {
     }
 }
 
-#[cfg(feature = "std")]
 impl std::error::Error for BlockidError {}
 
 impl From<IoError> for BlockidError {
@@ -102,6 +92,7 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS2, LUKS2_ID_INFO),
 
     (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_DOS, DOS_PT_ID_INFO),
+    (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_GPT, GPT_PT_ID_INFO),
 
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXFAT, EXFAT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT2, EXT2_ID_INFO),
@@ -139,7 +130,7 @@ impl BlockidProbe {
 
         Ok( Self { 
             file,
-            //buffer: buffer,
+            buffer: None,
             offset, 
             size, 
             #[cfg(target_arch = "aarch64")]
@@ -154,6 +145,13 @@ impl BlockidProbe {
             filter,
             values: None 
         })
+    }
+
+    // Need to figure out how to use buffering when available so this does nothing
+    pub fn enable_buffering(&mut self, capacity: usize) -> Result<(), BlockidError> {
+        let clone = self.file.try_clone()?;
+        self.buffer = Some(BufReader::with_capacity(capacity, clone));
+        return Ok(());
     }
 
     pub fn probe_values(
@@ -214,7 +212,7 @@ impl BlockidProbe {
         return Err(BlockidError::ProbeError("All probe filtered functions exhasted"));
     }
 
-    pub fn push_result(
+    pub(crate) fn push_result(
             &mut self,
             result: ProbeResult,
         ) 
@@ -224,7 +222,6 @@ impl BlockidProbe {
             .push(result)
     }
 
-    #[cfg(feature = "std")]
     pub fn probe_from_filename<P: AsRef<Path>>(
             filename: P,
             flags: ProbeFlags,
@@ -238,20 +235,53 @@ impl BlockidProbe {
 
         return Ok(probe);
     }
+
+    pub fn results(&self) -> Option<&[ProbeResult]> {
+        self.values.as_deref()
+    }
+
+    pub fn into_results(self) -> Option<Vec<ProbeResult>> {
+        self.values
+    }
+
+    #[inline]
+    pub fn devno(&self) -> Dev {
+        self.devno
+    }
     
-    #[cfg(not(feature = "std"))]
-    pub fn probe_from_filename<P: Arg>(
-            filename: P,
-            flags: ProbeFlags,
-            filter: ProbeFilter,
-            offset: u64,
-        ) -> Result<BlockidProbe, BlockidError>
-    {
-        let file = File::open(filename)?;
+    #[inline]
+    pub fn devno_maj(&self) -> u32 {
+        major(self.devno)
+    }
 
-        let probe = BlockidProbe::new(file, offset, flags, filter)?;
+    #[inline]
+    pub fn devno_min(&self) -> u32 {
+        minor(self.devno)
+    }
 
-        return Ok(probe);
+    #[inline]
+    pub fn disk_devno(&self) -> Dev {
+        self.disk_devno
+    }
+
+    #[inline]
+    pub fn disk_devno_maj(&self) -> u32 {
+        major(self.disk_devno)
+    }
+
+    #[inline]
+    pub fn disk_devno_min(&self) -> u32 {
+        minor(self.disk_devno)
+    }
+
+    #[inline]
+    pub fn is_block_device(&self) -> bool {
+        FileType::from_raw_mode(self.mode.as_raw_mode()).is_block_device()
+    }
+
+    #[inline]
+    pub fn is_regular_file(&self) -> bool {
+        FileType::from_raw_mode(self.mode.as_raw_mode()).is_file()
     }
 
     fn is_opal_locked(
@@ -274,25 +304,68 @@ impl BlockidProbe {
 
 #[derive(Debug)]
 pub struct BlockidProbe {
-    pub file: File,
-    //pub buffer: BufReader<File>, // Need to implement later when i get bufreader for my own file
-    pub offset: u64,
-    pub size: u64,
+    file: File,
+    buffer: Option<BufReader<File>>,
+    offset: u64,
+    size: u64,
     pub io_size: i64, 
 
-    pub devno: Dev,
-    pub disk_devno: Dev,
-    pub sector_size: u64,
-    pub mode: Mode,
+    devno: Dev,
+    disk_devno: Dev,
+    sector_size: u64,
+    mode: Mode,
     //pub zone_size: u64,
 
-    pub flags: ProbeFlags,
-    pub filter: ProbeFilter,
-    pub values: Option<Vec<ProbeResult>>
+    flags: ProbeFlags,
+    filter: ProbeFilter,
+    values: Option<Vec<ProbeResult>>
+}
+
+impl BlockidProbeBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_path<P: AsRef<Path>>(mut self, path: P) -> Self {
+        self.path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    pub fn with_offset(mut self, offset: u64) -> Self {
+        self.offset = offset;
+        self
+    }
+
+    pub fn with_flags(mut self, flags: ProbeFlags) -> Self {
+        self.flags = flags;
+        self
+    }
+
+    pub fn with_filter(mut self, filter: ProbeFilter) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    pub fn build(self) -> Result<BlockidProbe, BlockidError> {
+        let path = self.path.ok_or_else(|| {
+            BlockidError::ArgumentError("Path not set in BlockidProbeBuilder")
+        })?;
+
+        let file = File::open(&path)?;
+        BlockidProbe::new(file, self.offset, self.flags, self.filter)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct BlockidProbeBuilder {
+    path: Option<PathBuf>,
+    offset: u64,
+    flags: ProbeFlags,
+    filter: ProbeFilter,
 }
 
 bitflags!{
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ProbeFlags: u64 {
         const TINY_DEV = 1 << 0;
         const OPAL_CHECKED = 1 << 1;
@@ -300,7 +373,7 @@ bitflags!{
         const FORCE_GPT_PMBR = 1 << 3;
     }
 
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ProbeFilter: u64 {
         const SKIP_CONT = 1 << 0;
         const SKIP_PT = 1 << 1;
@@ -308,14 +381,15 @@ bitflags!{
         const SKIP_LUKS1 = 1 << 3;
         const SKIP_LUKS2 = 1 << 4;
         const SKIP_DOS = 1 << 5;
-        const SKIP_EXFAT = 1 << 6;
-        const SKIP_EXT2 = 1 << 7;
-        const SKIP_EXT3 = 1 << 8;
-        const SKIP_EXT4 = 1 << 9;
-        const SKIP_LINUX_SWAP_V0 = 1 << 10;
-        const SKIP_LINUX_SWAP_V1 = 1 << 11;
-        const SKIP_NTFS = 1 << 12;
-        const SKIP_VFAT = 1 << 13;
+        const SKIP_GPT = 1 << 6;
+        const SKIP_EXFAT = 1 << 7;
+        const SKIP_EXT2 = 1 << 8;
+        const SKIP_EXT3 = 1 << 9;
+        const SKIP_EXT4 = 1 << 10;
+        const SKIP_LINUX_SWAP_V0 = 1 << 11;
+        const SKIP_LINUX_SWAP_V1 = 1 << 12;
+        const SKIP_NTFS = 1 << 13;
+        const SKIP_VFAT = 1 << 14;
     }
 }
 
