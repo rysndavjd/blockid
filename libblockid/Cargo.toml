@@ -7,18 +7,16 @@ repository = "https://github.com/rysndavjd/blockid"
 keywords = ["partition", "filesystem", "superblock", "no_std"]
 categories = ["filesystem"]
 license = "MIT OR Apache-2.0"
-build = "build.rs"
 
 [features]
-default = ["std"]
-std = ["zerocopy/std", "bitflags/std", "rustix/std", "linux-raw-sys/std", "widestring/std"]
+default = []
 
 [dependencies]
-bitflags = { version = "2.9.1", default-features = false }
+bitflags = { version = "2.9.1", default-features = false, features = ["std"] }
 crc = "3.3.0"
-zerocopy = { version = "0.8.26", default-features = false, features = ["derive", "alloc"] }
-uuid = { version = "1.16.0", features = ["zerocopy"] }
-linux-raw-sys = { version = "0.10.0", default-features = false, features = ["ioctl"] }
-rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc", "stdio"] }
-widestring = { version = "1.2.0", default-features = false, features = ["alloc"] }
+zerocopy = { version = "0.8.26", default-features = false, features = ["derive", "alloc", "std"] }
+uuid = { version = "1.16.0", default-features = false, features = ["zerocopy", "std"] }
+linux-raw-sys = { version = "0.10.0", default-features = false, features = ["ioctl", "std"] }
+rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc", "stdio", "std"] }
+widestring = { version = "1.2.0", default-features = false, features = ["alloc", "std"] }
 log = "0.4.27"

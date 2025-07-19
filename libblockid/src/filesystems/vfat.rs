@@ -1,23 +1,12 @@
-use core::fmt::{self, Debug};
-use alloc::string::{String, ToString};
-
-#[cfg(feature = "std")]
-use std::io::{Error as IoError, Seek, Read, SeekFrom};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, SeekFrom};
+use std::io::{Error as IoError, Seek, Read, SeekFrom, ErrorKind};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U32, byteorder::U16, byteorder::LittleEndian,
-    transmute, Immutable};
+    transmute, Immutable, KnownLayout};
 
 use crate::{
-    probe_get_magic, from_file, read_vec_at,
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
-    ProbeResult, FilesystemResults, FsSecType, FsType, UsageType,
-    filesystems::{volume_id::VolumeId32, FsError}, util::{is_power_2, 
-    decode_utf8_lossy_from},
+    filesystems::{volume_id::VolumeId32, FsError}, from_file, probe_get_magic, read_exact_at, read_vec_at, util::{decode_utf8_lossy_from, is_power_2}, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, FilesystemResults, FsSecType, FsType, ProbeResult, UsageType
 };
 
 #[derive(Debug)]
@@ -27,8 +16,8 @@ pub enum FatError {
     UnknownFilesystem(&'static str),
 }
 
-impl fmt::Display for FatError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for FatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FatError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             FatError::FatHeaderError(e) => write!(f, "Fat Header Error: {e}"),
@@ -114,7 +103,7 @@ pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 };
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 pub struct VFatSuperBlock {
     pub vs_ignored: [u8; 3],
     pub vs_sysid: [u8; 8],
@@ -149,7 +138,7 @@ pub struct VFatSuperBlock {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 pub struct MsDosSuperBlock {
     /* DOS 2.0 BPB */
     pub ms_ignored: [u8; 3],
@@ -251,8 +240,8 @@ fn read_vfat_dir_entry<R: Read+Seek>(
 }
 
 pub fn get_fat_size (
-        ms: MsDosSuperBlock,
-        vs: VFatSuperBlock,
+        ms: &MsDosSuperBlock,
+        vs: &VFatSuperBlock,
     ) -> u32
 {   
     let num_fat: u32 = ms.ms_fats.into();
@@ -266,8 +255,8 @@ pub fn get_fat_size (
 }
 
 pub fn get_cluster_count (
-        ms: MsDosSuperBlock,
-        vs: VFatSuperBlock,
+        ms: &MsDosSuperBlock,
+        vs: &VFatSuperBlock,
     ) -> u32
 {
     let sect_count: u32 = if ms.ms_sectors == 0 {
@@ -285,7 +274,7 @@ pub fn get_cluster_count (
 }
 
 pub fn get_sect_count (
-        ms: MsDosSuperBlock,
+        ms: &MsDosSuperBlock,
     ) -> u32
 {
     let sect_count: u32 = if ms.ms_sectors == 0 {
@@ -298,9 +287,9 @@ pub fn get_sect_count (
 }
 
 pub fn valid_fat (
-        ms: MsDosSuperBlock,
-        vs: VFatSuperBlock,
-        mag: BlockidMagic,
+        ms: &MsDosSuperBlock,
+        vs: &VFatSuperBlock,
+        mag: &BlockidMagic,
     ) -> Result<FsSecType, FatError> 
 {    
     if mag.len <= 2 {
@@ -363,15 +352,19 @@ pub fn probe_is_vfat(
         probe: &mut BlockidProbe, 
     ) -> Result<(), FatError>
 {
-    let ms: MsDosSuperBlock = from_file(&mut probe.file, probe.offset)?;
-    let vs: VFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let buffer: [u8; 512] = read_exact_at(&mut probe.file, probe.offset)?;
+
+    let ms = MsDosSuperBlock::ref_from_bytes(&buffer)
+        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to MSDOS superblock"))?;
+    let vs = VFatSuperBlock::ref_from_bytes(&buffer)
+        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to VFAT superblock"))?;
 
     let mag: BlockidMagic = match probe_get_magic(&mut probe.file, &VFAT_ID_INFO)? {
         Some(t) => t,
         None => return Err(FatError::UnknownFilesystem("Invalid magic sig"))
     };
     
-    valid_fat(ms, vs, mag)?;
+    valid_fat(ms, vs, &mag)?;
 
     return Ok(());
 }
@@ -414,8 +407,8 @@ pub fn search_fat_label<R: Read+Seek>(
 
 fn probe_fat16<R: Read+Seek>(
         file: &mut R,
-        ms: MsDosSuperBlock,
-        vs: VFatSuperBlock,
+        ms: &MsDosSuperBlock,
+        vs: &VFatSuperBlock,
         fat_size: u32,
     ) -> Result<(Option<String>, VolumeId32), FatError>
 {   
@@ -436,8 +429,8 @@ fn probe_fat16<R: Read+Seek>(
 
 fn probe_fat32<R: Read+Seek>(
         file: &mut R,
-        ms: MsDosSuperBlock,
-        vs: VFatSuperBlock,
+        ms: &MsDosSuperBlock,
+        vs: &VFatSuperBlock,
         fat_size: u32,
     ) -> Result<(Option<String>, VolumeId32), FatError>
 {   
@@ -507,10 +500,14 @@ pub fn probe_vfat(
         mag: BlockidMagic,
     ) -> Result<(), FatError> 
 {
-    let ms: MsDosSuperBlock = from_file(&mut probe.file, 0)?;
-    let vs: VFatSuperBlock = from_file(&mut probe.file, 0)?;
+    let buffer: [u8; 512] = read_exact_at(&mut probe.file, probe.offset)?;
 
-    let sec_type = valid_fat(ms, vs, mag)?;
+    let ms = MsDosSuperBlock::ref_from_bytes(&buffer)
+        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to MSDOS superblock"))?;
+    let vs = VFatSuperBlock::ref_from_bytes(&buffer)
+        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to VFAT superblock"))?;
+
+    let sec_type = valid_fat(ms, vs, &mag)?;
 
     let fat_size = get_fat_size(ms, vs);
 

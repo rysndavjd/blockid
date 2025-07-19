@@ -5,42 +5,13 @@ pub mod ntfs;
 pub mod vfat;
 pub mod volume_id;
 
-use core::fmt;
-use core::fmt::Debug;
-
-#[cfg(feature = "std")]
-use std::io::Error as IoError;
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::NoStdIoError as IoError;
-
 use crate::util::UtfError;
 use crate::BlockidError;
 use crate::checksum::CsumAlgorium;
 
-/* Tags
-TYPE:           filesystem type
-SEC_TYPE:       Secondary filesystem type
-LABEL:          fs label
-LABEL_RAW:      Raw fs label
-UUID:           fs uuid
-UUID_RAW:       raw uuid
-UUID_SUB:       Sub uuid
-LOG_UUID:       external log uuid
-LOG_UUID_RAW:   external log uuid
-EXT_JOURNAL:    external journal uuid
-USAGE:          usage string 
-VERSION:        fs version
-SBMAGIC:        superblock magic string
-SBMAGIC_OFFSET: magic offset
-FSSIZE:         size of filesystem
-FSLASTBLOCK:    offset of last sector in superblock   
-FSBLOCKSIZE:    fs block size
-BLOCK_SIZE:     block size of phyical disk
-*/
-
 #[derive(Debug)]
 pub enum FsError {
-    IoError(IoError),
+    IoError(std::io::Error),
     InvalidHeader(&'static str),
     UnknownFilesystem(&'static str),
     UtfError(UtfError),
@@ -50,8 +21,8 @@ pub enum FsError {
     }
 }
 
-impl fmt::Display for FsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for FsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FsError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             FsError::InvalidHeader(e) => write!(f, "Invalid Header: {e}"),

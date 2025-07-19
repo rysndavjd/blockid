@@ -1,11 +1,4 @@
-use core::fmt::{self, Debug};
-use alloc::str::{Utf8Error, FromStr};
-
-#[cfg(feature = "std")]
-use std::{io::{Error as IoError, Read, Seek, ErrorKind}};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, ErrorKind};
+use std::{io::{Error as IoError, ErrorKind, Read, Seek}, str::FromStr};
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
@@ -13,9 +6,9 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
 use uuid::{Uuid};
 
 use crate::{
-    containers::ContError, from_file, BlockidError, BlockidIdinfo, 
-    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
-    ContainerResults, ProbeResult, UsageType, Endianness
+    containers::ContError, from_file, util::decode_utf8_from, BlockidError, 
+    BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
+    ContainerResults, Endianness, ProbeResult, UsageType, util::UtfError
 };
 
 /* 
@@ -28,19 +21,19 @@ use crate::{
 pub enum LuksError {
     IoError(IoError),
     UuidConversionError(uuid::Error),
-    UTF8ErrorError(Utf8Error),
+    UtfError(UtfError),
     LuksHeaderError(&'static str),
     UnknownFilesystem(&'static str),
     NixError(rustix::io::Errno),
 
 }
 
-impl fmt::Display for LuksError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for LuksError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LuksError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             LuksError::UuidConversionError(e) => write!(f, "Converting uuid from disk failed: {e}"),
-            LuksError::UTF8ErrorError(e) => write!(f, "UTF-8 error: {e}"),
+            LuksError::UtfError(e) => write!(f, "UTF-8 error: {e}"),
             LuksError::LuksHeaderError(e) => write!(f, "Luks Header Error: {e}"),
             LuksError::UnknownFilesystem(e) => write!(f, "Not an LUKS superblock: {e}"),
             LuksError::NixError(e) => write!(f, "*Nix operation failed: {e}"),
@@ -53,7 +46,7 @@ impl From<LuksError> for ContError {
         match err {
             LuksError::IoError(e) => ContError::IoError(e),
             LuksError::UuidConversionError(_) => ContError::InvalidHeader("Invalid string to convert to uuid"),
-            LuksError::UTF8ErrorError(_) => ContError::InvalidHeader("Invalid utf8 to convert to string"),
+            LuksError::UtfError(_) => ContError::InvalidHeader("Invalid utf8 to convert to string"),
             LuksError::LuksHeaderError(info) => ContError::InvalidHeader(info),
             LuksError::UnknownFilesystem(info) => ContError::UnknownContainer(info),
             LuksError::NixError(e) => ContError::NixError(e),
@@ -73,9 +66,9 @@ impl From<uuid::Error> for LuksError {
     }
 }
 
-impl From<Utf8Error> for LuksError {
-    fn from(err: Utf8Error) -> Self {
-        LuksError::UTF8ErrorError(err)
+impl From<UtfError> for LuksError {
+    fn from(err: UtfError) -> Self {
+        LuksError::UtfError(err)
     }
 }
 
@@ -157,17 +150,6 @@ pub struct Luks1Header {
 }
 
 impl Luks1Header {
-    fn get_uuid(
-            self
-        ) -> Result<Uuid, LuksError>
-    {
-        // This is janky
-        let uuid_str = str::from_utf8(&self.uuid)?;
-        let uuid = Uuid::from_str(&uuid_str.trim_end_matches('\0'))?;
-
-        return Ok(uuid);
-    }
-
     fn luks_valid(
             self,
         ) -> bool
@@ -200,16 +182,6 @@ pub struct Luks2Header {
 }
 
 impl Luks2Header {
-    fn get_uuid(
-            self
-        ) -> Result<Uuid, LuksError>
-    {
-        let uuid_str = str::from_utf8(&self.uuid)?;
-        let uuid = Uuid::from_str(&uuid_str.trim_end_matches('\0'))?;
-
-        return Ok(uuid);
-    }
-
     fn luks_valid<R: Seek+Read>(
             self,
             file: &mut R,
@@ -251,7 +223,7 @@ pub fn probe_luks1(
                 ContainerResults { 
                     cont_type: Some(crate::ContType::LUKS1), 
                     label: None, 
-                    cont_uuid: Some(BlockidUUID::Uuid(header.get_uuid()?)), 
+                    cont_uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
                     version: Some(BlockidVersion::Number(u64::from(header.version))), 
@@ -282,7 +254,7 @@ pub fn probe_luks2(
                 ContainerResults { 
                     cont_type: Some(crate::ContType::LUKS1), 
                     label: None, 
-                    cont_uuid: Some(BlockidUUID::Uuid(header.get_uuid()?)), 
+                    cont_uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
                     version: Some(BlockidVersion::Number(u64::from(header.version))), 
@@ -321,7 +293,7 @@ pub fn probe_luks_opal(
                 ContainerResults { 
                     cont_type: Some(crate::ContType::LUKS1), 
                     label: None, 
-                    cont_uuid: Some(BlockidUUID::Uuid(header.get_uuid()?)), 
+                    cont_uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
                     cont_creator: None, 
                     usage: Some(UsageType::Crypto), 
                     version: Some(BlockidVersion::Number(u64::from(header.version))), 

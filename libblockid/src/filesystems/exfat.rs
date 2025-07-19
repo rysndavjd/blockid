@@ -1,11 +1,4 @@
-use core::fmt::{self, Debug};
-use alloc::string::String;
-
-#[cfg(feature = "std")]
 use std::{io::{Error as IoError, Read, Seek}};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek};
 
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
@@ -33,8 +26,8 @@ pub enum ExFatError {
     }
 }
 
-impl fmt::Display for ExFatError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ExFatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExFatError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             ExFatError::ExfatHeaderError(e) => write!(f, "Not an Exfat superblock: {e}"),
@@ -195,7 +188,6 @@ const EXFAT_ENTRY_LABEL: u8 = 0x83;
 // 256 * 1024 * 1024
 //const EXFAT_MAX_DIR_SIZE: u32 = 268435456;
 
-
 pub fn get_exfatcsum(
         sectors: &[u8],
         sector_size: usize,
@@ -217,13 +209,13 @@ pub fn get_exfatcsum(
     return checksum;
 }
 
-fn verify_exfat_checksum<R: Read + Seek>(
-        file: &mut R,
+fn verify_exfat_checksum(
+        probe: &mut BlockidProbe,
         sb: ExFatSuperBlock
     ) -> Result<(), ExFatError>
 {
     let sector_size = sb.block_size();
-    let data = read_vec_at(file, 0, sector_size * 12)?;
+    let data = read_vec_at(&mut probe.file, probe.offset, sector_size * 12)?;
     let checksum = get_exfatcsum(&data, sector_size);
     
     for i in 0..(sector_size / 4) {
@@ -247,8 +239,8 @@ fn in_range_inclusive<T: PartialOrd>(val: T, start: T, stop: T) -> bool {
     val >= start && val <= stop
 }
 
-fn valid_exfat<R: Read + Seek>(
-        file: &mut R,
+fn valid_exfat(
+        probe: &mut BlockidProbe,
         sb: ExFatSuperBlock
     ) -> Result<(), ExFatError>
 {
@@ -310,7 +302,7 @@ fn valid_exfat<R: Read + Seek>(
         return Err(ExFatError::ExfatHeaderError("first_clustor_of_root needs to be val >= 2 && val <= clustor_count + 1"));
     }
 
-    verify_exfat_checksum(file, sb)?;
+    verify_exfat_checksum(probe, sb)?;
 
     return Ok(());
 }
@@ -325,7 +317,7 @@ pub fn probe_is_exfat(
         return Err(ExFatError::UnknownFilesystem("Block is detected with a VFAT magic"));
     }
 
-    valid_exfat(&mut probe.file, sb)?;
+    valid_exfat(probe, sb)?;
 
     return Ok(());
 }
@@ -384,7 +376,7 @@ pub fn probe_exfat(
 {
     let sb: ExFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
 
-    valid_exfat(&mut probe.file, sb)?;
+    valid_exfat(probe, sb)?;
 
     let label= find_label(&mut probe.file, sb)?; 
 

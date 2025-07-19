@@ -1,16 +1,9 @@
-use core::fmt;
-use alloc::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::io::{Error as IoError, Seek, Read};
-
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek};
+use std::io::{Error as IoError, Seek, Read, ErrorKind};
 
 use bitflags::bitflags;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U32, byteorder::LittleEndian,
-    transmute, Immutable};
+    Immutable, KnownLayout};
 
 use crate::{
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,
@@ -32,8 +25,8 @@ pub enum DosPTError {
     DosPTHeaderError(&'static str),
 }
 
-impl fmt::Display for DosPTError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for DosPTError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DosPTError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             DosPTError::UnknownPartitionTable(e) => write!(f, "Not an Dos table superblock: {e}"),
@@ -85,7 +78,7 @@ pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 };
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 pub struct DosTable {
     pub boot_code1: [u8; 218],
     pub disk_timestamp: [u8; 6],
@@ -339,7 +332,8 @@ fn parse_dos_extended<R: Read+Seek>(
     for i in 5..133 {
         let sector = read_sector_at(file, cur_start)?;
 
-        let ex_pt: DosTable = transmute!(sector);
+        let ex_pt = DosTable::ref_from_bytes(&sector)
+            .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to Extended MBR partition table"))?;
 
         if !ex_pt.valid_signature() {
             return Err(DosPTError::DosPTHeaderError("Extended partition doesnt have valid signature"));

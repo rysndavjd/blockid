@@ -7,33 +7,12 @@ pub mod aix;
 //pub mod unixware;
 //pub mod minix;
 
-use core::fmt;
-
-#[cfg(feature = "std")]
-use std::io::Error as IoError;
-#[cfg(not(feature = "std"))]
-use crate::nostd_io::NoStdIoError as IoError;
-
 use crate::BlockidError;
 use crate::{checksum::CsumAlgorium};
 
-/*
-  PTTYPE:               partition table type (dos, gpt, etc.).
-  PTUUID:               partition table id (uuid for gpt, hex for dos).
-  PART_ENTRY_SCHEME:    partition table type
-  PART_ENTRY_NAME:      partition name (gpt and mac only)
-  PART_ENTRY_UUID:      partition UUID (gpt, or pseudo IDs for MBR)
-  PART_ENTRY_TYPE:      partition type, 0xNN (e.g. 0x82) or type UUID (gpt only) or type string (mac)
-  PART_ENTRY_FLAGS:     partition flags (e.g. boot_ind) or  attributes (e.g. gpt attributes)
-  PART_ENTRY_NUMBER:    partition number
-  PART_ENTRY_OFFSET:    the begin of the partition
-  PART_ENTRY_SIZE:      size of the partition
-  PART_ENTRY_DISK:      whole-disk maj:min
-*/
-
 #[derive(Debug)]
 pub enum PtError {
-    IoError(IoError),
+    IoError(std::io::Error),
     InvalidHeader(&'static str),
     UnknownPartition(&'static str),
     ChecksumError {
@@ -42,8 +21,8 @@ pub enum PtError {
     }
 }
 
-impl fmt::Display for PtError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for PtError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PtError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             PtError::InvalidHeader(e) => write!(f, "Invalid Header: {e}"),
