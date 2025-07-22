@@ -13,19 +13,18 @@ pub mod filesystems;
 
 use std::{
     fmt::{self, Debug},
-    fs::File,
-    io::{ErrorKind, Read, Seek, SeekFrom, BufReader},
+    fs::{read_dir, File},
+    io::{BufReader, Error as IoError, ErrorKind, Read, Seek, SeekFrom},
     os::fd::AsFd,
     path::{Path, PathBuf},
-    io::Error as IoError,
 };
 
 use bitflags::bitflags;
+use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::FromBytes;
-use rustix::fs::{fstat, ioctl_blksszget, major, minor, Dev, FileType, Mode};
-use crate::{ioctl::{ioctl_blkgetsize64, ioctl_ioc_opal_get_status, 
-    OpalStatusFlags}};
+use rustix::fs::{fstat, major, minor, Dev, FileType, Mode, stat};
+use crate::ioctl::{logical_block_size, device_size_bytes};
 
 use crate::{
     containers::{
@@ -48,43 +47,22 @@ use crate::{
     }, 
 };
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum BlockidError {
+    #[error("Invalid Arguments given: {0}")]
     ArgumentError(&'static str),
+    #[error("Probe failed: {0}")]
     ProbeError(&'static str),
-    FsError(FsError),
-    PtError(PtError),
-    ContError(ContError),
-    IoError(IoError),
-    NixError(rustix::io::Errno),
-}
-
-impl fmt::Display for BlockidError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BlockidError::ArgumentError(e) => write!(f, "Invalid Arguments given: {e}"),
-            BlockidError::ProbeError(e) => write!(f, "Probe failed: {e}"),
-            BlockidError::FsError(e) => write!(f, "Filesystem probe failed: {e}"),
-            BlockidError::PtError(e) => write!(f, "Partition Table probe failed: {e}"),
-            BlockidError::ContError(e) => write!(f, "Container probe failed: {e}"),
-            BlockidError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            BlockidError::NixError(e) => write!(f, "*Nix operation failed: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for BlockidError {}
-
-impl From<IoError> for BlockidError {
-    fn from(err: IoError) -> Self {
-        BlockidError::IoError(err)
-    }
-}
-
-impl From<rustix::io::Errno> for BlockidError {
-    fn from(err: rustix::io::Errno) -> Self {
-        BlockidError::NixError(err)
-    }
+    #[error("Filesystem probe failed: {0}")]
+    FsError(#[from] FsError),
+    #[error("Partition Table probe failed: {0}")]
+    PtError(#[from] PtError),
+    #[error("Container probe failed: {0}")]
+    ContError(#[from] ContError),
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("*Nix operation failed: {0}")]
+    NixError(#[from] rustix::io::Errno),
 }
 
 static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
@@ -105,6 +83,14 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
 ];
 
 impl BlockidProbe {
+    pub fn list_supported_sb() -> Vec<String> {
+        PROBES
+            .iter()
+            .filter_map(|(_, _, info)| info.name)
+            .map(|name| name.to_string())
+            .collect()
+    }
+
     pub fn new(
             file: File,
             offset: u64,
@@ -115,13 +101,13 @@ impl BlockidProbe {
         let stat = fstat(file.as_fd())?;
 
         let sector_size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
-            u64::from(ioctl_blksszget(file.as_fd())?)
+            u64::from(logical_block_size(file.as_fd())?)
         } else {
             512
         };
         
         let size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
-            ioctl_blkgetsize64(file.as_fd())?
+            device_size_bytes(file.as_fd())?
         } else {
             stat.st_size as u64
         };
@@ -133,11 +119,8 @@ impl BlockidProbe {
             buffer: None,
             offset, 
             size, 
-            #[cfg(target_arch = "aarch64")]
-            io_size: i64::from(stat.st_blksize), 
-            #[cfg(target_arch = "x86_64")]
-            io_size: stat.st_blksize,
-            devno: stat.st_rdev, 
+            io_size: stat.st_blksize.into(),
+            devno: stat.st_rdev,
             disk_devno: stat.st_dev,
             sector_size, 
             mode: Mode::from(stat.st_mode), 
@@ -148,9 +131,14 @@ impl BlockidProbe {
     }
 
     // Need to figure out how to use buffering when available so this does nothing
-    pub fn enable_buffering(&mut self, capacity: usize) -> Result<(), BlockidError> {
+    pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), BlockidError> {
         let clone = self.file.try_clone()?;
         self.buffer = Some(BufReader::with_capacity(capacity, clone));
+        return Ok(());
+    }
+
+    pub fn enable_buffering(&mut self) -> Result<(), BlockidError> {
+        self.enable_buffering_with_capacity(self.io_size as usize)?;
         return Ok(());
     }
 
@@ -244,6 +232,10 @@ impl BlockidProbe {
         self.values
     }
 
+    pub fn ssz(&self) -> u64 {
+        self.sector_size
+    }
+
     #[inline]
     pub fn devno(&self) -> Dev {
         self.devno
@@ -284,14 +276,15 @@ impl BlockidProbe {
         FileType::from_raw_mode(self.mode.as_raw_mode()).is_file()
     }
 
+    #[cfg(target_os = "linux")]
     fn is_opal_locked(
             &mut self
         ) -> Result<bool, rustix::io::Errno>
     {
         if !self.flags.contains(ProbeFlags::OPAL_CHECKED) {
-            let status = ioctl_ioc_opal_get_status(self.file.as_fd())?;
+            let status = crate::ioctl::ioctl_ioc_opal_get_status(self.file.as_fd())?;
         
-            if status.flags.contains(OpalStatusFlags::OPAL_FL_LOCKED) {
+            if status.flags.contains(crate::ioctl::OpalStatusFlags::OPAL_FL_LOCKED) {
                 self.flags.insert(ProbeFlags::OPAL_LOCKED);
             }
         
@@ -308,7 +301,7 @@ pub struct BlockidProbe {
     buffer: Option<BufReader<File>>,
     offset: u64,
     size: u64,
-    pub io_size: i64, 
+    io_size: i64,
 
     devno: Dev,
     disk_devno: Dev,
@@ -327,7 +320,12 @@ impl BlockidProbeBuilder {
     }
 
     pub fn from_path<P: AsRef<Path>>(mut self, path: P) -> Self {
-        self.path = Some(path.as_ref().to_path_buf());
+        self.disk_id = Some(IdType::Path(path.as_ref().to_path_buf()));
+        self
+    }
+
+    pub fn from_devno(mut self, devno: Dev) -> Self {
+        self.disk_id = Some(IdType::Devno(devno));
         self
     }
 
@@ -347,21 +345,33 @@ impl BlockidProbeBuilder {
     }
 
     pub fn build(self) -> Result<BlockidProbe, BlockidError> {
-        let path = self.path.ok_or_else(|| {
-            BlockidError::ArgumentError("Path not set in BlockidProbeBuilder")
+        let id = self.disk_id.ok_or_else(|| {
+            BlockidError::ArgumentError("Path/devno not set in BlockidProbeBuilder")
         })?;
 
-        let file = File::open(&path)?;
+        let file = match id {
+            IdType::Path(path) => File::open(path)?,
+            IdType::Devno(devno) => {
+                let path = devno_to_path(devno)?;
+                File::open(path)?
+            }
+        };
         BlockidProbe::new(file, self.offset, self.flags, self.filter)
     }
 }
 
 #[derive(Debug, Default)]
 pub struct BlockidProbeBuilder {
-    path: Option<PathBuf>,
+    disk_id: Option<IdType>,
     offset: u64,
     flags: ProbeFlags,
     filter: ProbeFilter,
+}
+
+#[derive(Debug)]
+enum IdType {
+    Path(PathBuf),
+    Devno(Dev),
 }
 
 bitflags!{
@@ -480,23 +490,21 @@ pub struct FilesystemResults {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ContType {
-    MD,
-    LVM,
-    DM,
+    //MD,
+    //LVM,
+    //DM,
     LUKS1,
     LUKS2,
-    Other(&'static str)
 }
 
 impl fmt::Display for ContType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MD => write!(f, "MD"),
-            Self::LVM => write!(f, "LVM"),
-            Self::DM => write!(f, "DM"),
+            //Self::MD => write!(f, "MD"),
+            //Self::LVM => write!(f, "LVM"),
+            //Self::DM => write!(f, "DM"),
             Self::LUKS1 => write!(f, "LUKS1"),
             Self::LUKS2 => write!(f, "LUKS2"),
-            Self::Other(s) => write!(f, "{s}"),
         }
     }
 }
@@ -505,8 +513,8 @@ impl fmt::Display for ContType {
 pub enum PtType {
     Dos,
     Gpt,
-    Mac,
-    Bsd,
+    //Mac,
+    //Bsd,
 }
 
 impl fmt::Display for PtType {
@@ -514,8 +522,8 @@ impl fmt::Display for PtType {
         match self {
             Self::Dos => write!(f, "Dos"),
             Self::Gpt => write!(f, "Gpt"),
-            Self::Mac => write!(f, "Mac"),
-            Self::Bsd => write!(f, "Bsd"),
+            //Self::Mac => write!(f, "Mac"),
+            //Self::Bsd => write!(f, "Bsd"),
         }
     }
 }
@@ -615,6 +623,33 @@ pub struct BlockidMagic {
 
 impl BlockidMagic {
     pub const EMPTY_MAGIC: BlockidMagic = BlockidMagic{magic: &[0], len: 0, b_offset: 0};
+}
+
+pub fn devno_to_path(dev: Dev) -> Result<PathBuf, IoError> {
+    let dev_dir = read_dir(Path::new("/dev"))?;
+
+    for entry in dev_dir.flatten() {
+        let path = entry.path();
+
+        if let Ok(stat) = stat(&path) {
+
+            if FileType::from_raw_mode(stat.st_mode).is_block_device()
+                && stat.st_rdev == dev 
+            {
+                return Ok(path);
+            }
+        }
+    }
+    return Err(IoError::new(ErrorKind::NotFound, "Unable to find path from devno"));
+}
+
+pub fn path_to_devno<P: AsRef<Path>>(path: P) -> Result<Dev, IoError> {
+    let stat = stat(path.as_ref())?;
+    if FileType::from_raw_mode(stat.st_mode).is_block_device() {
+        return Ok(stat.st_rdev)
+    } else {
+        return Err(IoError::new(ErrorKind::InvalidInput, "Path doesnt point to a block device"));
+    }
 }
 
 fn from_file<T: FromBytes, R: Read+Seek>(

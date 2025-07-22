@@ -42,7 +42,7 @@ impl From<IoError> for GptPtError {
 }
 
 pub const GPT_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("gpt"),
+    name: Some("gpt_pt"),
     usage: Some(UsageType::PartitionTable),
     minsz: None,
     probe_fn: |probe, magic| {

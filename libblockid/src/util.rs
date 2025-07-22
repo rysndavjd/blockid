@@ -1,32 +1,14 @@
 use std::str::Utf8Error;
+use thiserror::Error;
 use widestring::{utfstring::Utf16String, error::Utf16Error};
 use crate::Endianness;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum UtfError {
-    Utf8Error(Utf8Error),
-    Utf16Error(Utf16Error),
-}
-
-impl std::fmt::Display for UtfError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UtfError::Utf8Error(e) => write!(f, "UTF-8 Error: {e}"),
-            UtfError::Utf16Error(e) => write!(f, "UTF-16 Error: {e}"),
-        }
-    }
-}
-
-impl From<Utf8Error> for UtfError {
-    fn from(err: Utf8Error) -> Self {
-        UtfError::Utf8Error(err)
-    }
-}
-
-impl From<Utf16Error> for UtfError {
-    fn from(err: Utf16Error) -> Self {
-        UtfError::Utf16Error(err)
-    }
+    #[error("UTF-8 Error: {0}")]
+    Utf8Error(#[from] Utf8Error),
+    #[error("UTF-16 Error: {0}")]
+    Utf16Error(#[from] Utf16Error),
 }
 
 pub fn decode_utf16_lossy_from(bytes: &[u8], endian: Endianness) -> Utf16String {
