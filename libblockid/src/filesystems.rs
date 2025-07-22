@@ -5,38 +5,22 @@ pub mod ntfs;
 pub mod vfat;
 pub mod volume_id;
 
-use crate::util::UtfError;
-use crate::BlockidError;
-use crate::checksum::CsumAlgorium;
+use thiserror::Error;
+use crate::{checksum::CsumAlgorium, util::UtfError};
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum FsError {
-    IoError(std::io::Error),
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Invalid Header: {0}")]    
     InvalidHeader(&'static str),
+    #[error("Unknown Filesystem: {0}")]
     UnknownFilesystem(&'static str),
-    UtfError(UtfError),
+    #[error("UTF Error: {0}")]
+    UtfError(#[from] UtfError),
+    #[error("Filesystem Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
-    }
-}
-
-impl std::fmt::Display for FsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FsError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            FsError::InvalidHeader(e) => write!(f, "Invalid Header: {e}"),
-            FsError::UnknownFilesystem(e) => write!(f, "Unknown Filesystem: {e}"),
-            FsError::UtfError(e) => write!(f, "UTF Error: {e}"),
-            FsError::ChecksumError{expected, got} => {
-                write!(f, "Filesystem Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")
-            },
-        }
-    }
-}
-
-impl From<FsError> for BlockidError {
-    fn from(err: FsError) -> Self {
-        BlockidError::FsError(err)
     }
 }

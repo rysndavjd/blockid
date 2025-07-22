@@ -47,7 +47,7 @@ impl From<IoError> for SwapError {
 const TOI_MAGIC_STRING: [u8; 8] = *b"\xed\xc3\x02\xe9\x98\x56\xe5\x0c";
 
 pub const LINUX_SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("swap"),
+    name: Some("linux_swap_v0"),
     usage: Some(UsageType::Other("swap")),
     probe_fn: |probe, magic| {
         probe_swap_v0(probe, magic)
@@ -85,7 +85,7 @@ pub const LINUX_SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 };
 
 pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("swap"),
+    name: Some("linux_swap_v1"),
     usage: Some(UsageType::Other("swap")),
     probe_fn: |probe, magic| {
         probe_swap_v1(probe, magic)

@@ -8,4 +8,5 @@ build = "build.rs"
 clap = { version = "4.5.41", features = ["derive"] }
 libblockid = { path = "../libblockid" }
 rustix = { version = "1.0.7", features = ["fs"] }
+thiserror = "2.0.12"
 uuid = "1.16.0"

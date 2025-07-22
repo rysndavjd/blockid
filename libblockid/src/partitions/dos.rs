@@ -52,7 +52,7 @@ impl From<IoError> for DosPTError {
 }
 
 pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("dos"),
+    name: Some("dos_pt"),
     usage: Some(UsageType::PartitionTable),
     minsz: None,
     probe_fn: |probe, magic| {

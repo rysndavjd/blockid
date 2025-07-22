@@ -1,5 +1,7 @@
 use std::{io::{Error as IoError, ErrorKind, Read, Seek}, str::FromStr};
 
+#[cfg(not(target_os = "linux"))]
+use log::warn;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
     byteorder::BigEndian, Immutable};
@@ -86,7 +88,7 @@ pub const SECONDARY_OFFSETS: [u64; 9] = [0x04000, 0x008000, 0x010000, 0x020000,
                              0x40000, 0x080000, 0x100000, 0x200000, 0x400000];
 
 pub const LUKS1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("crypto_LUKS"),
+    name: Some("luks1"),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {
         probe_luks1(probe, magic)
@@ -104,7 +106,7 @@ pub const LUKS1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 };
 
 pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("LUKS2"),
+    name: Some("luks1"),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {
         probe_luks2(probe, magic)
@@ -122,7 +124,7 @@ pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 };
 
 pub const LUKS_OPAL_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("LUKS OPAL"),
+    name: Some("LUKS_OPAL"),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {
         probe_luks_opal(probe, magic)
@@ -285,9 +287,12 @@ pub fn probe_luks_opal(
         return Err(LuksError::LuksHeaderError("Luks2 does not contain opal subsystem to be opal"));
     }
 
+    #[cfg(target_os = "linux")]
     if probe.is_opal_locked()? {
         return Err(LuksError::IoError(ErrorKind::PermissionDenied.into()));
     }
+    #[cfg(not(target_os = "linux"))]
+    warn!("Unable to check if opal is locked as the ioctl call is unavilable on non-linux platforms");
 
     probe.push_result(ProbeResult::Container(
                 ContainerResults { 
