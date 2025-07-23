@@ -232,6 +232,33 @@ impl BlockidProbe {
         self.values
     }
 
+    pub fn into_cont_result(self) -> Option<ContainerResults> {
+        self.into_results()?
+            .into_iter()
+            .find_map(|result| match result {
+                ProbeResult::Container(r) => Some(r),
+                _ => None,
+            })
+    }
+
+    pub fn into_pt_result(self) -> Option<PartTableResults> {
+        self.into_results()?
+            .into_iter()
+            .find_map(|result| match result {
+                ProbeResult::PartTable(r) => Some(r),
+                _ => None,
+            })
+    }
+
+    pub fn into_fs_result(self) -> Option<FilesystemResults> {
+        self.into_results()?
+            .into_iter()
+            .find_map(|result| match result {
+                ProbeResult::Filesystem(r) => Some(r),
+                _ => None,
+            })
+    }
+
     pub fn ssz(&self) -> u64 {
         self.sector_size
     }
