@@ -1,4 +1,3 @@
-
 fn main() {
     let pointer_width = std::env::var("CARGO_CFG_TARGET_POINTER_WIDTH")
         .expect("Failed to read target pointer width");
