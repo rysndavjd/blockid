@@ -24,7 +24,8 @@ use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::FromBytes;
 use rustix::fs::{fstat, major, minor, Dev, FileType, Mode, stat};
-use crate::ioctl::{logical_block_size, device_size_bytes};
+use crate::ioctl::{OpalStatusFlags, ioctl_ioc_opal_get_status, 
+    logical_block_size, device_size_bytes, ioctl_blkgetzonesz};
 
 use crate::{
     containers::{
@@ -114,6 +115,9 @@ impl BlockidProbe {
 
         //let buffer = BufReader::with_capacity(stat.st_blksize as usize, file.try_clone()?);
 
+        #[cfg(target_os = "linux")]
+        let zone_size = u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9);
+
         Ok( Self { 
             file,
             buffer: None,
@@ -123,7 +127,9 @@ impl BlockidProbe {
             devno: stat.st_rdev,
             disk_devno: stat.st_dev,
             sector_size, 
-            mode: Mode::from(stat.st_mode), 
+            mode: Mode::from(stat.st_mode),
+            #[cfg(target_os = "linux")]
+            zone_size,
             flags,
             filter,
             values: None 
@@ -163,8 +169,6 @@ impl BlockidProbe {
 
                 if result.is_ok() {
                     return Ok(());
-                } else {
-                    log::error!("Wrong FS: {:?}", result.unwrap_err());
                 }
             }
             return Err(BlockidError::ProbeError("All probe functions exhasted"));
@@ -210,7 +214,7 @@ impl BlockidProbe {
             .push(result)
     }
 
-    pub fn probe_from_filename<P: AsRef<Path>>(
+    pub fn from_filename<P: AsRef<Path>>(
             filename: P,
             flags: ProbeFlags,
             filter: ProbeFilter,
@@ -259,48 +263,56 @@ impl BlockidProbe {
             })
     }
 
+    #[inline]
     pub fn ssz(&self) -> u64 {
-        self.sector_size
+        return self.sector_size;
+    }
+
+    #[inline]
+    pub fn zsz(&self) -> u64 {
+        return self.zone_size;
     }
 
     #[inline]
     pub fn devno(&self) -> Dev {
-        self.devno
+        return self.devno;
     }
     
     #[inline]
     pub fn devno_maj(&self) -> u32 {
-        major(self.devno)
+        return major(self.devno);
     }
 
     #[inline]
     pub fn devno_min(&self) -> u32 {
-        minor(self.devno)
+        return minor(self.devno);
     }
 
     #[inline]
     pub fn disk_devno(&self) -> Dev {
-        self.disk_devno
+        return self.disk_devno;
     }
 
     #[inline]
     pub fn disk_devno_maj(&self) -> u32 {
-        major(self.disk_devno)
+        return major(self.disk_devno);
     }
 
     #[inline]
     pub fn disk_devno_min(&self) -> u32 {
-        minor(self.disk_devno)
+        return minor(self.disk_devno);
     }
 
     #[inline]
     pub fn is_block_device(&self) -> bool {
-        FileType::from_raw_mode(self.mode.as_raw_mode()).is_block_device()
+        return FileType::from_raw_mode(self.mode.as_raw_mode())
+            .is_block_device();
     }
 
     #[inline]
     pub fn is_regular_file(&self) -> bool {
-        FileType::from_raw_mode(self.mode.as_raw_mode()).is_file()
+        return FileType::from_raw_mode(self.mode.as_raw_mode())
+            .is_file();
     }
 
     #[cfg(target_os = "linux")]
@@ -309,16 +321,16 @@ impl BlockidProbe {
         ) -> Result<bool, rustix::io::Errno>
     {
         if !self.flags.contains(ProbeFlags::OPAL_CHECKED) {
-            let status = crate::ioctl::ioctl_ioc_opal_get_status(self.file.as_fd())?;
+            let status = ioctl_ioc_opal_get_status(self.file.as_fd())?;
         
-            if status.flags.contains(crate::ioctl::OpalStatusFlags::OPAL_FL_LOCKED) {
+            if status.flags.contains(OpalStatusFlags::OPAL_FL_LOCKED) {
                 self.flags.insert(ProbeFlags::OPAL_LOCKED);
             }
         
             self.flags.insert(ProbeFlags::OPAL_CHECKED);
         }
     
-        Ok(self.flags.contains(ProbeFlags::OPAL_LOCKED))
+        return Ok(self.flags.contains(ProbeFlags::OPAL_LOCKED));
     }
 }
 
@@ -334,7 +346,8 @@ pub struct BlockidProbe {
     disk_devno: Dev,
     sector_size: u64,
     mode: Mode,
-    //pub zone_size: u64,
+    #[cfg(target_os = "linux")]
+    zone_size: u64,
 
     flags: ProbeFlags,
     filter: ProbeFilter,
