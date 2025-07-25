@@ -2,6 +2,9 @@ use bitflags::bitflags;
 use rustix::{io, ioctl::{ioctl, Getter}, fd::AsFd};
 
 #[cfg(target_os = "linux")]
+pub const BLKGETZONESZ: u32 = 2147750532;
+
+#[cfg(target_os = "linux")]
 pub const BLKGETSIZE64: u32 = 2148012658;
 
 #[cfg(target_os = "linux")]
@@ -44,6 +47,15 @@ const DKIOCGETBLOCKCOUNT: u32 = 2148033561;
 pub fn ioctl_blkgetsize64<Fd: AsFd>(fd: Fd) -> io::Result<u64> {
     unsafe {
         let ctl = Getter::<{ BLKGETSIZE64 }, u64>::new();
+        ioctl(fd, ctl)
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+pub fn ioctl_blkgetzonesz<Fd: AsFd>(fd: Fd) -> io::Result<u32> {
+    unsafe {
+        let ctl = Getter::<{ BLKGETZONESZ }, u32>::new();
         ioctl(fd, ctl)
     }
 }
