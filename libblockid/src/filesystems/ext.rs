@@ -8,11 +8,10 @@ use rustix::fs::makedev;
 use uuid::Uuid;
 
 use crate::{
-    from_file, FilesystemResults,
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe,
-    BlockidUUID, BlockidVersion, FsType, ProbeResult, UsageType,
-    checksum::{get_crc32c, verify_crc32c, CsumAlgorium},
-    filesystems::FsError, util::decode_utf8_lossy_from
+    from_file, ProbeResult, BlockidError, BlockidIdinfo, 
+    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
+    BlockType, UsageType, checksum::{get_crc32c, verify_crc32c, 
+    CsumAlgorium}, filesystems::FsError, util::decode_utf8_lossy_from
 };
 
 /*
@@ -63,6 +62,7 @@ const EXT_OFFSET: u64 = 0x438;
 
 pub const JBD_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("jbd"),
+    btype: Some(BlockType::Jbd),
     usage: Some(UsageType::Other("jbd")),
     probe_fn: |probe, magic| {
         probe_jbd(probe, magic)
@@ -81,6 +81,7 @@ pub const JBD_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 pub const EXT2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("ext2"),
+    btype: Some(BlockType::Ext2),
     usage: Some(UsageType::Filesystem),
     probe_fn: |probe, magic| {
         probe_ext2(probe, magic)
@@ -99,6 +100,7 @@ pub const EXT2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 pub const EXT3_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("ext3"),
+    btype: Some(BlockType::Ext3),
     usage: Some(UsageType::Filesystem),
     probe_fn: |probe, magic| {
         probe_ext3(probe, magic)
@@ -117,6 +119,7 @@ pub const EXT3_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 pub const EXT4_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("ext4"),
+    btype: Some(BlockType::Ext4),
     usage: Some(UsageType::Filesystem),
     probe_fn: |probe, magic| {
         probe_ext4(probe, magic)
@@ -442,27 +445,28 @@ pub fn probe_jbd(
     
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    probe.push_result(ProbeResult::Filesystem(
-        FilesystemResults { fs_type: Some(FsType::Ext2), 
-                            sec_type: None, 
-                            label, 
-                            fs_uuid: Some(uuid), 
-                            log_uuid: Some(uuid), 
-                            ext_journal: journal_uuid, 
-                            fs_creator: Some(creator),
-                            usage: Some(UsageType::Filesystem), 
-                            version: Some(version), 
-                            sbmagic: Some(&EXT_MAGIC), 
-                            sbmagic_offset: Some(EXT_OFFSET), 
-                            fs_size: Some(fs_size), 
-                            fs_last_block: Some(fs_last_block),
-                            fs_block_size: Some(block_size),
-                            block_size: Some(block_size),
-                            endianness: None,
-                        }
-                    )
-                );
-    
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Jbd), 
+            sec_type: None, 
+            label, 
+            uuid: Some(uuid), 
+            log_uuid: None, 
+            ext_journal: journal_uuid, 
+            offset: None, 
+            creator: Some(creator), 
+            usage: Some(UsageType::Filesystem), 
+            version: Some(version), 
+            sbmagic: Some(&EXT_MAGIC), 
+            sbmagic_offset: Some(EXT_OFFSET), 
+            size: Some(fs_size), 
+            fs_last_block: Some(fs_last_block), 
+            fs_block_size: Some(block_size), 
+            block_size: Some(block_size), 
+            partitions: None, 
+            endianness: None, 
+        }
+    );
     return Ok(());
 }
 
@@ -491,27 +495,28 @@ pub fn probe_ext2(
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    probe.push_result(ProbeResult::Filesystem(
-                FilesystemResults { fs_type: Some(FsType::Ext2), 
-                                    sec_type: None, 
-                                    label, 
-                                    fs_uuid: Some(uuid), 
-                                    log_uuid: None, 
-                                    ext_journal: journal_uuid, 
-                                    fs_creator: Some(creator),
-                                    usage: Some(UsageType::Filesystem), 
-                                    version: Some(version), 
-                                    sbmagic: Some(&EXT_MAGIC), 
-                                    sbmagic_offset: Some(EXT_OFFSET), 
-                                    fs_size: Some(fs_size), 
-                                    fs_last_block: Some(fs_last_block),
-                                    fs_block_size: Some(block_size),
-                                    block_size: Some(block_size),
-                                    endianness: None,
-                                }
-                            )
-                        );
-
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Ext2), 
+            sec_type: None, 
+            label, 
+            uuid: Some(uuid), 
+            log_uuid: None, 
+            ext_journal: journal_uuid, 
+            offset: None, 
+            creator: Some(creator), 
+            usage: Some(UsageType::Filesystem), 
+            version: Some(version), 
+            sbmagic: Some(&EXT_MAGIC), 
+            sbmagic_offset: Some(EXT_OFFSET), 
+            size: Some(fs_size), 
+            fs_last_block: Some(fs_last_block), 
+            fs_block_size: Some(block_size), 
+            block_size: Some(block_size), 
+            partitions: None, 
+            endianness: None, 
+        }
+    );
     return Ok(());
 }
 
@@ -540,27 +545,28 @@ pub fn probe_ext3(
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    probe.push_result(ProbeResult::Filesystem(
-                FilesystemResults { fs_type: Some(FsType::Ext3), 
-                                    sec_type: None, 
-                                    label, 
-                                    fs_uuid: Some(uuid), 
-                                    log_uuid: None, 
-                                    ext_journal: journal_uuid, 
-                                    fs_creator: Some(creator),
-                                    usage: Some(UsageType::Filesystem), 
-                                    version: Some(version), 
-                                    sbmagic: Some(&EXT_MAGIC), 
-                                    sbmagic_offset: Some(EXT_OFFSET), 
-                                    fs_size: Some(fs_size), 
-                                    fs_last_block: Some(fs_last_block),
-                                    fs_block_size: Some(block_size),
-                                    block_size: Some(block_size),
-                                    endianness: None,
-                                }
-                            )
-                        );
-    
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Ext3), 
+            sec_type: None, 
+            label, 
+            uuid: Some(uuid), 
+            log_uuid: None, 
+            ext_journal: journal_uuid, 
+            offset: None, 
+            creator: Some(creator), 
+            usage: Some(UsageType::Filesystem), 
+            version: Some(version), 
+            sbmagic: Some(&EXT_MAGIC), 
+            sbmagic_offset: Some(EXT_OFFSET), 
+            size: Some(fs_size), 
+            fs_last_block: Some(fs_last_block), 
+            fs_block_size: Some(block_size), 
+            block_size: Some(block_size), 
+            partitions: None, 
+            endianness: None, 
+        }
+    );    
     return Ok(());
 }
 
@@ -593,27 +599,28 @@ pub fn probe_ext4(
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
-    probe.push_result(ProbeResult::Filesystem(
-                FilesystemResults { fs_type: Some(FsType::Ext4), 
-                                    sec_type: None, 
-                                    label, 
-                                    fs_uuid: Some(uuid), 
-                                    log_uuid: None, 
-                                    ext_journal: journal_uuid, 
-                                    fs_creator: Some(creator),
-                                    usage: Some(UsageType::Filesystem), 
-                                    version: Some(version), 
-                                    sbmagic: Some(&EXT_MAGIC), 
-                                    sbmagic_offset: Some(EXT_OFFSET), 
-                                    fs_size: Some(fs_size), 
-                                    fs_last_block: Some(fs_last_block),
-                                    fs_block_size: Some(block_size),
-                                    block_size: Some(block_size),
-                                    endianness: None,
-                                }
-                            )
-                        );
-    
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Ext4), 
+            sec_type: None, 
+            label, 
+            uuid: Some(uuid), 
+            log_uuid: None, 
+            ext_journal: journal_uuid, 
+            offset: None, 
+            creator: Some(creator), 
+            usage: Some(UsageType::Filesystem), 
+            version: Some(version), 
+            sbmagic: Some(&EXT_MAGIC), 
+            sbmagic_offset: Some(EXT_OFFSET), 
+            size: Some(fs_size), 
+            fs_last_block: Some(fs_last_block), 
+            fs_block_size: Some(block_size), 
+            block_size: Some(block_size), 
+            partitions: None, 
+            endianness: None, 
+        }
+    );  
     return Ok(());                    
 }
 

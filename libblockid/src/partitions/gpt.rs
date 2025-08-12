@@ -5,7 +5,8 @@ use zerocopy::{byteorder::{LittleEndian, U16, U32, U64},
 use uuid::Uuid;
 
 use crate::{
-    checksum::verify_crc32_iso_hdlc, partitions::{dos::{DosTable, MbrPartitionType}, PtError}, read_sector_at, read_vec_at, util::decode_utf16_lossy_from, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, Endianness, PartEntryAttributes, PartEntryType, PartTableResults, PartitionResults, ProbeFlags, ProbeResult, PtType, UsageType
+    checksum::verify_crc32_iso_hdlc, partitions::{dos::{DosTable, 
+    MbrPartitionType}, PtError}, read_sector_at, read_vec_at, util::decode_utf16_lossy_from, BlockType, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, Endianness, PartEntryAttributes, PartEntryType, PartitionResults, ProbeFlags, ProbeResult, UsageType
 };
 
 #[derive(Debug)]
@@ -43,6 +44,7 @@ impl From<IoError> for GptPtError {
 
 pub const GPT_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("gpt_pt"),
+    btype: Some(BlockType::Gpt),
     usage: Some(UsageType::PartitionTable),
     minsz: None,
     probe_fn: |probe, magic| {
@@ -55,6 +57,7 @@ pub const GPT_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 pub const PMBR_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("pmbr"),
+    btype: Some(BlockType::Dos),
     usage: Some(UsageType::PartitionTable),
     minsz: None,
     probe_fn: |probe, magic| {
@@ -284,16 +287,26 @@ fn get_gpt_header<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, last_lba: u64,
     .collect();
 
     return Ok(
-        ProbeResult::PartTable(
-            PartTableResults { 
-                offset: Some(offset), 
-                pt_type: Some(PtType::Gpt), 
-                pt_uuid: Some(BlockidUUID::Uuid(Uuid::from(header.disk_guid))), 
-                sbmagic: Some(GptTable::HEADER_SIGNATURE_STR), 
-                sbmagic_offset: Some(ssz * lba), 
-                partitions: Some(partitions) 
-            }
-        )
+        ProbeResult { 
+            btype: Some(BlockType::Gpt), 
+            sec_type: None, 
+            label: None, 
+            uuid: Some(BlockidUUID::Uuid(Uuid::from(header.disk_guid))), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: Some(offset), 
+            creator: None, 
+            usage: Some(UsageType::PartitionTable), 
+            version: None, 
+            sbmagic: Some(GptTable::HEADER_SIGNATURE_STR), 
+            sbmagic_offset: Some(ssz * lba), 
+            size: None, 
+            fs_last_block: None, 
+            fs_block_size: None, 
+            block_size: None, 
+            partitions: Some(partitions), 
+            endianness: None,
+        }
     );
 }
 
