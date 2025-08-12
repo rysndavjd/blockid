@@ -10,8 +10,7 @@ use crate::{
     volume_id::VolumeId32, FsError}, from_file, probe_get_magic, 
     read_exact_at, read_vec_at, util::{decode_utf16_lossy_from, UtfError}, 
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
-    BlockidVersion, FilesystemResults, FsType, ProbeResult, UsageType,
-    Endianness,
+    BlockidVersion, ProbeResult, BlockType, UsageType, Endianness,
 };
 
 #[derive(Debug)]
@@ -64,6 +63,7 @@ impl From<UtfError> for ExFatError {
 
 pub const EXFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("exfat"),
+    btype: Some(BlockType::Exfat),
     usage: Some(UsageType::Filesystem),
     probe_fn: |probe, magic| {
         probe_exfat(probe, magic)
@@ -380,27 +380,27 @@ pub fn probe_exfat(
 
     let label= find_label(&mut probe.file, sb)?; 
 
-    probe.push_result(ProbeResult::Filesystem(
-                FilesystemResults { 
-                    fs_type: Some(FsType::Exfat), 
-                    sec_type: None, 
-                    label, 
-                    fs_uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(sb.volume_serial))), 
-                    log_uuid: None, 
-                    ext_journal: None, 
-                    fs_creator: None, 
-                    usage: Some(UsageType::Filesystem), 
-                    version: Some(BlockidVersion::DevT(makedev(sb.vermaj as u32, sb.vermin as u32))), 
-                    sbmagic: Some(b"EXFAT   "), 
-                    sbmagic_offset: Some(3), 
-                    fs_size: Some(sb.block_size() as u64 * u64::from(sb.volume_length)), 
-                    fs_last_block: None, 
-                    fs_block_size: Some(sb.block_size() as u64), 
-                    block_size: Some(sb.block_size() as u64),
-                    endianness: None,
-                }
-            )
-        );
-
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Exfat), 
+            sec_type: None, 
+            label, 
+            uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(sb.volume_serial))), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: None, 
+            creator: None, 
+            usage: Some(UsageType::Filesystem), 
+            version: Some(BlockidVersion::DevT(makedev(sb.vermaj as u32, sb.vermin as u32))), 
+            sbmagic: Some(b"EXFAT   "), 
+            sbmagic_offset: Some(3), 
+            size: Some(sb.block_size() as u64 * u64::from(sb.volume_length)), 
+            fs_last_block: None, 
+            fs_block_size: Some(sb.block_size() as u64), 
+            block_size: Some(sb.block_size() as u64), 
+            partitions: None, 
+            endianness: None 
+        }
+    );
     return Ok(());
 }

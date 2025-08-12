@@ -7,7 +7,7 @@ use crate::{
     filesystems::{volume_id::VolumeId64, FsError}, 
     from_file, probe_get_magic, read_vec_at, BlockidError, BlockidIdinfo, 
     BlockidMagic, BlockidProbe, BlockidUUID, Endianness, 
-    FilesystemResults, FsType, ProbeResult, UsageType, 
+    ProbeResult, BlockType, UsageType, 
     util::{decode_utf16_lossy_from, is_power_2, UtfError},
 };
 
@@ -63,6 +63,7 @@ impl From<IoError> for NtfsError {
 
 pub const NTFS_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("ntfs"),
+    btype: Some(BlockType::Ntfs),
     usage: Some(UsageType::Filesystem),
     probe_fn: |probe, magic| {
         probe_ntfs(probe, magic)
@@ -302,26 +303,27 @@ pub fn probe_ntfs(
 
     let label = find_label(&mut probe.file, ns, sector_size, sectors_per_cluster)?;
 
-    probe.push_result(ProbeResult::Filesystem(
-            FilesystemResults { 
-                fs_type: Some(FsType::Ntfs), 
-                sec_type: None, 
-                label: label,
-                fs_uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))), 
-                log_uuid: None, 
-                ext_journal: None, 
-                fs_creator: None, 
-                usage: Some(UsageType::Filesystem), 
-                version: None, 
-                sbmagic: Some(magic.magic), 
-                sbmagic_offset: Some(magic.b_offset), 
-                fs_size: Some(u64::from(ns.number_of_sectors) * sector_size), 
-                fs_last_block: None, 
-                fs_block_size: Some(sector_size * sectors_per_cluster), 
-                block_size: Some(sector_size),
-                endianness: None,
-            }
-        )
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Ntfs), 
+            sec_type: None, 
+            label: label, 
+            uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: None, 
+            creator: None, 
+            usage: Some(UsageType::Filesystem), 
+            version: None, 
+            sbmagic: Some(magic.magic), 
+            sbmagic_offset: Some(magic.b_offset), 
+            size: Some(u64::from(ns.number_of_sectors) * sector_size), 
+            fs_last_block: None, 
+            fs_block_size: Some(sector_size * sectors_per_cluster), 
+            block_size: Some(sector_size), 
+            partitions: None, 
+            endianness: None 
+        }
     );
 
     return Ok(());

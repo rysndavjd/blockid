@@ -6,7 +6,10 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
     transmute, Immutable, KnownLayout};
 
 use crate::{
-    filesystems::{volume_id::VolumeId32, FsError}, from_file, probe_get_magic, read_exact_at, read_vec_at, util::{decode_utf8_lossy_from, is_power_2}, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, FilesystemResults, FsSecType, FsType, ProbeResult, UsageType
+    filesystems::{volume_id::VolumeId32, FsError}, from_file, 
+    probe_get_magic, read_exact_at, read_vec_at, util::{decode_utf8_lossy_from, 
+        is_power_2}, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, 
+        BlockidUUID, ProbeResult, SecType, BlockType, UsageType
 };
 
 #[derive(Debug)]
@@ -44,6 +47,7 @@ impl From<IoError> for FatError {
 
 pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("vfat"),
+    btype: Some(BlockType::Vfat),
     usage: Some(UsageType::Filesystem),
     probe_fn: |probe, magic| {
         probe_vfat(probe, magic)
@@ -290,7 +294,7 @@ pub fn valid_fat (
         ms: &MsDosSuperBlock,
         vs: &VFatSuperBlock,
         mag: &BlockidMagic,
-    ) -> Result<FsSecType, FatError> 
+    ) -> Result<SecType, FatError> 
 {    
     if mag.len <= 2 {
         if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
@@ -338,11 +342,11 @@ pub fn valid_fat (
     }
 
     if cluster_count < FAT12_MAX {
-        return Ok(FsSecType::Fat12)
+        return Ok(SecType::Fat12)
     } else if cluster_count < FAT16_MAX {
-        return Ok(FsSecType::Fat16)
+        return Ok(SecType::Fat16)
     } else if cluster_count < FAT32_MAX {
-        return Ok(FsSecType::Fat32)
+        return Ok(SecType::Fat32)
     } else {
         return Err(FatError::UnknownFilesystem("Unknown fat type"));
     }
@@ -521,26 +525,27 @@ pub fn probe_vfat(
     
     let creator = String::from_utf8_lossy(&ms.ms_sysid).to_string();
 
-    probe.push_result(ProbeResult::Filesystem(
-            FilesystemResults { 
-                fs_type: Some(FsType::Vfat), 
-                sec_type: Some(sec_type), 
-                label: label, 
-                fs_uuid: Some(BlockidUUID::VolumeId32(serno)), 
-                log_uuid: None, 
-                ext_journal: None, 
-                fs_creator: Some(creator), 
-                usage: Some(UsageType::Filesystem), 
-                version: None, 
-                sbmagic: Some(mag.magic), 
-                sbmagic_offset: Some(mag.b_offset), 
-                fs_size: Some(u64::from(ms.ms_sector_size) * get_sect_count(ms) as u64), 
-                fs_last_block: None, 
-                fs_block_size: Some(vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size)), 
-                block_size: Some(u64::from(ms.ms_sector_size)),
-                endianness: None,
-            }
-        )
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Vfat), 
+            sec_type: Some(sec_type), 
+            label: label, 
+            uuid: Some(BlockidUUID::VolumeId32(serno)), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: None, 
+            creator: Some(creator), 
+            usage: Some(UsageType::Filesystem), 
+            version: None, 
+            sbmagic: Some(mag.magic), 
+            sbmagic_offset: Some(mag.b_offset), 
+            size: Some(u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms))), 
+            fs_last_block: Some(u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms))), 
+            fs_block_size: Some(u64::from(vs.vs_cluster_size) * u64::from(ms.ms_sector_size)), 
+            block_size: Some(u64::from(ms.ms_sector_size)), 
+            partitions: None, 
+            endianness: None, 
+        }
     );
     
     return Ok(());

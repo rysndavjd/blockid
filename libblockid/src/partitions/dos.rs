@@ -7,11 +7,10 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
 
 use crate::{
     BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,
-    PartEntryAttributes, PartEntryType, PartTableResults, PartitionResults,
-    ProbeResult, PtType, UsageType, from_file, read_sector_at, filesystems::{
-    exfat::probe_is_exfat, vfat::probe_is_vfat, ntfs::probe_is_ntfs,
-    volume_id::VolumeId32}, partitions::{aix::BLKID_AIX_MAGIC_STRING, 
-    PtError},
+    PartEntryAttributes, PartEntryType, PartitionResults, BlockType, 
+    UsageType, from_file, read_sector_at, filesystems::{ exfat::probe_is_exfat, 
+    vfat::probe_is_vfat, ntfs::probe_is_ntfs, volume_id::VolumeId32}, 
+    partitions::{aix::BLKID_AIX_MAGIC_STRING, PtError}, ProbeResult,
 };
 
 /*
@@ -53,6 +52,7 @@ impl From<IoError> for DosPTError {
 
 pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("dos_pt"),
+    btype: Some(BlockType::Dos),
     usage: Some(UsageType::PartitionTable),
     minsz: None,
     probe_fn: |probe, magic| {
@@ -425,14 +425,27 @@ pub fn probe_dos_pt(
         partitions.extend(ex);
     };
     
-    probe.push_result(ProbeResult::PartTable(
-                        PartTableResults { 
-                            offset: Some(probe.offset), 
-                            pt_type: Some(PtType::Dos), 
-                            pt_uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(dos_pt.disk_id))), 
-                            sbmagic: Some(b"\x55\xAA"),
-                            sbmagic_offset: Some(510),
-                            partitions: Some(partitions) 
-                        }));
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::Dos), 
+            sec_type: None, 
+            label: None, 
+            uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(dos_pt.disk_id))), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: Some(probe.offset), 
+            creator: None, 
+            usage: Some(UsageType::PartitionTable), 
+            version: None, 
+            sbmagic: Some(b"\x55\xAA"), 
+            sbmagic_offset: Some(510), 
+            size: None, 
+            fs_last_block: None, 
+            fs_block_size: None, 
+            block_size: None, 
+            partitions: Some(partitions), 
+            endianness: None, 
+        }
+    );
     return Ok(());
 }

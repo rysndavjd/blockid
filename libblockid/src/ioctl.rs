@@ -127,7 +127,6 @@ pub fn ioctl_ioc_opal_get_status<Fd: AsFd>(fd: Fd) -> io::Result<OpalStatus> {
     }
 }
 
-#[inline]
 pub fn logical_block_size<Fd: AsFd>(fd: Fd) -> io::Result<u32> {
     #[cfg(target_os = "linux")]
     return rustix::fs::ioctl_blksszget(fd);
@@ -137,7 +136,6 @@ pub fn logical_block_size<Fd: AsFd>(fd: Fd) -> io::Result<u32> {
     return ioctl_dkiocgetblocksize(fd);
 }
 
-#[inline]
 pub fn device_size_bytes<Fd: AsFd>(fd: Fd) -> io::Result<u64> {
     #[cfg(target_os = "linux")]
     return ioctl_blkgetsize64(fd);

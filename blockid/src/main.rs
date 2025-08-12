@@ -1,7 +1,6 @@
-use std::{io::{Error as IoError, ErrorKind}, path::PathBuf};
+use std::{io::{Error as IoError, ErrorKind}, path::{Path, PathBuf}};
 use std::str::FromStr;
-use libblockid::{BlockidProbe, ProbeFilter, ProbeFlags, BlockidError as LibblockidError,
-    devno_to_path, ProbeResult};
+use libblockid::{devno_to_path, BType, BlockLabel, BlockidError as LibblockidError, BlockidProbe, ProbeFilter, ProbeFlags, ProbeResult};
 use clap::{Arg, value_parser, ArgAction, Command, ValueEnum, builder::EnumValueParser,
     parser::ValuesRef};
 use thiserror::Error;
@@ -14,7 +13,7 @@ pub enum BlockidError {
     #[error("IO error occured: {0}")]
     IOError(#[from] std::io::Error),
     #[error("Invalid tag input: {0}")]
-    TagError(String),
+    TagError(&'static str),
     #[error("Clap error: {0}")]
     ClapError(&'static str),
     #[error("Libblockid Error: {0}")]
@@ -39,37 +38,55 @@ enum OutputTags {
     Creator,
 }
 
-fn print_tags(probe: BlockidProbe, mut _tags: ValuesRef<OutputTags>, _format: OutputType) -> Result<(), BlockidError> {
-    let mut tags = _tags.peekable();
-
-    if tags.peek().is_none() {
-        return Err(BlockidError::TagError(String::from("Please enter at least one tag to print")));
-    }
+fn get_probes(path: PathBuf) -> Result<Vec<BlockidProbe>, BlockidError> {
     
-    let results = probe
-        .results()
-        .ok_or(BlockidError::TagError(String::from("No value to print")))?;
+}
 
-    for result in results {
-        let mut matched_tags: Vec<String> = Vec::new();
+fn print_tags(, tags: Vec<OutputTags>) -> Result<(), BlockidError> {
 
-        match result {
-            ProbeResult::Container(t) => {
-                for tag in tags {
-                    match tag {
-                        &OutputTags::Device => matched_tags.push(devno_to_path(probe.devno())?.display().to_string()),
-                        &OutputTags::Type => matched_tags.push(t.cont_type.unwrap().to_string()),
-                        &OutputTags::Label => matched_tags.push(t.label.unwrap()),
-                        &OutputTags::PartLabel => 
-                        &OutputTags::Uuid => 
-                        &OutputTags::PartUuid => 
-                        &OutputTags::BlockSize => 
-                        &OutputTags::Creator => 
-                    }
-                }
-            }
-        }
+    if tags.is_empty() {
+        return Err(BlockidError::TagError("Please enter at least one tag to print"));
     }
+
+    let result = probe
+        .result()
+        .ok_or(BlockidError::LibblockidError(LibblockidError::UnknownBlock))?;
+    
+    let block: String = tags
+        .iter()
+        .filter_map(|t| {
+            match t {
+                OutputTags::Device => {
+                    Some(format!("{}", probe.path().display()))
+                },
+                OutputTags::Type => {
+                    Some(format!("{}", result.block_type()?))
+                },
+                OutputTags::Label => {
+                    Some(format!("{}", result.label()?))
+                }, 
+                OutputTags::PartLabel => {
+                    
+                },
+                OutputTags::Uuid => {
+
+                },
+                OutputTags::PartUuid => {
+
+                },
+                OutputTags::BlockSize => {
+
+                },
+                OutputTags::Creator => {
+
+                },
+            }   
+        })
+        .collect();
+
+    for tag in tags {
+        
+    };
 
     return Ok(());
 }
@@ -85,7 +102,7 @@ fn main() -> Result<(), BlockidError> {
                 .help("Read from <file> instead of reading from the default")
                 .value_name("file")
                 .required(false)
-                .value_parser(value_parser!(PathBuf)),
+                .value_parser(value_parser!(String)),
         )
         .arg(
             Arg::new("list-supported")
@@ -101,6 +118,7 @@ fn main() -> Result<(), BlockidError> {
                 .help("show specified tag(s)")
                 .value_delimiter(',')
                 .value_parser(EnumValueParser::<OutputTags>::new())
+                .default_missing_value("device,label,uuid,blocksize,type,partlabel,partuuid")
                 .action(clap::ArgAction::Append)
         )
         .arg(
@@ -110,7 +128,6 @@ fn main() -> Result<(), BlockidError> {
                 .value_name("format")
                 .help("Output format")
                 .value_parser(EnumValueParser::<OutputType>::new())
-                .default_value("full"),
         )
         .arg(
             Arg::new("debug")
@@ -134,23 +151,38 @@ fn main() -> Result<(), BlockidError> {
         )
         .get_matches();
     
-    let cache = if let Some(cache_file) = matches.get_one::<PathBuf>("cache-file") {
-        cache_file
+    let cache = if let Some(cache_file) = matches.get_one::<String>("cache-file") {
+        PathBuf::from(cache_file)
     } else {
-        &PathBuf::from(CACHE_PATH)
+        PathBuf::from(CACHE_PATH)
     };
 
     if matches.get_flag("list-supported") {
-        for item in BlockidProbe::list_supported_sb() {
+        for item in BlockidProbe::list_supported_blks() {
             println!("{item}");   
         }
         return Ok(());
     }
 
-    let mut tags: ValuesRef<OutputTags> = matches
-        .get_many::<OutputTags>("match-tag")
-        .ok_or(BlockidError::ClapError("Unable to convert tag to enum"))?;
-
+    let tags: Vec<OutputTags> = match matches
+        .get_many::<OutputTags>("match-tag") {
+        Some(r) => {
+            r
+            .into_iter()
+            .copied()
+            .collect()
+        },
+        None => {
+            vec![OutputTags::Device,
+                OutputTags::Label,
+                OutputTags::Uuid,
+                OutputTags::BlockSize,
+                OutputTags::Type,
+                OutputTags::PartLabel,
+                OutputTags::PartUuid,
+                ]
+        }
+    };
 
     return Ok(());
 }

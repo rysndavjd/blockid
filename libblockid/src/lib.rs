@@ -23,9 +23,11 @@ use bitflags::bitflags;
 use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::FromBytes;
-use rustix::fs::{fstat, major, minor, Dev, FileType, Mode, stat};
+use rustix::fs::{stat, fstat, major, minor, Dev, FileType, Mode};
+use crate::ioctl::{logical_block_size, device_size_bytes};
+#[cfg(target_os = "linux")]
 use crate::ioctl::{OpalStatusFlags, ioctl_ioc_opal_get_status, 
-    logical_block_size, device_size_bytes, ioctl_blkgetzonesz};
+    ioctl_blkgetzonesz};
 
 use crate::{
     containers::{
@@ -54,7 +56,9 @@ pub enum BlockidError {
     ArgumentError(&'static str),
     #[error("Probe failed: {0}")]
     ProbeError(&'static str),
-    #[error("Filesystem probe failed: {0}")]
+    #[error("Unknown super block")]
+    UnknownBlock,
+    #[error("Unable to convert probe to result: {0}")]
     FsError(#[from] FsError),
     #[error("Partition Table probe failed: {0}")]
     PtError(#[from] PtError),
@@ -84,7 +88,7 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
 ];
 
 impl BlockidProbe {
-    pub fn list_supported_sb() -> Vec<String> {
+    pub fn supported_string() -> Vec<String> {
         PROBES
             .iter()
             .filter_map(|(_, _, info)| info.name)
@@ -92,8 +96,16 @@ impl BlockidProbe {
             .collect()
     }
 
+    pub fn supported_type() -> Vec<BlockType> {
+        PROBES
+            .iter()
+            .filter_map(|(_, _, info)| info.btype)
+            .collect()
+    }
+
     pub fn new(
             file: File,
+            path: PathBuf,
             offset: u64,
             flags: ProbeFlags,
             filter: ProbeFilter,
@@ -120,6 +132,7 @@ impl BlockidProbe {
 
         Ok( Self { 
             file,
+            path,
             buffer: None,
             offset, 
             size, 
@@ -132,7 +145,7 @@ impl BlockidProbe {
             zone_size,
             flags,
             filter,
-            values: None 
+            value: None,
         })
     }
 
@@ -209,58 +222,39 @@ impl BlockidProbe {
             result: ProbeResult,
         ) 
     {
-        self.values
-            .get_or_insert_with(Vec::new)
-            .push(result)
+        if self.value.is_some() {
+            log::error!("Probe already has a result, first: {:?}, second: {result:?}", self.value)
+        }
+        self.value = Some(result)
     }
 
-    pub fn from_filename<P: AsRef<Path>>(
-            filename: P,
+    pub fn from_filename(
+            filename: String,
             flags: ProbeFlags,
             filter: ProbeFilter,
             offset: u64,
         ) -> Result<BlockidProbe, BlockidError>
     {
-        let file = File::open(filename)?;
+        let file = File::open(&filename)?;
+        
+        let path: PathBuf = filename.into();
 
-        let probe = BlockidProbe::new(file, offset, flags, filter)?;
+        let probe = BlockidProbe::new(file, path, offset, flags, filter)?;
 
         return Ok(probe);
     }
 
-    pub fn results(&self) -> Option<&[ProbeResult]> {
-        self.values.as_deref()
+    pub fn result(&self) -> Option<&ProbeResult> {
+        return self.value.as_ref();
     }
 
-    pub fn into_results(self) -> Option<Vec<ProbeResult>> {
-        self.values
+    pub fn into_result(self) -> Option<ProbeResult> {
+        return self.value;
     }
 
-    pub fn into_cont_result(self) -> Option<ContainerResults> {
-        self.into_results()?
-            .into_iter()
-            .find_map(|result| match result {
-                ProbeResult::Container(r) => Some(r),
-                _ => None,
-            })
-    }
-
-    pub fn into_pt_result(self) -> Option<PartTableResults> {
-        self.into_results()?
-            .into_iter()
-            .find_map(|result| match result {
-                ProbeResult::PartTable(r) => Some(r),
-                _ => None,
-            })
-    }
-
-    pub fn into_fs_result(self) -> Option<FilesystemResults> {
-        self.into_results()?
-            .into_iter()
-            .find_map(|result| match result {
-                ProbeResult::Filesystem(r) => Some(r),
-                _ => None,
-            })
+    #[inline]
+    pub fn path(&self) -> &Path {
+        return self.path.as_path();
     }
 
     #[inline]
@@ -268,6 +262,7 @@ impl BlockidProbe {
         return self.sector_size;
     }
 
+    #[cfg(target_os = "linux")]
     #[inline]
     pub fn zsz(&self) -> u64 {
         return self.zone_size;
@@ -301,6 +296,10 @@ impl BlockidProbe {
     #[inline]
     pub fn disk_devno_min(&self) -> u32 {
         return minor(self.disk_devno);
+    }
+
+    pub fn disk_path(&self) -> Result<PathBuf, IoError> {
+        return devno_to_path(self.disk_devno)
     }
 
     #[inline]
@@ -337,6 +336,7 @@ impl BlockidProbe {
 #[derive(Debug)]
 pub struct BlockidProbe {
     file: File,
+    path: PathBuf,
     buffer: Option<BufReader<File>>,
     offset: u64,
     size: u64,
@@ -351,7 +351,7 @@ pub struct BlockidProbe {
 
     flags: ProbeFlags,
     filter: ProbeFilter,
-    values: Option<Vec<ProbeResult>>
+    value: Option<ProbeResult>
 }
 
 impl BlockidProbeBuilder {
@@ -389,14 +389,14 @@ impl BlockidProbeBuilder {
             BlockidError::ArgumentError("Path/devno not set in BlockidProbeBuilder")
         })?;
 
-        let file = match id {
-            IdType::Path(path) => File::open(path)?,
+        let (file, path) = match id {
+            IdType::Path(path) => (File::open(&path)?, path),
             IdType::Devno(devno) => {
                 let path = devno_to_path(devno)?;
-                File::open(path)?
+                (File::open(&path)?, path)
             }
         };
-        BlockidProbe::new(file, self.offset, self.flags, self.filter)
+        BlockidProbe::new(file, path, self.offset, self.flags, self.filter)
     }
 }
 
@@ -449,51 +449,183 @@ pub enum Endianness {
     Big
 }
 
-#[derive(Debug)]
-pub enum ProbeResult {
-    Container(ContainerResults),
-    PartTable(PartTableResults),
-    Filesystem(FilesystemResults),
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ProbeResult {
+    btype: Option<BlockType>,
+    sec_type: Option<SecType>,
+    label: Option<String>,
+    uuid: Option<BlockidUUID>,
+    log_uuid: Option<BlockidUUID>,
+    ext_journal: Option<BlockidUUID>,
+    offset: Option<u64>,
+    creator: Option<String>,
+    usage: Option<UsageType>,
+    version: Option<BlockidVersion>,
+    sbmagic: Option<&'static [u8]>,
+    sbmagic_offset: Option<u64>,
+    size: Option<u64>,
+    fs_last_block: Option<u64>,
+    fs_block_size: Option<u64>,
+    block_size: Option<u64>,
+    partitions: Option<Vec<PartitionResults>>,
+    endianness: Option<Endianness>,
 }
 
-#[derive(Debug)]
-pub struct ContainerResults {
-    pub cont_type: Option<ContType>,
-    pub label: Option<String>,
-    pub cont_uuid: Option<BlockidUUID>,
-    pub cont_creator: Option<String>,
-    pub usage: Option<UsageType>,
-    pub version: Option<BlockidVersion>,
-    pub sbmagic: Option<&'static [u8]>,
-    pub sbmagic_offset: Option<u64>,
-    pub cont_size: Option<u64>,
-    pub cont_block_size: Option<u64>,
-    pub endianness: Option<Endianness>,
+impl ProbeResult {
+    pub fn block_type(&self) -> Option<&BlockType> {
+        self.btype.as_ref()
+    }
+
+    pub fn into_block_type(self) -> Option<BlockType> {
+        self.btype
+    }
+
+    pub fn sec_type(&self) -> Option<&SecType> {
+        self.sec_type.as_ref()
+    }
+
+    pub fn into_sec_type(self) -> Option<SecType> {
+        self.sec_type
+    }
+
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_ref().map(|string| string.as_str())
+    }
+
+    pub fn into_label(self) -> Option<String> {
+        self.label
+    }
+
+    pub fn uuid(&self) -> Option<&BlockidUUID> {
+        self.uuid.as_ref()
+    }
+
+    pub fn into_uuid(self) -> Option<BlockidUUID> {
+        self.uuid
+    }
+
+    pub fn log_uuid(&self) -> Option<&BlockidUUID> {
+        self.log_uuid.as_ref()
+    }
+
+    pub fn into_log_uuid(self) -> Option<BlockidUUID> {
+        self.log_uuid
+    }
+
+    pub fn ext_journal(&self) -> Option<&BlockidUUID> {
+        self.ext_journal.as_ref()
+    }
+
+    pub fn into_ext_journal(self) -> Option<BlockidUUID> {
+        self.ext_journal
+    }
+
+    pub fn offset(&self) -> Option<u64> {
+        self.offset
+    }
+
+    pub fn into_offset(self) -> Option<u64> {
+        self.offset
+    }
+
+    pub fn creator(&self) -> Option<&str> {
+        self.creator.as_ref().map(|string| string.as_str())
+    }
+
+    pub fn into_creator(self) -> Option<String> {
+        self.creator
+    }
+
+    pub fn usage(&self) -> Option<&UsageType> {
+        self.usage.as_ref()
+    }
+
+    pub fn into_usage(self) -> Option<UsageType> {
+        self.usage
+    }
+
+    pub fn version(&self) -> Option<&BlockidVersion> {
+        self.version.as_ref()
+    }
+
+    pub fn into_version(self) -> Option<BlockidVersion> {
+        self.version
+    }
+
+    pub fn magic(&self) -> Option<&[u8]> {
+        self.sbmagic
+    }
+
+    pub fn into_magic(self) -> Option<&'static[u8]> {
+        self.sbmagic
+    }
+
+    pub fn magic_offset(&self) -> Option<u64> {
+        self.sbmagic_offset
+    }
+
+    pub fn into_magic_offset(self) -> Option<u64> {
+        self.sbmagic_offset
+    }
+
+    pub fn size(&self) -> Option<u64> {
+        self.size
+    }
+
+    pub fn into_size(self) -> Option<u64> {
+        self.size
+    } 
+
+    pub fn fs_last_block(&self) -> Option<u64> {
+        self.fs_last_block
+    }
+
+    pub fn into_fs_last_block(self) -> Option<u64> {
+        self.fs_last_block
+    }
+
+    pub fn fs_block_size(&self) -> Option<u64> {
+        self.fs_block_size
+    }
+
+    pub fn into_fs_block_size(self) -> Option<u64> {
+        self.fs_block_size
+    }
+
+    pub fn block_size(&self) -> Option<u64> {
+        self.block_size
+    }
+
+    pub fn into_block_size(self) -> Option<u64> {
+        self.block_size
+    }
+
+    pub fn partitions(&self) -> Option<&Vec<PartitionResults>> {
+        self.partitions.as_ref()
+    }
+
+    pub fn into_partitions(self) -> Option<Vec<PartitionResults>> {
+        self.partitions
+    }
+
+    pub fn endianness(&self) -> Option<&Endianness> {
+        self.endianness.as_ref()
+    }
+
+    pub fn into_endianness(self) -> Option<Endianness> {
+        self.endianness
+    }
 }
 
-#[derive(Debug)]
-pub struct PartTableResults {
-    pub offset: Option<u64>,
-
-    pub pt_type: Option<PtType>,
-    pub pt_uuid: Option<BlockidUUID>,
-    pub sbmagic: Option<&'static [u8]>,
-    pub sbmagic_offset: Option<u64>,
-
-    pub partitions: Option<Vec<PartitionResults>>,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PartitionResults {
-    pub offset: Option<u64>,
-    pub size: Option<u64>,
-
-    pub partno: Option<u64>,
-    pub part_uuid: Option<BlockidUUID>,
-    pub name: Option<String>,
-
-    pub entry_type: Option<PartEntryType>,
-    pub entry_attributes: Option<PartEntryAttributes>,
+    offset: Option<u64>,
+    size: Option<u64>,
+    partno: Option<u64>,
+    part_uuid: Option<BlockidUUID>,
+    name: Option<String>,
+    entry_type: Option<PartEntryType>,
+    entry_attributes: Option<PartEntryAttributes>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -508,99 +640,55 @@ pub enum PartEntryAttributes {
     Gpt(u64)
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct FilesystemResults {
-    pub fs_type: Option<FsType>,
-    pub sec_type: Option<FsSecType>,
-    pub label: Option<String>,
-    pub fs_uuid: Option<BlockidUUID>,
-    pub log_uuid: Option<BlockidUUID>,
-    pub ext_journal: Option<BlockidUUID>,
-    pub fs_creator: Option<String>,
-    pub usage: Option<UsageType>,
-    pub version: Option<BlockidVersion>,
-    pub sbmagic: Option<&'static [u8]>,
-    pub sbmagic_offset: Option<u64>,
-    pub fs_size: Option<u64>,
-    pub fs_last_block: Option<u64>,
-    pub fs_block_size: Option<u64>,
-    pub block_size: Option<u64>,
-    pub endianness: Option<Endianness>,
-}
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum ContType {
-    //MD,
-    //LVM,
-    //DM,
+pub enum BlockType {
     LUKS1,
     LUKS2,
-}
-
-impl fmt::Display for ContType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            //Self::MD => write!(f, "MD"),
-            //Self::LVM => write!(f, "LVM"),
-            //Self::DM => write!(f, "DM"),
-            Self::LUKS1 => write!(f, "LUKS1"),
-            Self::LUKS2 => write!(f, "LUKS2"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum PtType {
+    LUKSOPAL,
     Dos,
     Gpt,
-    //Mac,
-    //Bsd,
-}
-
-impl fmt::Display for PtType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Dos => write!(f, "Dos"),
-            Self::Gpt => write!(f, "Gpt"),
-            //Self::Mac => write!(f, "Mac"),
-            //Self::Bsd => write!(f, "Bsd"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum FsType {
     Exfat,
+    Jbd,
     Ext2,
     Ext3,
     Ext4,
-    LinuxSwap,
+    LinuxSwapV0,
+    LinuxSwapV1,
+    SwapSuspend,
     Ntfs,
     Vfat,
 }
 
-impl fmt::Display for FsType {
+impl fmt::Display for BlockType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::LUKS1 => write!(f, "LUKS1"),
+            Self::LUKS2 => write!(f, "LUKS2"),
+            Self::LUKSOPAL => write!(f, "LUKS Opal"),
+            Self::Dos => write!(f, "Dos"),
+            Self::Gpt => write!(f, "Gpt"),
             Self::Exfat => write!(f, "Exfat"),
+            Self::Jbd => write!(f, "Jbd"),
             Self::Ext2 => write!(f, "Ext2"),
             Self::Ext3 => write!(f, "Ext3"),
             Self::Ext4 => write!(f, "Ext4"),
             Self::Ntfs => write!(f, "Ntfs"),
-            Self::LinuxSwap => write!(f, "Linux Swap"),
+            Self::LinuxSwapV0 => write!(f, "Linux Swap V0"),
+            Self::LinuxSwapV1 => write!(f, "Linux Swap V1"),
+            Self::SwapSuspend => write!(f, "Swap Suspend"),
             Self::Vfat => write!(f, "Vfat"),
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum FsSecType {
+pub enum SecType {
     Fat12,
     Fat16,
     Fat32,
 }
 
-impl fmt::Display for FsSecType {
+impl fmt::Display for SecType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Fat12 => write!(f, "Fat12"),
@@ -630,6 +718,7 @@ impl fmt::Display for BlockidUUID {
 #[derive(Debug, Copy, Clone, Hash)]
 pub struct BlockidIdinfo {
     pub name: Option<&'static str>,
+    pub btype: Option<BlockType>,
     pub usage: Option<UsageType>,
     pub minsz: Option<u64>,
     pub probe_fn: ProbeFn,
@@ -645,11 +734,38 @@ pub enum UsageType {
     Other(&'static str),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockidVersion {
-    String(String),
     Number(u64),
     DevT(Dev),
+}
+
+pub trait BlockLabel {
+    fn label(&self) -> Option<&str>;
+}
+
+pub trait BType {
+    fn block_type(&self) -> Option<BlockType>;
+}
+
+pub trait BlockUuid {
+    fn uuid(&self) -> Option<BlockidUUID>;
+}
+
+pub trait BlockSize {
+    fn block_size(&self) -> Option<u64>;
+}
+
+pub trait BlockCreator {
+    fn creator(&self) -> Option<&str>;
+}
+
+pub trait BlockEndianness {
+    fn endianness(&self) -> Option<Endianness>;
+}
+
+pub trait BlockPartitions {
+    fn partitions(&self) -> Option<Vec<&PartitionResults>>;
 }
 
 type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<(), BlockidError>;

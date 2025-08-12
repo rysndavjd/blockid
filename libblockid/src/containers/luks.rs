@@ -10,7 +10,7 @@ use uuid::{Uuid};
 use crate::{
     containers::ContError, from_file, util::decode_utf8_from, BlockidError, 
     BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
-    ContainerResults, Endianness, ProbeResult, UsageType, util::UtfError
+    Endianness, ProbeResult, UsageType, util::UtfError, BlockType
 };
 
 /* 
@@ -27,7 +27,6 @@ pub enum LuksError {
     LuksHeaderError(&'static str),
     UnknownFilesystem(&'static str),
     NixError(rustix::io::Errno),
-
 }
 
 impl std::fmt::Display for LuksError {
@@ -89,6 +88,7 @@ pub const SECONDARY_OFFSETS: [u64; 9] = [0x04000, 0x008000, 0x010000, 0x020000,
 
 pub const LUKS1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("luks1"),
+    btype: Some(BlockType::LUKS1),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {
         probe_luks1(probe, magic)
@@ -107,6 +107,7 @@ pub const LUKS1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("luks1"),
+    btype: Some(BlockType::LUKS2),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {
         probe_luks2(probe, magic)
@@ -125,6 +126,7 @@ pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 pub const LUKS_OPAL_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("LUKS_OPAL"),
+    btype: Some(BlockType::LUKSOPAL),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {
         probe_luks_opal(probe, magic)
@@ -221,23 +223,28 @@ pub fn probe_luks1(
         return Err(LuksError::LuksHeaderError("Luks is not valid luks1 container"));
     }
 
-    probe.push_result(ProbeResult::Container(
-                ContainerResults { 
-                    cont_type: Some(crate::ContType::LUKS1), 
-                    label: None, 
-                    cont_uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
-                    cont_creator: None, 
-                    usage: Some(UsageType::Crypto), 
-                    version: Some(BlockidVersion::Number(u64::from(header.version))), 
-                    sbmagic: Some(&LUKS1_MAGIC), 
-                    sbmagic_offset: Some(0), 
-                    cont_size: None, 
-                    cont_block_size: None,
-                    endianness: Some(Endianness::Big),
-                }
-            )
-        );
-
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::LUKS1), 
+            sec_type: None, 
+            label: None, 
+            uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: None, 
+            creator: None, 
+            usage: Some(UsageType::Crypto), 
+            version: Some(BlockidVersion::Number(u64::from(header.version))), 
+            sbmagic: Some(&LUKS1_MAGIC), 
+            sbmagic_offset: Some(0), 
+            size: None, 
+            fs_last_block: None, 
+            fs_block_size: None, 
+            block_size: None, 
+            partitions: None, 
+            endianness: Some(Endianness::Big), 
+        }    
+    );
     return Ok(());
 }
 
@@ -252,23 +259,28 @@ pub fn probe_luks2(
         return Err(LuksError::LuksHeaderError("Luks is not valid luks2 container"));
     }
 
-    probe.push_result(ProbeResult::Container(
-                ContainerResults { 
-                    cont_type: Some(crate::ContType::LUKS1), 
-                    label: None, 
-                    cont_uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
-                    cont_creator: None, 
-                    usage: Some(UsageType::Crypto), 
-                    version: Some(BlockidVersion::Number(u64::from(header.version))), 
-                    sbmagic: Some(&LUKS2_MAGIC), 
-                    sbmagic_offset: Some(0), 
-                    cont_size: None, 
-                    cont_block_size: None,
-                    endianness: Some(Endianness::Big),
-                }
-            )
-        );
-
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::LUKS2), 
+            sec_type: None, 
+            label: None, 
+            uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: None, 
+            creator: None, 
+            usage: Some(UsageType::Crypto), 
+            version: Some(BlockidVersion::Number(u64::from(header.version))), 
+            sbmagic: Some(&LUKS2_MAGIC), 
+            sbmagic_offset: Some(0), 
+            size: None, 
+            fs_last_block: None, 
+            fs_block_size: None, 
+            block_size: None, 
+            partitions: None, 
+            endianness: Some(Endianness::Big), 
+        }    
+    );
     return Ok(());
 }
 
@@ -294,22 +306,27 @@ pub fn probe_luks_opal(
     #[cfg(not(target_os = "linux"))]
     warn!("Unable to check if opal is locked as the ioctl call is unavilable on non-linux platforms");
 
-    probe.push_result(ProbeResult::Container(
-                ContainerResults { 
-                    cont_type: Some(crate::ContType::LUKS1), 
-                    label: None, 
-                    cont_uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
-                    cont_creator: None, 
-                    usage: Some(UsageType::Crypto), 
-                    version: Some(BlockidVersion::Number(u64::from(header.version))), 
-                    sbmagic: Some(&LUKS2_MAGIC), 
-                    sbmagic_offset: Some(0), 
-                    cont_size: None, 
-                    cont_block_size: None,
-                    endianness: Some(Endianness::Big),
-                }
-            )
-        );
-
+    probe.push_result(
+        ProbeResult { 
+            btype: Some(BlockType::LUKSOPAL), 
+            sec_type: None, 
+            label: None, 
+            uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
+            log_uuid: None, 
+            ext_journal: None, 
+            offset: None, 
+            creator: None, 
+            usage: Some(UsageType::Crypto), 
+            version: Some(BlockidVersion::Number(u64::from(header.version))), 
+            sbmagic: Some(&LUKS1_MAGIC), 
+            sbmagic_offset: Some(0), 
+            size: None, 
+            fs_last_block: None, 
+            fs_block_size: None, 
+            block_size: None, 
+            partitions: None, 
+            endianness: Some(Endianness::Big), 
+        }    
+    );
     return Ok(());
 }
