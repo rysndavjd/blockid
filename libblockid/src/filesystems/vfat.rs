@@ -6,10 +6,11 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
     transmute, Immutable, KnownLayout};
 
 use crate::{
-    filesystems::{volume_id::VolumeId32, FsError}, from_file, 
-    probe_get_magic, read_exact_at, read_vec_at, util::{decode_utf8_lossy_from, 
-        is_power_2}, BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, 
-        BlockidUUID, ProbeResult, SecType, BlockType, UsageType
+    filesystems::{volume_id::VolumeId32, FsError}, probe::{BlockType, 
+    BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, ProbeResult, 
+    SecType, UsageType, FilesystemResult}, util::{decode_utf8_lossy_from, 
+    from_file, is_power_2, probe_get_magic, read_exact_at, read_vec_at}, 
+    BlockidError
 };
 
 #[derive(Debug)]
@@ -356,14 +357,14 @@ pub fn probe_is_vfat(
         probe: &mut BlockidProbe, 
     ) -> Result<(), FatError>
 {
-    let buffer: [u8; 512] = read_exact_at(&mut probe.file, probe.offset)?;
+    let buffer: [u8; 512] = read_exact_at(&mut probe.file(), probe.offset())?;
 
     let ms = MsDosSuperBlock::ref_from_bytes(&buffer)
         .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to MSDOS superblock"))?;
     let vs = VFatSuperBlock::ref_from_bytes(&buffer)
         .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to VFAT superblock"))?;
 
-    let mag: BlockidMagic = match probe_get_magic(&mut probe.file, &VFAT_ID_INFO)? {
+    let mag: BlockidMagic = match probe_get_magic(&mut probe.file(), &VFAT_ID_INFO)? {
         Some(t) => t,
         None => return Err(FatError::UnknownFilesystem("Invalid magic sig"))
     };
@@ -504,7 +505,7 @@ pub fn probe_vfat(
         mag: BlockidMagic,
     ) -> Result<(), FatError> 
 {
-    let buffer: [u8; 512] = read_exact_at(&mut probe.file, probe.offset)?;
+    let buffer: [u8; 512] = read_exact_at(&mut probe.file(), probe.offset())?;
 
     let ms = MsDosSuperBlock::ref_from_bytes(&buffer)
         .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to MSDOS superblock"))?;
@@ -516,9 +517,9 @@ pub fn probe_vfat(
     let fat_size = get_fat_size(ms, vs);
 
     let (label, serno) = if ms.ms_fat_length != 0 {
-        probe_fat16(&mut probe.file, ms, vs, fat_size)?
+        probe_fat16(&mut probe.file(), ms, vs, fat_size)?
     } else if vs.vs_fat32_length != 0 {
-        probe_fat32(&mut probe.file, ms, vs, fat_size)?
+        probe_fat32(&mut probe.file(), ms, vs, fat_size)?
     } else {
         return Err(FatError::UnknownFilesystem("Block is not fat filesystem"));
     };
@@ -526,26 +527,26 @@ pub fn probe_vfat(
     let creator = String::from_utf8_lossy(&ms.ms_sysid).to_string();
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Vfat), 
-            sec_type: Some(sec_type), 
-            label: label, 
-            uuid: Some(BlockidUUID::VolumeId32(serno)), 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: None, 
-            creator: Some(creator), 
-            usage: Some(UsageType::Filesystem), 
-            version: None, 
-            sbmagic: Some(mag.magic), 
-            sbmagic_offset: Some(mag.b_offset), 
-            size: Some(u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms))), 
-            fs_last_block: Some(u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms))), 
-            fs_block_size: Some(u64::from(vs.vs_cluster_size) * u64::from(ms.ms_sector_size)), 
-            block_size: Some(u64::from(ms.ms_sector_size)), 
-            partitions: None, 
-            endianness: None, 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult {
+                btype: Some(BlockType::Vfat), 
+                sec_type: Some(sec_type), 
+                uuid: Some(BlockidUUID::VolumeId32(serno)), 
+                log_uuid: None, 
+                ext_journal: None, 
+                label: label, 
+                creator: Some(creator), 
+                usage: Some(UsageType::Filesystem), 
+                version: None, 
+                sbmagic: Some(mag.magic), 
+                sbmagic_offset: Some(mag.b_offset), 
+                size: Some(u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms))), 
+                fs_last_block: Some(u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms))), 
+                fs_block_size: Some(u64::from(vs.vs_cluster_size) * u64::from(ms.ms_sector_size)), 
+                block_size: Some(u64::from(ms.ms_sector_size)), 
+                endianness: None, 
+            }
+        )
     );
     
     return Ok(());

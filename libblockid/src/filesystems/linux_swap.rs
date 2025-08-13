@@ -4,9 +4,11 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned, Immutable};
 use uuid::Uuid;
 
 use crate::{
-    filesystems::FsError, from_file, read_exact_at, BlockidError, BlockidIdinfo, 
-    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, Endianness, 
-    ProbeResult, BlockType, UsageType, util::decode_utf8_lossy_from
+    filesystems::FsError, probe::{BlockType, BlockidIdinfo, 
+    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
+    Endianness, FilesystemResult, ProbeResult, UsageType}, 
+    util::{decode_utf8_lossy_from, from_file, read_exact_at}, 
+    BlockidError
 };
 
 #[derive(Debug)]
@@ -282,39 +284,39 @@ pub fn probe_swap_v0(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check: [u8; 8] = read_exact_at(&mut probe.file, probe.offset + 1024)?;
+    let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
     }
 
     if magic.magic == b"SWAP-SPACE" {
-        let header: SwapHeaderV1 = from_file(&mut probe.file, 1024)?;
+        let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
         
         let (endian, pagesize, fs_size, fs_last_block, 
             name) = swap_get_info(magic, "Swap V0", header)?;
     
         probe.push_result(
-            ProbeResult { 
-                btype: Some(BlockType::LinuxSwapV0), 
-                sec_type: None, 
-                label: None, 
-                uuid: None, 
-                log_uuid: None, 
-                ext_journal: None, 
-                offset: None, 
-                creator: None, 
-                usage: Some(UsageType::Other(name)), 
-                version: Some(BlockidVersion::Number(0)), 
-                sbmagic: Some(magic.magic), 
-                sbmagic_offset: Some(magic.b_offset), 
-                size: Some(fs_size), 
-                fs_last_block: Some(fs_last_block), 
-                fs_block_size: Some(pagesize), 
-                block_size: None, 
-                partitions: None, 
-                endianness: Some(endian), 
-            }
+            ProbeResult::Filesystem( 
+                FilesystemResult { 
+                    btype: Some(BlockType::LinuxSwapV0), 
+                    sec_type: None, 
+                    label: None, 
+                    uuid: None, 
+                    log_uuid: None, 
+                    ext_journal: None, 
+                    creator: None, 
+                    usage: Some(UsageType::Other(name)), 
+                    version: Some(BlockidVersion::Number(0)), 
+                    sbmagic: Some(magic.magic), 
+                    sbmagic_offset: Some(magic.b_offset), 
+                    size: Some(fs_size), 
+                    fs_last_block: Some(fs_last_block), 
+                    fs_block_size: Some(pagesize), 
+                    block_size: None, 
+                    endianness: Some(endian), 
+                }
+            )
         );
         return Ok(());
     } else {
@@ -327,14 +329,14 @@ pub fn probe_swap_v1(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let check: [u8; 8] = read_exact_at(&mut probe.file, probe.offset + 1024)?;
+    let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
     }
 
     if magic.magic == b"SWAPSPACE2" {
-        let header: SwapHeaderV1 = from_file(&mut probe.file, probe.offset + 1024)?;
+        let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
         
         let (endian, pagesize, fs_size, fs_last_block, 
             name) = swap_get_info(magic, "Swap V1", header)?;
@@ -347,26 +349,26 @@ pub fn probe_swap_v1(
             None
         };
         probe.push_result(
-            ProbeResult { 
-                btype: Some(BlockType::LinuxSwapV1), 
-                sec_type: None, 
-                label, 
-                uuid: Some(BlockidUUID::Uuid(uuid)), 
-                log_uuid: None, 
-                ext_journal: None, 
-                offset: None, 
-                creator: None, 
-                usage: Some(UsageType::Other(name)), 
-                version: Some(BlockidVersion::Number(1)), 
-                sbmagic: Some(magic.magic), 
-                sbmagic_offset: Some(magic.b_offset), 
-                size: Some(fs_size), 
-                fs_last_block: Some(fs_last_block), 
-                fs_block_size: Some(pagesize), 
-                block_size: None, 
-                partitions: None, 
-                endianness: Some(endian), 
-            }
+            ProbeResult::Filesystem(
+                FilesystemResult { 
+                    btype: Some(BlockType::LinuxSwapV1), 
+                    sec_type: None, 
+                    label, 
+                    uuid: Some(BlockidUUID::Uuid(uuid)), 
+                    log_uuid: None, 
+                    ext_journal: None, 
+                    creator: None, 
+                    usage: Some(UsageType::Other(name)), 
+                    version: Some(BlockidVersion::Number(1)), 
+                    sbmagic: Some(magic.magic), 
+                    sbmagic_offset: Some(magic.b_offset), 
+                    size: Some(fs_size), 
+                    fs_last_block: Some(fs_last_block), 
+                    fs_block_size: Some(pagesize), 
+                    block_size: None, 
+                    endianness: Some(endian), 
+                }
+            )
         );
         return Ok(());
     } else {
@@ -379,7 +381,7 @@ pub fn probe_swsuspend(
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
-    let header: SwapHeaderV1 = from_file(&mut probe.file, probe.offset + 1024)?;
+    let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
 
     let (endian, pagesize, fs_size, fs_last_block,
          name) = if magic.magic == b"S1SUSPEND" {
@@ -397,26 +399,26 @@ pub fn probe_swsuspend(
     };
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::SwapSuspend), 
-            sec_type: None, 
-            label: None, 
-            uuid: None, 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: None, 
-            creator: None, 
-            usage: Some(UsageType::Other(name)), 
-            version: None, 
-            sbmagic: Some(magic.magic), 
-            sbmagic_offset: Some(magic.b_offset), 
-            size: Some(fs_size), 
-            fs_last_block: Some(fs_last_block), 
-            fs_block_size: Some(pagesize), 
-            block_size: None, 
-            partitions: None, 
-            endianness: Some(endian), 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult { 
+                btype: Some(BlockType::SwapSuspend), 
+                sec_type: None, 
+                label: None, 
+                uuid: None, 
+                log_uuid: None, 
+                ext_journal: None, 
+                creator: None, 
+                usage: Some(UsageType::Other(name)), 
+                version: None, 
+                sbmagic: Some(magic.magic), 
+                sbmagic_offset: Some(magic.b_offset), 
+                size: Some(fs_size), 
+                fs_last_block: Some(fs_last_block), 
+                fs_block_size: Some(pagesize), 
+                block_size: None, 
+                endianness: Some(endian), 
+            }
+        )
     );
     return Ok(());
 }

@@ -5,12 +5,10 @@ use log::warn;
 use zerocopy::{FromBytes, IntoBytes, Unaligned, 
     byteorder::U64, byteorder::U32, byteorder::U16, 
     byteorder::BigEndian, Immutable};
-use uuid::{Uuid};
+use uuid::Uuid;
 
 use crate::{
-    containers::ContError, from_file, util::decode_utf8_from, BlockidError, 
-    BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
-    Endianness, ProbeResult, UsageType, util::UtfError, BlockType
+    containers::ContError, probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, ContainerResult, Endianness, ProbeResult, UsageType}, util::{decode_utf8_from, from_file, UtfError}, BlockidError, BlockidProbe
 };
 
 /* 
@@ -217,33 +215,27 @@ pub fn probe_luks1(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks1Header = from_file(&mut probe.file, probe.offset)?;
+    let header: Luks1Header = from_file(&mut probe.file(), probe.offset())?;
     
     if !header.luks_valid() {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks1 container"));
     }
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::LUKS1), 
-            sec_type: None, 
-            label: None, 
-            uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: None, 
-            creator: None, 
-            usage: Some(UsageType::Crypto), 
-            version: Some(BlockidVersion::Number(u64::from(header.version))), 
-            sbmagic: Some(&LUKS1_MAGIC), 
-            sbmagic_offset: Some(0), 
-            size: None, 
-            fs_last_block: None, 
-            fs_block_size: None, 
-            block_size: None, 
-            partitions: None, 
-            endianness: Some(Endianness::Big), 
-        }    
+        ProbeResult::Container(
+            ContainerResult { 
+                btype: Some(BlockType::LUKS1), 
+                sec_type: None, 
+                label: None, 
+                uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
+                creator: None, 
+                usage: Some(UsageType::Crypto), 
+                version: Some(BlockidVersion::Number(u64::from(header.version))), 
+                sbmagic: Some(&LUKS1_MAGIC), 
+                sbmagic_offset: Some(0), 
+                endianness: Some(Endianness::Big), 
+            }
+        )
     );
     return Ok(());
 }
@@ -253,33 +245,27 @@ pub fn probe_luks2(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks2Header = from_file(&mut probe.file, probe.offset)?;
+    let header: Luks2Header = from_file(&mut probe.file(), probe.offset())?;
 
-    if !header.luks_valid(&mut probe.file) {
+    if !header.luks_valid(&mut probe.file()) {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks2 container"));
     }
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::LUKS2), 
-            sec_type: None, 
-            label: None, 
-            uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: None, 
-            creator: None, 
-            usage: Some(UsageType::Crypto), 
-            version: Some(BlockidVersion::Number(u64::from(header.version))), 
-            sbmagic: Some(&LUKS2_MAGIC), 
-            sbmagic_offset: Some(0), 
-            size: None, 
-            fs_last_block: None, 
-            fs_block_size: None, 
-            block_size: None, 
-            partitions: None, 
-            endianness: Some(Endianness::Big), 
-        }    
+        ProbeResult::Container(
+            ContainerResult { 
+                btype: Some(BlockType::LUKS2), 
+                sec_type: None, 
+                label: None, 
+                uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
+                creator: None, 
+                usage: Some(UsageType::Crypto), 
+                version: Some(BlockidVersion::Number(u64::from(header.version))), 
+                sbmagic: Some(&LUKS2_MAGIC), 
+                sbmagic_offset: Some(0), 
+                endianness: Some(Endianness::Big), 
+            }   
+        ) 
     );
     return Ok(());
 }
@@ -289,9 +275,9 @@ pub fn probe_luks_opal(
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
-    let header: Luks2Header = from_file(&mut probe.file, probe.offset)?;
+    let header: Luks2Header = from_file(&mut probe.file(), probe.offset())?;
 
-    if !header.luks_valid(&mut probe.file) {
+    if !header.luks_valid(&mut probe.file()) {
         return Err(LuksError::LuksHeaderError("Luks is not valid luks2 opal container"));
     }
 
@@ -307,26 +293,20 @@ pub fn probe_luks_opal(
     warn!("Unable to check if opal is locked as the ioctl call is unavilable on non-linux platforms");
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::LUKSOPAL), 
-            sec_type: None, 
-            label: None, 
-            uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: None, 
-            creator: None, 
-            usage: Some(UsageType::Crypto), 
-            version: Some(BlockidVersion::Number(u64::from(header.version))), 
-            sbmagic: Some(&LUKS1_MAGIC), 
-            sbmagic_offset: Some(0), 
-            size: None, 
-            fs_last_block: None, 
-            fs_block_size: None, 
-            block_size: None, 
-            partitions: None, 
-            endianness: Some(Endianness::Big), 
-        }    
+        ProbeResult::Container(
+            ContainerResult { 
+                btype: Some(BlockType::LUKSOPAL), 
+                sec_type: None, 
+                label: None, 
+                uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
+                creator: None, 
+                usage: Some(UsageType::Crypto), 
+                version: Some(BlockidVersion::Number(u64::from(header.version))), 
+                sbmagic: Some(&LUKS1_MAGIC), 
+                sbmagic_offset: Some(0), 
+                endianness: Some(Endianness::Big), 
+            }
+        )
     );
     return Ok(());
 }
