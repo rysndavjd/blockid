@@ -8,10 +8,7 @@ use rustix::fs::makedev;
 use uuid::Uuid;
 
 use crate::{
-    from_file, ProbeResult, BlockidError, BlockidIdinfo, 
-    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
-    BlockType, UsageType, checksum::{get_crc32c, verify_crc32c, 
-    CsumAlgorium}, filesystems::FsError, util::decode_utf8_lossy_from
+    checksum::{get_crc32c, verify_crc32c, CsumAlgorium}, filesystems::FsError, probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, FilesystemResult, ProbeResult, UsageType}, util::{decode_utf8_lossy_from, from_file}, BlockidError
 };
 
 /*
@@ -435,7 +432,7 @@ pub fn probe_jbd(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
     
     let fi = es.feature_incompat();
 
@@ -446,26 +443,26 @@ pub fn probe_jbd(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Jbd), 
-            sec_type: None, 
-            label, 
-            uuid: Some(uuid), 
-            log_uuid: None, 
-            ext_journal: journal_uuid, 
-            offset: None, 
-            creator: Some(creator), 
-            usage: Some(UsageType::Filesystem), 
-            version: Some(version), 
-            sbmagic: Some(&EXT_MAGIC), 
-            sbmagic_offset: Some(EXT_OFFSET), 
-            size: Some(fs_size), 
-            fs_last_block: Some(fs_last_block), 
-            fs_block_size: Some(block_size), 
-            block_size: Some(block_size), 
-            partitions: None, 
-            endianness: None, 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult { 
+                btype: Some(BlockType::Jbd), 
+                sec_type: None, 
+                label, 
+                uuid: Some(uuid), 
+                log_uuid: None, 
+                ext_journal: journal_uuid, 
+                creator: Some(creator), 
+                usage: Some(UsageType::Filesystem), 
+                version: Some(version), 
+                sbmagic: Some(&EXT_MAGIC), 
+                sbmagic_offset: Some(EXT_OFFSET), 
+                size: Some(fs_size), 
+                fs_last_block: Some(fs_last_block), 
+                fs_block_size: Some(block_size), 
+                block_size: Some(block_size), 
+                endianness: None, 
+            }
+        )
     );
     return Ok(());
 }
@@ -475,7 +472,7 @@ pub fn probe_ext2(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
 
     ext_checksum(es)?;
 
@@ -496,26 +493,26 @@ pub fn probe_ext2(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Ext2), 
-            sec_type: None, 
-            label, 
-            uuid: Some(uuid), 
-            log_uuid: None, 
-            ext_journal: journal_uuid, 
-            offset: None, 
-            creator: Some(creator), 
-            usage: Some(UsageType::Filesystem), 
-            version: Some(version), 
-            sbmagic: Some(&EXT_MAGIC), 
-            sbmagic_offset: Some(EXT_OFFSET), 
-            size: Some(fs_size), 
-            fs_last_block: Some(fs_last_block), 
-            fs_block_size: Some(block_size), 
-            block_size: Some(block_size), 
-            partitions: None, 
-            endianness: None, 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult { 
+                btype: Some(BlockType::Ext2), 
+                sec_type: None, 
+                label, 
+                uuid: Some(uuid), 
+                log_uuid: None, 
+                ext_journal: journal_uuid, 
+                creator: Some(creator), 
+                usage: Some(UsageType::Filesystem), 
+                version: Some(version), 
+                sbmagic: Some(&EXT_MAGIC), 
+                sbmagic_offset: Some(EXT_OFFSET), 
+                size: Some(fs_size), 
+                fs_last_block: Some(fs_last_block), 
+                fs_block_size: Some(block_size), 
+                block_size: Some(block_size), 
+                endianness: None, 
+            }
+        )
     );
     return Ok(());
 }
@@ -525,7 +522,7 @@ pub fn probe_ext3(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
 
     ext_checksum(es)?;
 
@@ -546,26 +543,26 @@ pub fn probe_ext3(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Ext3), 
-            sec_type: None, 
-            label, 
-            uuid: Some(uuid), 
-            log_uuid: None, 
-            ext_journal: journal_uuid, 
-            offset: None, 
-            creator: Some(creator), 
-            usage: Some(UsageType::Filesystem), 
-            version: Some(version), 
-            sbmagic: Some(&EXT_MAGIC), 
-            sbmagic_offset: Some(EXT_OFFSET), 
-            size: Some(fs_size), 
-            fs_last_block: Some(fs_last_block), 
-            fs_block_size: Some(block_size), 
-            block_size: Some(block_size), 
-            partitions: None, 
-            endianness: None, 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult { 
+                btype: Some(BlockType::Ext3), 
+                sec_type: None, 
+                label, 
+                uuid: Some(uuid), 
+                log_uuid: None, 
+                ext_journal: journal_uuid, 
+                creator: Some(creator), 
+                usage: Some(UsageType::Filesystem), 
+                version: Some(version), 
+                sbmagic: Some(&EXT_MAGIC), 
+                sbmagic_offset: Some(EXT_OFFSET), 
+                size: Some(fs_size), 
+                fs_last_block: Some(fs_last_block), 
+                fs_block_size: Some(block_size), 
+                block_size: Some(block_size), 
+                endianness: None, 
+            }
+        )
     );    
     return Ok(());
 }
@@ -575,7 +572,7 @@ pub fn probe_ext4(
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
-    let es: Ext2SuperBlock = from_file(&mut probe.file, probe.offset + 1024)?;
+    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
 
     ext_checksum(es)?;
 
@@ -600,26 +597,26 @@ pub fn probe_ext4(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) = ext_get_info(es)?;
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Ext4), 
-            sec_type: None, 
-            label, 
-            uuid: Some(uuid), 
-            log_uuid: None, 
-            ext_journal: journal_uuid, 
-            offset: None, 
-            creator: Some(creator), 
-            usage: Some(UsageType::Filesystem), 
-            version: Some(version), 
-            sbmagic: Some(&EXT_MAGIC), 
-            sbmagic_offset: Some(EXT_OFFSET), 
-            size: Some(fs_size), 
-            fs_last_block: Some(fs_last_block), 
-            fs_block_size: Some(block_size), 
-            block_size: Some(block_size), 
-            partitions: None, 
-            endianness: None, 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult { 
+                btype: Some(BlockType::Ext4), 
+                sec_type: None, 
+                label, 
+                uuid: Some(uuid), 
+                log_uuid: None, 
+                ext_journal: journal_uuid, 
+                creator: Some(creator), 
+                usage: Some(UsageType::Filesystem), 
+                version: Some(version), 
+                sbmagic: Some(&EXT_MAGIC), 
+                sbmagic_offset: Some(EXT_OFFSET), 
+                size: Some(fs_size), 
+                fs_last_block: Some(fs_last_block), 
+                fs_block_size: Some(block_size), 
+                block_size: Some(block_size), 
+                endianness: None, 
+            }
+        )
     );  
     return Ok(());                    
 }

@@ -1,10 +1,10 @@
 use std::{io::{Error as IoError, ErrorKind}, path::{Path, PathBuf}};
 use std::str::FromStr;
-use libblockid::{devno_to_path, BType, BlockLabel, BlockidError as LibblockidError, BlockidProbe, ProbeFilter, ProbeFlags, ProbeResult};
 use clap::{Arg, value_parser, ArgAction, Command, ValueEnum, builder::EnumValueParser,
     parser::ValuesRef};
 use thiserror::Error;
 use bitflags::bitflags;
+use libblockid::{BlockidError as LibblockidError, BlockidProbe};
 
 const CACHE_PATH: &'static str = env!("CACHE_PATH");
 
@@ -36,59 +36,6 @@ enum OutputTags {
     PartUuid,
     BlockSize,
     Creator,
-}
-
-fn get_probes(path: PathBuf) -> Result<Vec<BlockidProbe>, BlockidError> {
-    
-}
-
-fn print_tags(, tags: Vec<OutputTags>) -> Result<(), BlockidError> {
-
-    if tags.is_empty() {
-        return Err(BlockidError::TagError("Please enter at least one tag to print"));
-    }
-
-    let result = probe
-        .result()
-        .ok_or(BlockidError::LibblockidError(LibblockidError::UnknownBlock))?;
-    
-    let block: String = tags
-        .iter()
-        .filter_map(|t| {
-            match t {
-                OutputTags::Device => {
-                    Some(format!("{}", probe.path().display()))
-                },
-                OutputTags::Type => {
-                    Some(format!("{}", result.block_type()?))
-                },
-                OutputTags::Label => {
-                    Some(format!("{}", result.label()?))
-                }, 
-                OutputTags::PartLabel => {
-                    
-                },
-                OutputTags::Uuid => {
-
-                },
-                OutputTags::PartUuid => {
-
-                },
-                OutputTags::BlockSize => {
-
-                },
-                OutputTags::Creator => {
-
-                },
-            }   
-        })
-        .collect();
-
-    for tag in tags {
-        
-    };
-
-    return Ok(());
 }
 
 fn main() -> Result<(), BlockidError> {
@@ -158,7 +105,7 @@ fn main() -> Result<(), BlockidError> {
     };
 
     if matches.get_flag("list-supported") {
-        for item in BlockidProbe::list_supported_blks() {
+        for item in BlockidProbe::supported_string() {
             println!("{item}");   
         }
         return Ok(());

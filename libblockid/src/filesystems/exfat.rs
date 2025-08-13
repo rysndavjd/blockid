@@ -7,10 +7,10 @@ use rustix::fs::makedev;
 
 use crate::{
     checksum::CsumAlgorium, filesystems::{vfat::VFAT_ID_INFO, 
-    volume_id::VolumeId32, FsError}, from_file, probe_get_magic, 
-    read_exact_at, read_vec_at, util::{decode_utf16_lossy_from, UtfError}, 
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, 
-    BlockidVersion, ProbeResult, BlockType, UsageType, Endianness,
+    volume_id::VolumeId32, FsError}, probe::{BlockType, BlockidIdinfo, 
+    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, Endianness, 
+    FilesystemResult, ProbeResult, UsageType}, util::{decode_utf16_lossy_from, 
+    from_file, probe_get_magic, read_exact_at, read_vec_at, UtfError}, BlockidError
 };
 
 #[derive(Debug)]
@@ -215,7 +215,7 @@ fn verify_exfat_checksum(
     ) -> Result<(), ExFatError>
 {
     let sector_size = sb.block_size();
-    let data = read_vec_at(&mut probe.file, probe.offset, sector_size * 12)?;
+    let data = read_vec_at(&mut probe.file(), probe.offset(), sector_size * 12)?;
     let checksum = get_exfatcsum(&data, sector_size);
     
     for i in 0..(sector_size / 4) {
@@ -311,9 +311,9 @@ pub fn probe_is_exfat(
         probe: &mut BlockidProbe
     ) -> Result<(), ExFatError>
 {
-    let sb: ExFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let sb: ExFatSuperBlock = from_file(&mut probe.file(), probe.offset())?;
     
-    if probe_get_magic(&mut probe.file, &VFAT_ID_INFO).is_ok() {
+    if probe_get_magic(&mut probe.file(), &VFAT_ID_INFO).is_ok() {
         return Err(ExFatError::UnknownFilesystem("Block is detected with a VFAT magic"));
     }
 
@@ -374,33 +374,33 @@ pub fn probe_exfat(
         _mag: BlockidMagic,
     ) -> Result<(), ExFatError> 
 {
-    let sb: ExFatSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let sb: ExFatSuperBlock = from_file(&mut probe.file(), probe.offset())?;
 
     valid_exfat(probe, sb)?;
 
-    let label= find_label(&mut probe.file, sb)?; 
+    let label= find_label(&mut probe.file(), sb)?; 
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Exfat), 
-            sec_type: None, 
-            label, 
-            uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(sb.volume_serial))), 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: None, 
-            creator: None, 
-            usage: Some(UsageType::Filesystem), 
-            version: Some(BlockidVersion::DevT(makedev(sb.vermaj as u32, sb.vermin as u32))), 
-            sbmagic: Some(b"EXFAT   "), 
-            sbmagic_offset: Some(3), 
-            size: Some(sb.block_size() as u64 * u64::from(sb.volume_length)), 
-            fs_last_block: None, 
-            fs_block_size: Some(sb.block_size() as u64), 
-            block_size: Some(sb.block_size() as u64), 
-            partitions: None, 
-            endianness: None 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult {
+                btype: Some(BlockType::Exfat),
+                sec_type: None,
+                uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(sb.volume_serial))),
+                log_uuid: None,
+                ext_journal: None,
+                label,
+                creator: None,
+                usage: Some(UsageType::Filesystem),
+                size: Some(sb.block_size() as u64 * u64::from(sb.volume_length)),
+                fs_last_block: None, 
+                fs_block_size: Some(sb.block_size() as u64), 
+                block_size: Some(sb.block_size() as u64),
+                version: Some(BlockidVersion::DevT(makedev(sb.vermaj as u32, sb.vermin as u32))),
+                sbmagic: Some(b"EXFAT   "),
+                sbmagic_offset: Some(3),
+                endianness: None
+            }
+        ) 
     );
     return Ok(());
 }

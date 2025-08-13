@@ -1,5 +1,5 @@
 pub mod dos;
-pub mod gpt;
+//pub mod gpt;
 //pub mod mac;
 //pub mod bsd;
 pub mod aix;

@@ -4,11 +4,10 @@ use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, FromBytes,
     Immutable, IntoBytes, Unaligned, KnownLayout};
 
 use crate::{
-    filesystems::{volume_id::VolumeId64, FsError}, 
-    from_file, probe_get_magic, read_vec_at, BlockidError, BlockidIdinfo, 
-    BlockidMagic, BlockidProbe, BlockidUUID, Endianness, 
-    ProbeResult, BlockType, UsageType, 
-    util::{decode_utf16_lossy_from, is_power_2, UtfError},
+    filesystems::{volume_id::VolumeId64, FsError}, probe::{BlockType, 
+        BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, Endianness, 
+        FilesystemResult, ProbeResult, UsageType}, util::{decode_utf16_lossy_from, 
+        from_file, is_power_2, probe_get_magic, read_vec_at, UtfError}, BlockidError
 };
 
 #[derive(Debug)]
@@ -284,9 +283,9 @@ pub fn probe_is_ntfs(
         probe: &mut BlockidProbe
     ) -> Result<(), NtfsError>
 {
-    let ns: NtfsSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let ns: NtfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
     
-    probe_get_magic(&mut probe.file, &NTFS_ID_INFO)?;
+    probe_get_magic(&mut probe.file(), &NTFS_ID_INFO)?;
     check_ntfs(ns)?;
 
     return Ok(());
@@ -297,33 +296,33 @@ pub fn probe_ntfs(
         magic: BlockidMagic
     ) -> Result<(), NtfsError> 
 {
-    let ns: NtfsSuperBlock = from_file(&mut probe.file, probe.offset)?;
+    let ns: NtfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
 
     let (sector_size, sectors_per_cluster) = check_ntfs(ns)?;
 
-    let label = find_label(&mut probe.file, ns, sector_size, sectors_per_cluster)?;
+    let label = find_label(&mut probe.file(), ns, sector_size, sectors_per_cluster)?;
 
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Ntfs), 
-            sec_type: None, 
-            label: label, 
-            uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))), 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: None, 
-            creator: None, 
-            usage: Some(UsageType::Filesystem), 
-            version: None, 
-            sbmagic: Some(magic.magic), 
-            sbmagic_offset: Some(magic.b_offset), 
-            size: Some(u64::from(ns.number_of_sectors) * sector_size), 
-            fs_last_block: None, 
-            fs_block_size: Some(sector_size * sectors_per_cluster), 
-            block_size: Some(sector_size), 
-            partitions: None, 
-            endianness: None 
-        }
+        ProbeResult::Filesystem(
+            FilesystemResult { 
+                btype: Some(BlockType::Ntfs), 
+                sec_type: None, 
+                label: label, 
+                uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))), 
+                log_uuid: None, 
+                ext_journal: None, 
+                creator: None, 
+                usage: Some(UsageType::Filesystem), 
+                version: None, 
+                sbmagic: Some(magic.magic), 
+                sbmagic_offset: Some(magic.b_offset), 
+                size: Some(u64::from(ns.number_of_sectors) * sector_size), 
+                fs_last_block: None, 
+                fs_block_size: Some(sector_size * sectors_per_cluster), 
+                block_size: Some(sector_size), 
+                endianness: None 
+            }
+        )
     );
 
     return Ok(());

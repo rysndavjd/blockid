@@ -6,11 +6,10 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
     Immutable, KnownLayout};
 
 use crate::{
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,
-    PartEntryAttributes, PartEntryType, PartitionResults, BlockType, 
-    UsageType, from_file, read_sector_at, filesystems::{ exfat::probe_is_exfat, 
-    vfat::probe_is_vfat, ntfs::probe_is_ntfs, volume_id::VolumeId32}, 
-    partitions::{aix::BLKID_AIX_MAGIC_STRING, PtError}, ProbeResult,
+    filesystems::{ exfat::probe_is_exfat, ntfs::probe_is_ntfs, 
+    vfat::probe_is_vfat, volume_id::VolumeId32}, 
+    partitions::{aix::BLKID_AIX_MAGIC_STRING, PtError}, 
+    probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, PartEntryAttributes, PartEntryType, PartTableResult, PartitionResults, ProbeResult, UsageType}, util::{from_file, read_sector_at}, BlockidError
 };
 
 /*
@@ -384,7 +383,7 @@ pub fn probe_dos_pt(
 {
     let mut partitions: Vec<PartitionResults> = Vec::new();
     
-    let dos_pt: DosTable = from_file(&mut probe.file, probe.offset)?;
+    let dos_pt: DosTable = from_file(&mut probe.file(), probe.offset())?;
     
     if dos_pt.boot_code1[0..3] == BLKID_AIX_MAGIC_STRING {
         return Err(DosPTError::UnknownPartitionTable("Disk has AIX magic number"));
@@ -392,7 +391,7 @@ pub fn probe_dos_pt(
 
     is_valid_dos(probe, dos_pt)?;
 
-    let ssf = probe.sector_size / 512;
+    let ssf = probe.ssz() / 512;
 
     let primary_partitions: Vec<PartitionResults> = dos_pt
         .partition_entries
@@ -421,31 +420,25 @@ pub fn probe_dos_pt(
     partitions.extend(primary_partitions);
 
     if let Some(ex_entry) = dos_pt.get_extended_partition() {
-        let ex = parse_dos_extended(&mut probe.file, ex_entry, ssf)?;
+        let ex = parse_dos_extended(&mut probe.file(), ex_entry, ssf)?;
         partitions.extend(ex);
     };
     
     probe.push_result(
-        ProbeResult { 
-            btype: Some(BlockType::Dos), 
-            sec_type: None, 
-            label: None, 
-            uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(dos_pt.disk_id))), 
-            log_uuid: None, 
-            ext_journal: None, 
-            offset: Some(probe.offset), 
-            creator: None, 
-            usage: Some(UsageType::PartitionTable), 
-            version: None, 
-            sbmagic: Some(b"\x55\xAA"), 
-            sbmagic_offset: Some(510), 
-            size: None, 
-            fs_last_block: None, 
-            fs_block_size: None, 
-            block_size: None, 
-            partitions: Some(partitions), 
-            endianness: None, 
-        }
+        ProbeResult::PartTable(
+            PartTableResult {
+                btype: Some(BlockType::Dos),
+                sec_type: None,
+                uuid: Some(BlockidUUID::VolumeId32(VolumeId32::new(dos_pt.disk_id))),
+                creator: None,
+                usage: Some(UsageType::PartitionTable),
+                version: None,
+                partitions: Some(partitions),
+                sbmagic: Some(b"\x55\xAA"),
+                sbmagic_offset: Some(510),
+                endianness: None,
+            }, 
+        )
     );
     return Ok(());
 }
