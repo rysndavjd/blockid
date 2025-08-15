@@ -8,7 +8,10 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
 use uuid::Uuid;
 
 use crate::{
-    containers::ContError, probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, ContainerResult, Endianness, ProbeResult, UsageType}, util::{decode_utf8_from, from_file, UtfError}, BlockidError, BlockidProbe
+    containers::ContError, probe::{BlockType, BlockidIdinfo, 
+    BlockidMagic, BlockidUUID, BlockidVersion, ContainerResult, 
+    Endianness, ProbeResult, UsageType}, util::{decode_utf8_from, 
+    from_file, UtfError}, BlockidError, Probe
 };
 
 /* 
@@ -211,7 +214,7 @@ impl Luks2Header {
 }
 
 pub fn probe_luks1(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
@@ -241,7 +244,7 @@ pub fn probe_luks1(
 }
 
 pub fn probe_luks2(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {
@@ -271,7 +274,7 @@ pub fn probe_luks2(
 }
 
 pub fn probe_luks_opal(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _magic: BlockidMagic
     ) -> Result<(), LuksError> 
 {

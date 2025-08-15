@@ -9,7 +9,7 @@ use crate::{
     filesystems::{ exfat::probe_is_exfat, ntfs::probe_is_ntfs, 
     vfat::probe_is_vfat, volume_id::VolumeId32}, 
     partitions::{aix::BLKID_AIX_MAGIC_STRING, PtError}, 
-    probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, PartEntryAttributes, PartEntryType, PartTableResult, PartitionResults, ProbeResult, UsageType}, util::{from_file, read_sector_at}, BlockidError
+    probe::{BlockType, BlockidIdinfo, BlockidMagic, Probe, BlockidUUID, PartEntryAttributes, PartEntryType, PartTableResult, PartitionResults, ProbeResult, UsageType}, util::{from_file, read_sector_at}, BlockidError
 };
 
 /*
@@ -277,7 +277,7 @@ bitflags! {
 }
 
 fn is_valid_dos(
-        probe: &mut BlockidProbe,
+        probe: &mut Probe,
         pt: DosTable,
     ) -> Result<(), DosPTError>
 {
@@ -377,7 +377,7 @@ fn parse_dos_extended<R: Read+Seek>(
 }
 
 pub fn probe_dos_pt(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _mag: BlockidMagic
     ) -> Result<(), DosPTError> 
 {

@@ -8,7 +8,7 @@ use rustix::fs::makedev;
 use crate::{
     checksum::CsumAlgorium, filesystems::{vfat::VFAT_ID_INFO, 
     volume_id::VolumeId32, FsError}, probe::{BlockType, BlockidIdinfo, 
-    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, Endianness, 
+    BlockidMagic, Probe, BlockidUUID, BlockidVersion, Endianness, 
     FilesystemResult, ProbeResult, UsageType}, util::{decode_utf16_lossy_from, 
     from_file, probe_get_magic, read_exact_at, read_vec_at, UtfError}, BlockidError
 };
@@ -210,7 +210,7 @@ pub fn get_exfatcsum(
 }
 
 fn verify_exfat_checksum(
-        probe: &mut BlockidProbe,
+        probe: &mut Probe,
         sb: ExFatSuperBlock
     ) -> Result<(), ExFatError>
 {
@@ -240,7 +240,7 @@ fn in_range_inclusive<T: PartialOrd>(val: T, start: T, stop: T) -> bool {
 }
 
 fn valid_exfat(
-        probe: &mut BlockidProbe,
+        probe: &mut Probe,
         sb: ExFatSuperBlock
     ) -> Result<(), ExFatError>
 {
@@ -308,7 +308,7 @@ fn valid_exfat(
 }
 
 pub fn probe_is_exfat(
-        probe: &mut BlockidProbe
+        probe: &mut Probe
     ) -> Result<(), ExFatError>
 {
     let sb: ExFatSuperBlock = from_file(&mut probe.file(), probe.offset())?;
@@ -370,7 +370,7 @@ fn find_label<R: Read+Seek>(
 }
 
 pub fn probe_exfat(
-        probe: &mut BlockidProbe,
+        probe: &mut Probe,
         _mag: BlockidMagic,
     ) -> Result<(), ExFatError> 
 {

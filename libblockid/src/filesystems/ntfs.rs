@@ -5,7 +5,7 @@ use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, FromBytes,
 
 use crate::{
     filesystems::{volume_id::VolumeId64, FsError}, probe::{BlockType, 
-        BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, Endianness, 
+        BlockidIdinfo, BlockidMagic, Probe, BlockidUUID, Endianness, 
         FilesystemResult, ProbeResult, UsageType}, util::{decode_utf16_lossy_from, 
         from_file, is_power_2, probe_get_magic, read_vec_at, UtfError}, BlockidError
 };
@@ -280,7 +280,7 @@ fn find_label<R: Read+Seek>(
 }
 
 pub fn probe_is_ntfs(
-        probe: &mut BlockidProbe
+        probe: &mut Probe
     ) -> Result<(), NtfsError>
 {
     let ns: NtfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
@@ -292,7 +292,7 @@ pub fn probe_is_ntfs(
 }
 
 pub fn probe_ntfs(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         magic: BlockidMagic
     ) -> Result<(), NtfsError> 
 {

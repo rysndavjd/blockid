@@ -1,7 +1,7 @@
 use std::{
     fmt,
     fs::File, 
-    io::{BufReader, Error as IoError, Seek, SeekFrom}, 
+    io::{BufReader, Seek, SeekFrom}, 
     path::{Path, PathBuf}
 };
 
@@ -16,7 +16,7 @@ use crate::ioctl::{logical_block_size, device_size_bytes};
 #[cfg(target_os = "linux")]
 use crate::ioctl::{OpalStatusFlags, ioctl_ioc_opal_get_status, 
     ioctl_blkgetzonesz};
-use crate::util::{devno_to_path, probe_get_magic};
+use crate::util::probe_get_magic;
 use crate::BlockidError;
 
 use crate::{
@@ -56,7 +56,7 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
 ];
 
 #[derive(Debug)]
-pub struct BlockidProbe {
+pub struct Probe {
     file: File,
     path: PathBuf,
     buffer: Option<BufReader<File>>,
@@ -77,12 +77,11 @@ pub struct BlockidProbe {
     value: Option<ProbeResult>
 }
 
-impl BlockidProbe {
-    pub fn supported_string() -> Vec<String> {
+impl Probe {
+    pub fn supported_string() -> Vec<&'static str> {
         PROBES
             .iter()
             .filter_map(|(_, _, info)| info.name)
-            .map(|name| name.to_string())
             .collect()
     }
 
@@ -95,12 +94,12 @@ impl BlockidProbe {
 
     pub fn new(
             file: File,
-            path: PathBuf,
+            path: &Path,
             offset: u64,
             probe_mode: ProbeMode,
             flags: ProbeFlags,
             filter: ProbeFilter,
-        ) -> Result<BlockidProbe, BlockidError>
+        ) -> Result<Probe, BlockidError>
     {   
         let stat = fstat(file.as_fd())?;
 
@@ -123,7 +122,7 @@ impl BlockidProbe {
 
         Ok( Self { 
             file,
-            path,
+            path: path.to_path_buf(),
             buffer: None,
             offset, 
             size, 
@@ -224,18 +223,16 @@ impl BlockidProbe {
     }
 
     pub fn from_filename(
-            filename: String,
+            filename: &Path,
             probe_mode: ProbeMode,
             flags: ProbeFlags,
             filter: ProbeFilter,
             offset: u64,
-        ) -> Result<BlockidProbe, BlockidError>
+        ) -> Result<Probe, BlockidError>
     {
         let file = File::open(&filename)?;
-        
-        let path: PathBuf = filename.into();
-
-        let probe = BlockidProbe::new(file, path, offset, probe_mode, flags, filter)?;
+                
+        let probe = Probe::new(file, filename, offset, probe_mode, flags, filter)?;
 
         return Ok(probe);
     }
@@ -302,10 +299,6 @@ impl BlockidProbe {
     #[inline]
     pub fn disk_devno_min(&self) -> u32 {
         return minor(self.disk_devno);
-    }
-
-    pub fn disk_path(&self) -> Result<PathBuf, IoError> {
-        return devno_to_path(self.disk_devno)
     }
 
     #[inline]
@@ -575,7 +568,7 @@ pub enum Endianness {
     Big
 }
 
-type ProbeFn = fn(&mut BlockidProbe, BlockidMagic) -> Result<(), BlockidError>;
+type ProbeFn = fn(&mut Probe, BlockidMagic) -> Result<(), BlockidError>;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BlockidMagic {

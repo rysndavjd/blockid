@@ -8,7 +8,11 @@ use rustix::fs::makedev;
 use uuid::Uuid;
 
 use crate::{
-    checksum::{get_crc32c, verify_crc32c, CsumAlgorium}, filesystems::FsError, probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, FilesystemResult, ProbeResult, UsageType}, util::{decode_utf8_lossy_from, from_file}, BlockidError
+    checksum::{get_crc32c, verify_crc32c, CsumAlgorium}, 
+    filesystems::FsError, probe::{BlockType, BlockidIdinfo, 
+    BlockidMagic, Probe, BlockidUUID, BlockidVersion, 
+    FilesystemResult, ProbeResult, UsageType}, 
+    util::{decode_utf8_lossy_from, from_file}, BlockidError
 };
 
 /*
@@ -428,7 +432,7 @@ fn ext_get_info(
 }
 
 pub fn probe_jbd(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
@@ -468,7 +472,7 @@ pub fn probe_jbd(
 }
 
 pub fn probe_ext2(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
@@ -518,7 +522,7 @@ pub fn probe_ext2(
 }
 
 pub fn probe_ext3(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {
@@ -568,7 +572,7 @@ pub fn probe_ext3(
 }
 
 pub fn probe_ext4(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         _magic: BlockidMagic
     ) -> Result<(), ExtError> 
 {

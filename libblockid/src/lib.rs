@@ -19,6 +19,7 @@ use std::{
     fs::File,
 };
 
+use glob::GlobError;
 use rustix::fs::Dev;
 use thiserror::Error;
 
@@ -29,12 +30,14 @@ use crate::{
 };
 
 pub use crate::{
-    probe::{BlockidProbe, ProbeFilter, ProbeFlags, ProbeMode},
+    probe::{Probe, ProbeFilter, ProbeFlags, ProbeMode},
     util::{devno_to_path, path_to_devno},
 };
 
 #[derive(Debug, Error)]
 pub enum BlockidError {
+    #[error("Glob Error: {0}")]
+    GlobError(#[from] GlobError),
     #[error("Invalid Arguments given: {0}")]
     ArgumentError(&'static str),
     #[error("Result Error: {0}")]
@@ -53,14 +56,14 @@ pub enum BlockidError {
     NixError(#[from] rustix::io::Errno),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum IdType {
     Path(PathBuf),
     Devno(Dev),
 }
 
-#[derive(Debug, Default)]
-pub struct BlockidProbeBuilder {
+#[derive(Debug, Default, Clone)]
+pub struct ProbeBuilder {
     disk_id: Option<IdType>,
     offset: u64,
     probe_mode: ProbeMode,
@@ -68,7 +71,7 @@ pub struct BlockidProbeBuilder {
     filter: ProbeFilter,
 }
 
-impl BlockidProbeBuilder {
+impl ProbeBuilder {
     pub fn new() -> Self {
         Self::default()
     }
@@ -103,9 +106,9 @@ impl BlockidProbeBuilder {
         self
     }
 
-    pub fn build(self) -> Result<BlockidProbe, BlockidError> {
+    pub fn build(self) -> Result<Probe, BlockidError> {
         let id = self.disk_id.ok_or_else(|| {
-            BlockidError::ArgumentError("Path/devno not set in BlockidProbeBuilder")
+            BlockidError::ArgumentError("Path/devno not set in ProbeBuilder")
         })?;
 
         let (file, path) = match id {
@@ -115,6 +118,6 @@ impl BlockidProbeBuilder {
                 (File::open(&path)?, path)
             }
         };
-        BlockidProbe::new(file, path, self.offset, self.probe_mode, self.flags, self.filter)
+        Probe::new(file, &path, self.offset, self.probe_mode, self.flags, self.filter)
     }
 }

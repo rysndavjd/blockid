@@ -4,7 +4,7 @@ use clap::{Arg, value_parser, ArgAction, Command, ValueEnum, builder::EnumValueP
     parser::ValuesRef};
 use thiserror::Error;
 use bitflags::bitflags;
-use libblockid::{BlockidError as LibblockidError, BlockidProbe};
+use libblockid::{BlockidError as LibblockidError, Probe};
 
 const CACHE_PATH: &'static str = env!("CACHE_PATH");
 
@@ -105,7 +105,7 @@ fn main() -> Result<(), BlockidError> {
     };
 
     if matches.get_flag("list-supported") {
-        for item in BlockidProbe::supported_string() {
+        for item in Probe::supported_string() {
             println!("{item}");   
         }
         return Ok(());
