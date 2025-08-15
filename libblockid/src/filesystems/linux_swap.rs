@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     filesystems::FsError, probe::{BlockType, BlockidIdinfo, 
-    BlockidMagic, BlockidProbe, BlockidUUID, BlockidVersion, 
+    BlockidMagic, Probe, BlockidUUID, BlockidVersion, 
     Endianness, FilesystemResult, ProbeResult, UsageType}, 
     util::{decode_utf8_lossy_from, from_file, read_exact_at}, 
     BlockidError
@@ -280,7 +280,7 @@ fn swap_get_info(
 }
 
 pub fn probe_swap_v0(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
@@ -325,7 +325,7 @@ pub fn probe_swap_v0(
 }
 
 pub fn probe_swap_v1(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {
@@ -377,7 +377,7 @@ pub fn probe_swap_v1(
 }
 
 pub fn probe_swsuspend(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
         magic: BlockidMagic
     ) -> Result<(), SwapError> 
 {

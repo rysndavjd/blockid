@@ -5,12 +5,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use glob::{glob, GlobError};
 use thiserror::Error;
 use widestring::{utfstring::Utf16String, error::Utf16Error};
 use rustix::fs::{stat, FileType, Dev};
 use zerocopy::FromBytes;
 
-use crate::probe::{Endianness, BlockidIdinfo, BlockidMagic};
+use crate::{probe::{BlockidIdinfo, BlockidMagic, BlockidUUID, Endianness, ProbeResult}, BlockidError, Probe, ProbeFilter, ProbeFlags, ProbeMode};
 
 #[derive(Debug, Error)]
 pub enum UtfError {
@@ -185,3 +186,38 @@ pub fn read_sector_at<R: Read+Seek>(
     return read_exact_at::<512, R>(file, sector << 9);
 }
 
+pub fn device_from(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
+    let patterns = [
+        "/dev/sd*",      
+        "/dev/hd*",      
+        "/dev/nvme*n*",  
+        "/dev/loop*",    
+        "/dev/ram*",     
+        "/dev/md*",      
+        "/dev/mapper/*",
+    ];
+
+    for pattern in patterns {
+        for entry in glob(pattern).expect("THIS SHOULD NOT FAIL") {
+            let path = entry?;
+            let stat = stat(&path)?; 
+            
+            let mut probe = Probe::from_filename(&path, ProbeMode::Single, ProbeFlags::empty(), ProbeFilter::empty(), 0)?;
+            probe.probe_values()?;
+
+            let value = match probe.result().ok_or(BlockidError::ProbeError("No device found"))? {
+                ProbeResult::Container(r) => r.uuid,
+                ProbeResult::PartTable(r) => r.uuid,
+                ProbeResult::Filesystem(r) => r.uuid,
+                ProbeResult::List(_) => None,
+            };
+
+            if FileType::from_raw_mode(stat.st_mode).is_block_device()
+                && &value.ok_or(BlockidError::ProbeError("AHHH"))? == uuid
+            {
+                return Ok(path);
+            }
+        }
+    }
+    return Err(BlockidError::ResultError("AHHH"));
+}

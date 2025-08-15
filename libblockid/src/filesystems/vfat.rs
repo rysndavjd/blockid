@@ -7,7 +7,7 @@ use zerocopy::{FromBytes, IntoBytes, Unaligned,
 
 use crate::{
     filesystems::{volume_id::VolumeId32, FsError}, probe::{BlockType, 
-    BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, ProbeResult, 
+    BlockidIdinfo, BlockidMagic, Probe, BlockidUUID, ProbeResult, 
     SecType, UsageType, FilesystemResult}, util::{decode_utf8_lossy_from, 
     from_file, is_power_2, probe_get_magic, read_exact_at, read_vec_at}, 
     BlockidError
@@ -354,7 +354,7 @@ pub fn valid_fat (
 }
 
 pub fn probe_is_vfat(
-        probe: &mut BlockidProbe, 
+        probe: &mut Probe, 
     ) -> Result<(), FatError>
 {
     let buffer: [u8; 512] = read_exact_at(&mut probe.file(), probe.offset())?;
@@ -501,7 +501,7 @@ fn probe_fat32<R: Read+Seek>(
 }
 
 pub fn probe_vfat(
-        probe: &mut BlockidProbe,
+        probe: &mut Probe,
         mag: BlockidMagic,
     ) -> Result<(), FatError> 
 {
