@@ -1,12 +1,15 @@
-use std::{io::{Error as IoError, ErrorKind}, path::{Path, PathBuf}};
-use std::str::FromStr;
-use clap::{Arg, value_parser, ArgAction, Command, ValueEnum, builder::EnumValueParser,
-    parser::ValuesRef};
-use thiserror::Error;
 use bitflags::bitflags;
-use libblockid::{BlockidError as LibblockidError, Probe};
+use clap::{
+    Arg, ArgAction, Command, ValueEnum, builder::EnumValueParser, parser::ValuesRef, value_parser,
+};
+use libblockid::{BlockidError as LibblockidError, Probe, ProbeBuilder};
+use std::{
+    io::{Error as IoError, ErrorKind},
+    path::{Path, PathBuf},
+};
+use thiserror::Error;
 
-const CACHE_PATH: &'static str = env!("CACHE_PATH");
+const CACHE_PATH: &str = env!("CACHE_PATH");
 
 #[derive(Debug, Error)]
 pub enum BlockidError {
@@ -30,7 +33,7 @@ enum OutputType {
 enum OutputTags {
     Device,
     Type,
-    Label, 
+    Label,
     PartLabel,
     Uuid,
     PartUuid,
@@ -66,7 +69,7 @@ fn main() -> Result<(), BlockidError> {
                 .value_delimiter(',')
                 .value_parser(EnumValueParser::<OutputTags>::new())
                 .default_missing_value("device,label,uuid,blocksize,type,partlabel,partuuid")
-                .action(clap::ArgAction::Append)
+                .action(clap::ArgAction::Append),
         )
         .arg(
             Arg::new("output")
@@ -74,7 +77,7 @@ fn main() -> Result<(), BlockidError> {
                 .long("output")
                 .value_name("format")
                 .help("Output format")
-                .value_parser(EnumValueParser::<OutputType>::new())
+                .value_parser(EnumValueParser::<OutputType>::new()),
         )
         .arg(
             Arg::new("debug")
@@ -97,7 +100,7 @@ fn main() -> Result<(), BlockidError> {
                 .index(1),
         )
         .get_matches();
-    
+
     let cache = if let Some(cache_file) = matches.get_one::<String>("cache-file") {
         PathBuf::from(cache_file)
     } else {
@@ -106,28 +109,23 @@ fn main() -> Result<(), BlockidError> {
 
     if matches.get_flag("list-supported") {
         for item in Probe::supported_string() {
-            println!("{item}");   
+            println!("{item}");
         }
         return Ok(());
     }
 
-    let tags: Vec<OutputTags> = match matches
-        .get_many::<OutputTags>("match-tag") {
-        Some(r) => {
-            r
-            .into_iter()
-            .copied()
-            .collect()
-        },
+    let tags: Vec<OutputTags> = match matches.get_many::<OutputTags>("match-tag") {
+        Some(r) => r.into_iter().copied().collect(),
         None => {
-            vec![OutputTags::Device,
+            vec![
+                OutputTags::Device,
                 OutputTags::Label,
                 OutputTags::Uuid,
                 OutputTags::BlockSize,
                 OutputTags::Type,
                 OutputTags::PartLabel,
                 OutputTags::PartUuid,
-                ]
+            ]
         }
     };
 

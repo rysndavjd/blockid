@@ -410,6 +410,7 @@ pub fn search_fat_label<R: Read+Seek>(
     return Ok(None);
 }
 
+// This fn works for both fat12 and fat16
 fn probe_fat16<R: Read+Seek>(
         file: &mut R,
         ms: &MsDosSuperBlock,
@@ -534,7 +535,7 @@ pub fn probe_vfat(
                 uuid: Some(BlockidUUID::VolumeId32(serno)), 
                 log_uuid: None, 
                 ext_journal: None, 
-                label: label, 
+                label, 
                 creator: Some(creator), 
                 usage: Some(UsageType::Filesystem), 
                 version: None, 
