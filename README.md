@@ -22,7 +22,7 @@ Libblockid
 | Btrfs      | Todo   | Filesystem       |
 | BSD        | Todo   | Partition Table  |
 | DOS        | Works   | Partition Table  |
-| GPT        | Next   | Partition Table  |
+| GPT        | Broke   | Partition Table  |
 | Mac        | Todo   | Partition Table  |
 | ExFAT      | Works  | Filesystem       |
 | Ext2/3/4   | Works  | Filesystem       |
@@ -35,6 +35,7 @@ Libblockid
 
 ### Status
 
+- **Broke**: Current implementation is broken.
 - **Todo**: Planned, but not yet started.
 - **Next**: Currently being implemented.
 - **Works**: Functionally implemented; successfully identifies and parses most metadata.

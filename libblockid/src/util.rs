@@ -5,13 +5,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use glob::{glob, GlobError};
+use glob::glob;
 use thiserror::Error;
 use widestring::{utfstring::Utf16String, error::Utf16Error};
 use rustix::fs::{stat, FileType, Dev};
 use zerocopy::FromBytes;
 
-use crate::{probe::{BlockidIdinfo, BlockidMagic, BlockidUUID, Endianness, ProbeResult}, BlockidError, Probe, ProbeFilter, ProbeFlags, ProbeMode};
+use crate::{probe::{BlockidIdinfo, BlockidMagic, BlockidUUID, 
+    Endianness, ProbeResult}, BlockidError, Probe, ProbeFilter, 
+    ProbeFlags};
 
 #[derive(Debug, Error)]
 pub enum UtfError {
@@ -89,15 +91,14 @@ pub fn devno_to_path(dev: Dev) -> Result<PathBuf, IoError> {
 
     for entry in dev_dir.flatten() {
         let path = entry.path();
+        let stat = stat(&path)?;
 
-        if let Ok(stat) = stat(&path) {
-
-            if FileType::from_raw_mode(stat.st_mode).is_block_device()
-                && stat.st_rdev == dev 
-            {
-                return Ok(path);
-            }
+        if FileType::from_raw_mode(stat.st_mode).is_block_device()
+            && stat.st_rdev == dev 
+        {
+            return Ok(path);
         }
+        
     }
     return Err(IoError::new(ErrorKind::NotFound, "Unable to find path from devno"));
 }
@@ -202,14 +203,13 @@ pub fn device_from(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
             let path = entry?;
             let stat = stat(&path)?; 
             
-            let mut probe = Probe::from_filename(&path, ProbeMode::Single, ProbeFlags::empty(), ProbeFilter::empty(), 0)?;
+            let mut probe = Probe::from_filename(&path, ProbeFlags::empty(), ProbeFilter::empty(), 0)?;
             probe.probe_values()?;
 
-            let value = match probe.result().ok_or(BlockidError::ProbeError("No device found"))? {
+            let value = match probe.inner_result().ok_or(BlockidError::ProbeError("No device found"))? {
                 ProbeResult::Container(r) => r.uuid,
                 ProbeResult::PartTable(r) => r.uuid,
                 ProbeResult::Filesystem(r) => r.uuid,
-                ProbeResult::List(_) => None,
             };
 
             if FileType::from_raw_mode(stat.st_mode).is_block_device()

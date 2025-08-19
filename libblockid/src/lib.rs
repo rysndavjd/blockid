@@ -30,7 +30,7 @@ use crate::{
 };
 
 pub use crate::{
-    probe::{Probe, ProbeFilter, ProbeFlags, ProbeMode},
+    probe::{Probe, ProbeFilter, ProbeFlags},
     util::{devno_to_path, path_to_devno},
 };
 
@@ -66,7 +66,6 @@ enum IdType {
 pub struct ProbeBuilder {
     disk_id: Option<IdType>,
     offset: u64,
-    probe_mode: ProbeMode,
     flags: ProbeFlags,
     filter: ProbeFilter,
 }
@@ -91,11 +90,6 @@ impl ProbeBuilder {
         self
     }
 
-    pub fn mode(mut self, mode: ProbeMode) -> Self {
-        self.probe_mode = mode;
-        self
-    }
-
     pub fn flags(mut self, flags: ProbeFlags) -> Self {
         self.flags = flags;
         self
@@ -107,9 +101,9 @@ impl ProbeBuilder {
     }
 
     pub fn build(self) -> Result<Probe, BlockidError> {
-        let id = self.disk_id.ok_or_else(|| {
-            BlockidError::ArgumentError("Path/devno not set in ProbeBuilder")
-        })?;
+        let id = self.disk_id.ok_or(BlockidError::ArgumentError(
+            "Path/devno not set in ProbeBuilder",
+        ))?;
 
         let (file, path) = match id {
             IdType::Path(path) => (File::open(&path)?, path),
@@ -118,6 +112,6 @@ impl ProbeBuilder {
                 (File::open(&path)?, path)
             }
         };
-        Probe::new(file, &path, self.offset, self.probe_mode, self.flags, self.filter)
+        Probe::new(file, &path, self.offset, self.flags, self.filter)
     }
 }

@@ -377,6 +377,8 @@ fn ext_checksum(
         if !verify_crc32c(&s_checksum.to_bytes(), csum) {
             return Err(ExtError::ChecksumError { expected: CsumAlgorium::Crc32c(u32::from(s_checksum)), got: CsumAlgorium::Crc32c(csum) });
         };
+    } else if u32::from(es.s_log_block_size) >= 256 {
+        return Err(ExtError::ExtFeatureError("legacy fs"));
     }
 
     return Ok(());

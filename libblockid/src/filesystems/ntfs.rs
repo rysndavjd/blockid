@@ -307,7 +307,7 @@ pub fn probe_ntfs(
             FilesystemResult { 
                 btype: Some(BlockType::Ntfs), 
                 sec_type: None, 
-                label: label, 
+                label, 
                 uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))), 
                 log_uuid: None, 
                 ext_journal: None, 

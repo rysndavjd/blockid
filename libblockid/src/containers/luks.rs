@@ -127,7 +127,7 @@ pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 pub const LUKS_OPAL_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("LUKS_OPAL"),
-    btype: Some(BlockType::LUKSOPAL),
+    btype: Some(BlockType::LUKSOpal),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {
         probe_luks_opal(probe, magic)
@@ -298,7 +298,7 @@ pub fn probe_luks_opal(
     probe.push_result(
         ProbeResult::Container(
             ContainerResult { 
-                btype: Some(BlockType::LUKSOPAL), 
+                btype: Some(BlockType::LUKSOpal), 
                 sec_type: None, 
                 label: None, 
                 uuid: Some(BlockidUUID::Uuid(Uuid::from_str(&decode_utf8_from(&header.uuid)?)?)), 
