@@ -7,8 +7,8 @@ pub mod aix;
 //pub mod unixware;
 //pub mod minix;
 
-use thiserror::Error;
 use crate::checksum::CsumAlgorium;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum PtError {
@@ -22,5 +22,5 @@ pub enum PtError {
     ChecksumError {
         expected: CsumAlgorium,
         got: CsumAlgorium,
-    }
+    },
 }

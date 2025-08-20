@@ -10,24 +10,20 @@ pub(crate) mod ioctl;
 mod util;
 
 pub(crate) mod containers;
-pub(crate) mod partitions;
 pub(crate) mod filesystems;
+pub(crate) mod partitions;
 
 use std::{
+    fs::File,
     io::Error as IoError,
     path::{Path, PathBuf},
-    fs::File,
 };
 
 use glob::GlobError;
 use rustix::fs::Dev;
 use thiserror::Error;
 
-use crate::{
-    containers::ContError,
-    partitions::PtError,
-    filesystems::FsError,
-};
+use crate::{containers::ContError, filesystems::FsError, partitions::PtError};
 
 pub use crate::{
     probe::{Probe, ProbeFilter, ProbeFlags},

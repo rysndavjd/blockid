@@ -1,4 +1,4 @@
-use crate::{BlockidProbe, BlockidIdinfo, BlockidMagic, UsageType, ProbeResult};
+use crate::{BlockidIdinfo, BlockidMagic, BlockidProbe, ProbeResult, UsageType};
 
 const SOLARIS_SECTOR: u64 = 1;
 const SOLARIS_OFFSET: u64 = SOLARIS_SECTOR << 9;
@@ -9,19 +9,16 @@ pub const SOLARIS_X86_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
     usage: Some(UsageType::PartitionTable),
     probe_fn: probe_solaris_pt,
     minsz: None,
-    magics: &[
-        BlockidMagic {
-            magic: b"\xEE\xDE\x0D\x60",
-            len: 4,
-            b_offset: SOLARIS_MAGICOFFSET,
-        },
-    ]
+    magics: &[BlockidMagic {
+        magic: b"\xEE\xDE\x0D\x60",
+        len: 4,
+        b_offset: SOLARIS_MAGICOFFSET,
+    }],
 };
 
 fn probe_solaris_pt(
-        probe: &mut BlockidProbe,
-        mag: BlockidMagic,
-    ) -> Result<ProbeResult ,Box<dyn std::error::Error>> 
-{
+    probe: &mut BlockidProbe,
+    mag: BlockidMagic,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     todo!()
 }

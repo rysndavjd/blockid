@@ -1,5 +1,9 @@
 use bitflags::bitflags;
-use rustix::{io, ioctl::{ioctl, Getter}, fd::AsFd};
+use rustix::{
+    fd::AsFd,
+    io,
+    ioctl::{Getter, ioctl},
+};
 
 #[cfg(target_os = "linux")]
 pub const BLKGETZONESZ: u32 = 2147750532;
@@ -10,15 +14,15 @@ pub const BLKGETSIZE64: u32 = 2148012658;
 #[cfg(target_os = "linux")]
 const IOC_OPAL_GET_STATUS: u32 = 2148036844;
 
-/* 
+/*
  * off_t = 8 bytes
- * #define DIOCGMEDIASIZE _IOR('d', 129, off_t) 
+ * #define DIOCGMEDIASIZE _IOR('d', 129, off_t)
  */
 
 #[cfg(target_os = "freebsd")]
 const DIOCGMEDIASIZE: u64 = 2148033665;
 
-/* 
+/*
  * u_int = 4 bytes
  * #define	DIOCGSECTORSIZE	_IOR('d', 128, u_int)
  */
@@ -26,7 +30,7 @@ const DIOCGMEDIASIZE: u64 = 2148033665;
 #[cfg(target_os = "freebsd")]
 const DIOCGSECTORSIZE: u64 = 2147771520;
 
-/* 
+/*
  * uint32_t = 4 bytes
  * #define DKIOCGETBLOCKSIZE _IOR('d', 24, uint32_t)
  */
@@ -34,7 +38,7 @@ const DIOCGSECTORSIZE: u64 = 2147771520;
 #[cfg(target_os = "macos")]
 const DKIOCGETBLOCKSIZE: u32 = 2147771416;
 
-/* 
+/*
  * uint64_t = 8 bytes
  * #define DKIOCGETBLOCKCOUNT _IOR('d', 25, uint64_t)
  */
@@ -97,12 +101,12 @@ pub fn ioctl_dkiocgetblockcount<Fd: AsFd>(fd: Fd) -> io::Result<u64> {
 }
 
 #[cfg(target_os = "linux")]
-bitflags!{
+bitflags! {
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct OpalStatusFlags: u32 {
         const OPAL_FL_SUPPORTED         = 0x00000001;
-        const OPAL_FL_LOCKING_SUPPORTED = 0x00000002; 
+        const OPAL_FL_LOCKING_SUPPORTED = 0x00000002;
         const OPAL_FL_LOCKING_ENABLED   = 0x00000004;
         const OPAL_FL_LOCKED            = 0x00000008;
         const OPAL_FL_MBR_ENABLED       = 0x00000010;

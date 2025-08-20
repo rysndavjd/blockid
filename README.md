@@ -29,7 +29,7 @@ Libblockid
 | LUKS       | Works   | Container        |
 | NTFS       | Works   | Filesystem       |
 | VFat       | Works  | Filesystem       |
-| XFS        | Todo   | Filesystem       |
+| XFS        | Next   | Filesystem       |
 | ZFS        | Todo   | Filesystem       |
 | Swap        | Works   | Filesystem       |
 
