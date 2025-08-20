@@ -3,6 +3,7 @@ pub mod ext;
 pub mod linux_swap;
 pub mod ntfs;
 pub mod vfat;
+pub mod xfs;
 pub mod volume_id;
 
 use thiserror::Error;

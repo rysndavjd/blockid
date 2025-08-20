@@ -11,7 +11,7 @@ use crate::{
     filesystems::{
         exfat::probe_is_exfat, ntfs::probe_is_ntfs, vfat::probe_is_vfat, volume_id::VolumeId32,
     },
-    partitions::{PtError, aix::BLKID_AIX_MAGIC_STRING},
+    partitions::{PtError, aix::AIX_MAGIC_STRING},
     probe::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, PartEntryAttributes, PartEntryType,
         PartTableResult, PartitionResults, Probe, ProbeResult, UsageType,
@@ -369,7 +369,7 @@ pub fn probe_dos_pt(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), DosPTEr
 
     let dos_pt: DosTable = from_file(&mut probe.file(), probe.offset())?;
 
-    if dos_pt.boot_code1[0..3] == BLKID_AIX_MAGIC_STRING {
+    if dos_pt.boot_code1[0..3] == AIX_MAGIC_STRING {
         return Err(DosPTError::UnknownPartitionTable(
             "Disk has AIX magic number",
         ));

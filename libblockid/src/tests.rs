@@ -1,6 +1,4 @@
 use crate::*;
 
 #[test]
-fn test() {
-}
-
+fn test() {}

@@ -1,57 +1,72 @@
 use std::{
     fmt,
-    fs::File, 
-    io::{BufReader, Seek, SeekFrom}, 
-    path::{Path, PathBuf}
+    fs::File,
+    io::{BufReader, Seek, SeekFrom},
+    path::{Path, PathBuf},
 };
 
-use rustix::{
-    fs::{fstat, major, minor, Dev, FileType, Mode},
-    fd::AsFd
-};
 use bitflags::bitflags;
+use rustix::{
+    fd::AsFd,
+    fs::{Dev, FileType, Mode, fstat, major, minor},
+};
 use uuid::Uuid;
 
-use crate::ioctl::{logical_block_size, device_size_bytes};
-#[cfg(target_os = "linux")]
-use crate::ioctl::{OpalStatusFlags, ioctl_ioc_opal_get_status, 
-    ioctl_blkgetzonesz};
-use crate::util::probe_get_magic;
 use crate::BlockidError;
+#[cfg(target_os = "linux")]
+use crate::ioctl::{OpalStatusFlags, ioctl_blkgetzonesz, ioctl_ioc_opal_get_status};
+use crate::ioctl::{device_size_bytes, logical_block_size};
+use crate::util::probe_get_magic;
 
 use crate::{
-    containers::{
-        luks::{LUKS1_ID_INFO, LUKS2_ID_INFO, LUKS_OPAL_ID_INFO}
-    }, 
+    containers::luks::{LUKS_OPAL_ID_INFO, LUKS1_ID_INFO, LUKS2_ID_INFO},
+    filesystems::{
+        exfat::EXFAT_ID_INFO,
+        ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO, JBD_ID_INFO},
+        linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO},
+        ntfs::NTFS_ID_INFO,
+        vfat::VFAT_ID_INFO,
+        volume_id::{VolumeId32, VolumeId64},
+    },
     partitions::{
         dos::DOS_PT_ID_INFO,
         //gpt::GPT_PT_ID_INFO
     },
-    filesystems::{
-        exfat::EXFAT_ID_INFO,
-        ext::{JBD_ID_INFO, EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO},
-        linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO}, 
-        ntfs::NTFS_ID_INFO,
-        vfat::VFAT_ID_INFO,
-        volume_id::{VolumeId32, VolumeId64},
-    }, 
 };
 
 static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
-    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS1, LUKS1_ID_INFO),
-    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS2, LUKS2_ID_INFO),
-    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS_OPAL, LUKS_OPAL_ID_INFO),
-
+    (
+        ProbeFilter::SKIP_CONT,
+        ProbeFilter::SKIP_LUKS1,
+        LUKS1_ID_INFO,
+    ),
+    (
+        ProbeFilter::SKIP_CONT,
+        ProbeFilter::SKIP_LUKS2,
+        LUKS2_ID_INFO,
+    ),
+    (
+        ProbeFilter::SKIP_CONT,
+        ProbeFilter::SKIP_LUKS_OPAL,
+        LUKS_OPAL_ID_INFO,
+    ),
     (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_DOS, DOS_PT_ID_INFO),
     //(ProbeFilter::SKIP_PT, ProbeFilter::SKIP_GPT, GPT_PT_ID_INFO),
-
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXFAT, EXFAT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT2, EXT2_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT3, EXT3_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT4, EXT4_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_JBD, JBD_ID_INFO),
-    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V0, LINUX_SWAP_V0_ID_INFO),
-    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V1, LINUX_SWAP_V1_ID_INFO),
+    (
+        ProbeFilter::SKIP_FS,
+        ProbeFilter::SKIP_LINUX_SWAP_V0,
+        LINUX_SWAP_V0_ID_INFO,
+    ),
+    (
+        ProbeFilter::SKIP_FS,
+        ProbeFilter::SKIP_LINUX_SWAP_V1,
+        LINUX_SWAP_V1_ID_INFO,
+    ),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_NTFS, NTFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_VFAT, VFAT_ID_INFO),
 ];
@@ -74,15 +89,12 @@ pub struct Probe {
 
     flags: ProbeFlags,
     filter: ProbeFilter,
-    value: Option<ProbeResult>
+    value: Option<ProbeResult>,
 }
 
 impl Probe {
     pub fn supported_string() -> Vec<&'static str> {
-        PROBES
-            .iter()
-            .filter_map(|(_, _, info)| info.name)
-            .collect()
+        PROBES.iter().filter_map(|(_, _, info)| info.name).collect()
     }
 
     pub fn supported_type() -> Vec<BlockType> {
@@ -93,13 +105,12 @@ impl Probe {
     }
 
     pub fn new(
-            file: File,
-            path: &Path,
-            offset: u64,
-            flags: ProbeFlags,
-            filter: ProbeFilter,
-        ) -> Result<Probe, BlockidError>
-    {   
+        file: File,
+        path: &Path,
+        offset: u64,
+        flags: ProbeFlags,
+        filter: ProbeFilter,
+    ) -> Result<Probe, BlockidError> {
         let stat = fstat(file.as_fd())?;
 
         let sector_size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
@@ -107,7 +118,7 @@ impl Probe {
         } else {
             512
         };
-        
+
         let size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
             device_size_bytes(file.as_fd())?
         } else {
@@ -119,16 +130,16 @@ impl Probe {
         #[cfg(target_os = "linux")]
         let zone_size = u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9);
 
-        Ok( Self { 
+        Ok(Self {
             file,
             path: path.to_path_buf(),
             buffer: None,
-            offset, 
-            size, 
+            offset,
+            size,
             io_size: stat.st_blksize.into(),
             devno: stat.st_rdev,
             disk_devno: stat.st_dev,
-            sector_size, 
+            sector_size,
             mode: Mode::from(stat.st_mode),
             #[cfg(target_os = "linux")]
             zone_size,
@@ -150,10 +161,7 @@ impl Probe {
         return Ok(());
     }
 
-    pub fn probe_values(
-            &mut self
-        ) -> Result<(), BlockidError>
-    {
+    pub fn probe_values(&mut self) -> Result<(), BlockidError> {
         if self.filter.is_empty() {
             for info in PROBES {
                 let result = match probe_get_magic(&mut self.file, &info.2) {
@@ -161,15 +169,13 @@ impl Probe {
                         self.file().seek(SeekFrom::Start(0))?;
                         match magic {
                             Some(t) => (info.2.probe_fn)(self, t),
-                            None => {
-                                (info.2.probe_fn)(self, BlockidMagic::EMPTY_MAGIC)
-                            }
+                            None => (info.2.probe_fn)(self, BlockidMagic::EMPTY_MAGIC),
                         }
-                    },
+                    }
                     Err(e) => {
                         log::error!("Wrong Magic\nInfo: \"{:?}\",\nError: {:?}", info.2, e);
-                        continue
-                    },
+                        continue;
+                    }
                 };
 
                 if result.is_ok() {
@@ -178,7 +184,7 @@ impl Probe {
             }
             return Err(BlockidError::ProbeError("All probe functions exhasted"));
         }
-        
+
         let filtered_probe: Vec<BlockidIdinfo> = PROBES
             .iter()
             .filter_map(|&(catagory, item, id_info)| {
@@ -189,46 +195,44 @@ impl Probe {
                 }
             })
             .collect();
-        
+
         for info in filtered_probe {
             let result = match probe_get_magic(&mut self.file, &info) {
-                Ok(magic) => {
-                    match magic {
-                        Some(t) => (info.probe_fn)(self, t),
-                        None => (info.probe_fn)(self, BlockidMagic::EMPTY_MAGIC)
-                    }
+                Ok(magic) => match magic {
+                    Some(t) => (info.probe_fn)(self, t),
+                    None => (info.probe_fn)(self, BlockidMagic::EMPTY_MAGIC),
                 },
                 Err(_) => continue,
             };
-            
+
             if result.is_ok() {
                 return Ok(());
             }
         }
 
-        return Err(BlockidError::ProbeError("All probe filtered functions exhasted"));
+        return Err(BlockidError::ProbeError(
+            "All probe filtered functions exhasted",
+        ));
     }
 
-    pub(crate) fn push_result(
-            &mut self,
-            result: ProbeResult,
-        ) 
-    {
+    pub(crate) fn push_result(&mut self, result: ProbeResult) {
         if self.value.is_some() {
-            log::error!("Probe already has a result, first: {:?}, second: {result:?}", self.value)
+            log::error!(
+                "Probe already has a result, first: {:?}, second: {result:?}",
+                self.value
+            )
         }
         self.value = Some(result)
     }
 
     pub fn from_filename(
-            filename: &Path,
-            flags: ProbeFlags,
-            filter: ProbeFilter,
-            offset: u64,
-        ) -> Result<Probe, BlockidError>
-    {
+        filename: &Path,
+        flags: ProbeFlags,
+        filter: ProbeFilter,
+        offset: u64,
+    ) -> Result<Probe, BlockidError> {
         let file = File::open(filename)?;
-                
+
         let probe = Probe::new(file, filename, offset, flags, filter)?;
 
         return Ok(probe);
@@ -246,7 +250,7 @@ impl Probe {
     pub fn path(&self) -> &Path {
         return self.path.as_path();
     }
-    
+
     #[inline]
     pub fn size(&self) -> u64 {
         return self.size;
@@ -272,7 +276,7 @@ impl Probe {
     pub fn devno(&self) -> Dev {
         return self.devno;
     }
-    
+
     #[inline]
     pub fn devno_maj(&self) -> u32 {
         return major(self.devno);
@@ -300,31 +304,26 @@ impl Probe {
 
     #[inline]
     pub fn is_block_device(&self) -> bool {
-        return FileType::from_raw_mode(self.mode.as_raw_mode())
-            .is_block_device();
+        return FileType::from_raw_mode(self.mode.as_raw_mode()).is_block_device();
     }
 
     #[inline]
     pub fn is_regular_file(&self) -> bool {
-        return FileType::from_raw_mode(self.mode.as_raw_mode())
-            .is_file();
+        return FileType::from_raw_mode(self.mode.as_raw_mode()).is_file();
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn is_opal_locked(
-            &mut self
-        ) -> Result<bool, rustix::io::Errno>
-    {
+    pub(crate) fn is_opal_locked(&mut self) -> Result<bool, rustix::io::Errno> {
         if !self.flags.contains(ProbeFlags::OPAL_CHECKED) {
             let status = ioctl_ioc_opal_get_status(self.file.as_fd())?;
-        
+
             if status.flags.contains(OpalStatusFlags::OPAL_FL_LOCKED) {
                 self.flags.insert(ProbeFlags::OPAL_LOCKED);
             }
-        
+
             self.flags.insert(ProbeFlags::OPAL_CHECKED);
         }
-    
+
         return Ok(self.flags.contains(ProbeFlags::OPAL_LOCKED));
     }
 
@@ -333,16 +332,15 @@ impl Probe {
     }
 
     pub fn flags(&self) -> ProbeFlags {
-       self.flags 
+        self.flags
     }
 
     pub fn file(&self) -> &File {
         &self.file
     }
-
 }
 
-bitflags!{
+bitflags! {
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ProbeFlags: u64 {
         const TINY_DEV = 1 << 0;
@@ -425,7 +423,7 @@ pub struct FilesystemResult {
     pub sec_type: Option<SecType>,
     pub uuid: Option<BlockidUUID>,
     pub log_uuid: Option<BlockidUUID>,
-    pub ext_journal: Option<BlockidUUID>, 
+    pub ext_journal: Option<BlockidUUID>,
     pub label: Option<String>,
     pub creator: Option<String>,
     pub usage: Option<UsageType>,
@@ -473,16 +471,36 @@ pub struct ContainerResultView<'a> {
 }
 
 impl<'a> ContainerResultView<'a> {
-    pub fn block_type(&self) -> Option<BlockType> { self.inner.btype }
-    pub fn sec_type(&self) -> Option<SecType> { self.inner.sec_type }
-    pub fn uuid(&self) -> Option<BlockidUUID> { self.inner.uuid }
-    pub fn label(&self) -> Option<&str> { self.inner.label.as_deref() }
-    pub fn creator(&self) -> Option<&str> { self.inner.creator.as_deref() }
-    pub fn usage(&self) -> Option<UsageType> { self.inner.usage }
-    pub fn version(&self) -> Option<BlockidVersion> { self.inner.version }
-    pub fn sbmagic(&self) -> Option<&'static [u8]> { self.inner.sbmagic }
-    pub fn sbmagic_offset(&self) -> Option<u64> { self.inner.sbmagic_offset }
-    pub fn endianness(&self) -> Option<Endianness> { self.inner.endianness }
+    pub fn block_type(&self) -> Option<BlockType> {
+        self.inner.btype
+    }
+    pub fn sec_type(&self) -> Option<SecType> {
+        self.inner.sec_type
+    }
+    pub fn uuid(&self) -> Option<BlockidUUID> {
+        self.inner.uuid
+    }
+    pub fn label(&self) -> Option<&str> {
+        self.inner.label.as_deref()
+    }
+    pub fn creator(&self) -> Option<&str> {
+        self.inner.creator.as_deref()
+    }
+    pub fn usage(&self) -> Option<UsageType> {
+        self.inner.usage
+    }
+    pub fn version(&self) -> Option<BlockidVersion> {
+        self.inner.version
+    }
+    pub fn sbmagic(&self) -> Option<&'static [u8]> {
+        self.inner.sbmagic
+    }
+    pub fn sbmagic_offset(&self) -> Option<u64> {
+        self.inner.sbmagic_offset
+    }
+    pub fn endianness(&self) -> Option<Endianness> {
+        self.inner.endianness
+    }
 }
 
 #[derive(Debug)]
@@ -491,15 +509,27 @@ pub struct PartTableResultView<'a> {
 }
 
 impl<'a> PartTableResultView<'a> {
-    pub fn block_type(&self) -> Option<BlockType> { self.inner.btype }
-    pub fn sec_type(&self) -> Option<SecType> { self.inner.sec_type }
-    pub fn uuid(&self) -> Option<BlockidUUID> { self.inner.uuid }
+    pub fn block_type(&self) -> Option<BlockType> {
+        self.inner.btype
+    }
+    pub fn sec_type(&self) -> Option<SecType> {
+        self.inner.sec_type
+    }
+    pub fn uuid(&self) -> Option<BlockidUUID> {
+        self.inner.uuid
+    }
     pub fn partitions(&self) -> impl Iterator<Item = &PartitionResults> {
         self.inner.partitions.as_deref().into_iter().flatten()
     }
-    pub fn sbmagic(&self) -> Option<&'static [u8]> { self.inner.sbmagic }
-    pub fn sbmagic_offset(&self) -> Option<u64> { self.inner.sbmagic_offset }
-    pub fn endianness(&self) -> Option<Endianness> { self.inner.endianness }
+    pub fn sbmagic(&self) -> Option<&'static [u8]> {
+        self.inner.sbmagic
+    }
+    pub fn sbmagic_offset(&self) -> Option<u64> {
+        self.inner.sbmagic_offset
+    }
+    pub fn endianness(&self) -> Option<Endianness> {
+        self.inner.endianness
+    }
 }
 
 #[derive(Debug)]
@@ -508,22 +538,54 @@ pub struct FilesystemResultView<'a> {
 }
 
 impl<'a> FilesystemResultView<'a> {
-    pub fn block_type(&self) -> Option<BlockType> { self.inner.btype }
-    pub fn sec_type(&self) -> Option<SecType> { self.inner.sec_type }
-    pub fn uuid(&self) -> Option<BlockidUUID> { self.inner.uuid }
-    pub fn log_uuid(&self) -> Option<BlockidUUID> { self.inner.log_uuid }
-    pub fn ext_journal(&self) -> Option<BlockidUUID> { self.inner.ext_journal }
-    pub fn label(&self) -> Option<&str> { self.inner.label.as_deref() }
-    pub fn creator(&self) -> Option<&str> { self.inner.creator.as_deref() }
-    pub fn usage(&self) -> Option<UsageType> { self.inner.usage }
-    pub fn size(&self) -> Option<u64> { self.inner.size }
-    pub fn last_block(&self) -> Option<u64> { self.inner.fs_last_block }
-    pub fn fs_block_size(&self) -> Option<u64> { self.inner.fs_block_size }
-    pub fn block_size(&self) -> Option<u64> { self.inner.block_size }
-    pub fn version(&self) -> Option<BlockidVersion> { self.inner.version }
-    pub fn sbmagic(&self) -> Option<&'static [u8]> { self.inner.sbmagic }
-    pub fn sbmagic_offset(&self) -> Option<u64> { self.inner.sbmagic_offset }
-    pub fn endianness(&self) -> Option<Endianness> { self.inner.endianness }
+    pub fn block_type(&self) -> Option<BlockType> {
+        self.inner.btype
+    }
+    pub fn sec_type(&self) -> Option<SecType> {
+        self.inner.sec_type
+    }
+    pub fn uuid(&self) -> Option<BlockidUUID> {
+        self.inner.uuid
+    }
+    pub fn log_uuid(&self) -> Option<BlockidUUID> {
+        self.inner.log_uuid
+    }
+    pub fn ext_journal(&self) -> Option<BlockidUUID> {
+        self.inner.ext_journal
+    }
+    pub fn label(&self) -> Option<&str> {
+        self.inner.label.as_deref()
+    }
+    pub fn creator(&self) -> Option<&str> {
+        self.inner.creator.as_deref()
+    }
+    pub fn usage(&self) -> Option<UsageType> {
+        self.inner.usage
+    }
+    pub fn size(&self) -> Option<u64> {
+        self.inner.size
+    }
+    pub fn last_block(&self) -> Option<u64> {
+        self.inner.fs_last_block
+    }
+    pub fn fs_block_size(&self) -> Option<u64> {
+        self.inner.fs_block_size
+    }
+    pub fn block_size(&self) -> Option<u64> {
+        self.inner.block_size
+    }
+    pub fn version(&self) -> Option<BlockidVersion> {
+        self.inner.version
+    }
+    pub fn sbmagic(&self) -> Option<&'static [u8]> {
+        self.inner.sbmagic
+    }
+    pub fn sbmagic_offset(&self) -> Option<u64> {
+        self.inner.sbmagic_offset
+    }
+    pub fn endianness(&self) -> Option<Endianness> {
+        self.inner.endianness
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -535,7 +597,7 @@ pub enum PartEntryType {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartEntryAttributes {
     Mbr(u8),
-    Gpt(u64)
+    Gpt(u64),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -641,7 +703,7 @@ pub enum BlockidVersion {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Endianness {
     Little,
-    Big
+    Big,
 }
 
 type ProbeFn = fn(&mut Probe, BlockidMagic) -> Result<(), BlockidError>;
@@ -654,5 +716,9 @@ pub struct BlockidMagic {
 }
 
 impl BlockidMagic {
-    pub const EMPTY_MAGIC: BlockidMagic = BlockidMagic{magic: &[0], len: 0, b_offset: 0};
+    pub const EMPTY_MAGIC: BlockidMagic = BlockidMagic {
+        magic: &[0],
+        len: 0,
+        b_offset: 0,
+    };
 }

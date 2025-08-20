@@ -1,21 +1,22 @@
+use alloc::vec::Vec;
 use core::fmt::{self, Debug};
-use alloc::{vec::Vec};
 
 #[cfg(feature = "std")]
-use std::io::{Error as IoError, Seek, Read, ErrorKind};
+use std::io::{Error as IoError, ErrorKind, Read, Seek};
 
 #[cfg(not(feature = "std"))]
-use crate::nostd_io::{NoStdIoError as IoError, Read, Seek, ErrorKind};
+use crate::nostd_io::{ErrorKind, NoStdIoError as IoError, Read, Seek};
 
 use bitflags::bitflags;
-use zerocopy::{byteorder::LittleEndian, byteorder::U32, byteorder::U16, 
-    transmute, FromBytes, Immutable, IntoBytes, Unaligned};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
+    byteorder::U32, transmute,
+};
 
 use crate::{
-    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID,
-    PartEntryAttributes, PartEntryType, PartTableResults, PartitionResults,
-    ProbeResult, PtType, UsageType, from_file, read_sector_at, filesystems::{
-    volume_id::VolumeId32}, partitions::PtError,
+    BlockidError, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, PartEntryAttributes,
+    PartEntryType, PartTableResults, PartitionResults, ProbeResult, PtType, UsageType,
+    filesystems::volume_id::VolumeId32, from_file, partitions::PtError, read_sector_at,
 };
 
 fn mag_sector(mag: &BlockidMagic) -> u64 {
@@ -68,8 +69,8 @@ pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
     usage: Some(UsageType::PartitionTable),
     probe_fn: |probe, magic| {
         probe_bsd_pt(probe, magic)
-        .map_err(PtError::from)
-        .map_err(BlockidError::from)
+            .map_err(PtError::from)
+            .map_err(BlockidError::from)
     },
     minsz: None,
     magics: Some(&[
@@ -88,7 +89,7 @@ pub const BSD_PT_IDINFO: BlockidIdinfo = BlockidIdinfo {
             len: 4,
             b_offset: 128,
         },
-    ])
+    ]),
 };
 
 const BSD_MAXPARTITIONS: usize = 16;
@@ -127,25 +128,16 @@ pub struct BsdDSubType(U16<LittleEndian>);
 impl BsdDSubType {
     pub const BSD_DSTYPE_INDOSPART: Self = Self(U16::new(0x8));
     pub const BSD_DSTYPE_GEOMETRY: Self = Self(U16::new(0x10));
-    
-    pub fn bsd_dstype_dospart(
-            partno: u8
-        ) -> u8
-    {
+
+    pub fn bsd_dstype_dospart(partno: u8) -> u8 {
         partno & 3
     }
 
-    pub fn from_u16(
-            bytes: u16
-        ) -> Self 
-    {
+    pub fn from_u16(bytes: u16) -> Self {
         Self(U16::new(bytes))
     }
-    
-    pub fn as_u16(
-            &self
-        ) -> u16
-    {
+
+    pub fn as_u16(&self) -> u16 {
         u16::from(self.0)
     }
 }
@@ -165,7 +157,7 @@ pub struct BsdDiskLabel {
     d_ncylinders: U32<LittleEndian>,
     d_secpercyl: U32<LittleEndian>,
     d_secperunit: U32<LittleEndian>,
-    
+
     d_sparespertrack: U16<LittleEndian>,
     d_sparespercyl: U16<LittleEndian>,
 
@@ -189,15 +181,11 @@ pub struct BsdDiskLabel {
     d_partitions: [BsdPartition; BSD_MAXPARTITIONS],
 }
 
-impl BsdDiskLabel {
+impl BsdDiskLabel {}
 
-}
-
-fn bsd_checksum(
-        label: BsdDiskLabel
-    ) -> u16
-{
-    let raw: Vec<u16> = label.as_bytes()
+fn bsd_checksum(label: BsdDiskLabel) -> u16 {
+    let raw: Vec<u16> = label
+        .as_bytes()
         .chunks_exact(2)
         .map(|b| u16::from_le_bytes([b[0], b[1]]))
         .collect();
@@ -210,15 +198,11 @@ fn bsd_checksum(
 /*
  * BSD disk label is pain in the ass to develop on linux and
  * will finish this when I figure out a workflow of creating
- * correct disk labels as Gnu Parted seems to make invaild bsd 
+ * correct disk labels as Gnu Parted seems to make invaild bsd
  * disk labels
  */
 
- pub fn probe_bsd_pt(
-        probe: &mut BlockidProbe,
-        mag: BlockidMagic,
-    ) -> Result<(), BsdError> 
-{
+pub fn probe_bsd_pt(probe: &mut BlockidProbe, mag: BlockidMagic) -> Result<(), BsdError> {
     //let data = read_sector_at(&mut probe.file, mag_sector(&mag))?;
 
     todo!();

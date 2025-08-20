@@ -1,14 +1,16 @@
-use std::io::{Error as IoError};
+use std::io::Error as IoError;
 
-use zerocopy::{FromBytes, IntoBytes, Unaligned, Immutable};
 use uuid::Uuid;
+use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned};
 
 use crate::{
-    filesystems::FsError, probe::{BlockType, BlockidIdinfo, 
-    BlockidMagic, Probe, BlockidUUID, BlockidVersion, 
-    Endianness, FilesystemResult, ProbeResult, UsageType}, 
-    util::{decode_utf8_lossy_from, from_file, read_exact_at}, 
-    BlockidError
+    BlockidError,
+    filesystems::FsError,
+    probe::{
+        BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, Endianness,
+        FilesystemResult, Probe, ProbeResult, UsageType,
+    },
+    util::{decode_utf8_lossy_from, from_file, read_exact_at},
 };
 
 #[derive(Debug)]
@@ -54,8 +56,8 @@ pub const LINUX_SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     usage: Some(UsageType::Other("swap")),
     probe_fn: |probe, magic| {
         probe_swap_v0(probe, magic)
-        .map_err(FsError::from)
-        .map_err(BlockidError::from)
+            .map_err(FsError::from)
+            .map_err(BlockidError::from)
     },
     minsz: Some(40960), // 10 * 4096
     magics: Some(&[
@@ -84,7 +86,7 @@ pub const LINUX_SWAP_V0_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 10,
             b_offset: 0xfff6,
         },
-    ])
+    ]),
 };
 
 pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -93,8 +95,8 @@ pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     usage: Some(UsageType::Other("swap")),
     probe_fn: |probe, magic| {
         probe_swap_v1(probe, magic)
-        .map_err(FsError::from)
-        .map_err(BlockidError::from)
+            .map_err(FsError::from)
+            .map_err(BlockidError::from)
     },
     minsz: Some(40960), // 10 * 4096
     magics: Some(&[
@@ -118,7 +120,7 @@ pub const LINUX_SWAP_V1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 10,
             b_offset: 0x7ff6,
         },
-    ])
+    ]),
 };
 
 pub const SWSUSPEND_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -127,8 +129,8 @@ pub const SWSUSPEND_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     usage: Some(UsageType::Other("swapsuspend")),
     probe_fn: |probe, magic| {
         probe_swsuspend(probe, magic)
-        .map_err(FsError::from)
-        .map_err(BlockidError::from)
+            .map_err(FsError::from)
+            .map_err(BlockidError::from)
     },
     minsz: Some(40960), // 10 * 4096
     magics: Some(&[
@@ -237,7 +239,7 @@ pub const SWSUSPEND_ID_INFO: BlockidIdinfo = BlockidIdinfo {
             len: 9,
             b_offset: 0xfff6,
         },
-    ])
+    ]),
 };
 
 #[repr(C)]
@@ -253,11 +255,10 @@ pub struct SwapHeaderV1 {
 }
 
 fn swap_get_info(
-        magic: BlockidMagic,
-        name: &'static str,
-        header: SwapHeaderV1
-    ) -> Result<(Endianness, u64, u64, u64, &'static str), SwapError> 
-{
+    magic: BlockidMagic,
+    name: &'static str,
+    header: SwapHeaderV1,
+) -> Result<(Endianness, u64, u64, u64, &'static str), SwapError> {
     let endianness = if u32::from_be_bytes(header.version) == 1 {
         Endianness::Big
     } else {
@@ -279,11 +280,7 @@ fn swap_get_info(
     return Ok((endianness, pagesize, fs_size, fs_last_block, name));
 }
 
-pub fn probe_swap_v0(
-        probe: &mut Probe, 
-        magic: BlockidMagic
-    ) -> Result<(), SwapError> 
-{
+pub fn probe_swap_v0(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapError> {
     let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
@@ -292,43 +289,35 @@ pub fn probe_swap_v0(
 
     if magic.magic == b"SWAP-SPACE" {
         let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
-        
-        let (endian, pagesize, fs_size, fs_last_block, 
-            name) = swap_get_info(magic, "Swap V0", header)?;
-    
-        probe.push_result(
-            ProbeResult::Filesystem( 
-                FilesystemResult { 
-                    btype: Some(BlockType::LinuxSwapV0), 
-                    sec_type: None, 
-                    label: None, 
-                    uuid: None, 
-                    log_uuid: None, 
-                    ext_journal: None, 
-                    creator: None, 
-                    usage: Some(UsageType::Other(name)), 
-                    version: Some(BlockidVersion::Number(0)), 
-                    sbmagic: Some(magic.magic), 
-                    sbmagic_offset: Some(magic.b_offset), 
-                    size: Some(fs_size), 
-                    fs_last_block: Some(fs_last_block), 
-                    fs_block_size: Some(pagesize), 
-                    block_size: None, 
-                    endianness: Some(endian), 
-                }
-            )
-        );
+
+        let (endian, pagesize, fs_size, fs_last_block, name) =
+            swap_get_info(magic, "Swap V0", header)?;
+
+        probe.push_result(ProbeResult::Filesystem(FilesystemResult {
+            btype: Some(BlockType::LinuxSwapV0),
+            sec_type: None,
+            label: None,
+            uuid: None,
+            log_uuid: None,
+            ext_journal: None,
+            creator: None,
+            usage: Some(UsageType::Other(name)),
+            version: Some(BlockidVersion::Number(0)),
+            sbmagic: Some(magic.magic),
+            sbmagic_offset: Some(magic.b_offset),
+            size: Some(fs_size),
+            fs_last_block: Some(fs_last_block),
+            fs_block_size: Some(pagesize),
+            block_size: None,
+            endianness: Some(endian),
+        }));
         return Ok(());
     } else {
         return Err(SwapError::UnknownFilesystem("Linux Swap v1 detected"));
     }
 }
 
-pub fn probe_swap_v1(
-        probe: &mut Probe, 
-        magic: BlockidMagic
-    ) -> Result<(), SwapError> 
-{
+pub fn probe_swap_v1(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapError> {
     let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
@@ -337,10 +326,10 @@ pub fn probe_swap_v1(
 
     if magic.magic == b"SWAPSPACE2" {
         let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
-        
-        let (endian, pagesize, fs_size, fs_last_block, 
-            name) = swap_get_info(magic, "Swap V1", header)?;
-        
+
+        let (endian, pagesize, fs_size, fs_last_block, name) =
+            swap_get_info(magic, "Swap V1", header)?;
+
         let uuid = Uuid::from_bytes(header.uuid);
 
         let label: Option<String> = if header.volume[0] != 0 {
@@ -348,77 +337,64 @@ pub fn probe_swap_v1(
         } else {
             None
         };
-        probe.push_result(
-            ProbeResult::Filesystem(
-                FilesystemResult { 
-                    btype: Some(BlockType::LinuxSwapV1), 
-                    sec_type: None, 
-                    label, 
-                    uuid: Some(BlockidUUID::Uuid(uuid)), 
-                    log_uuid: None, 
-                    ext_journal: None, 
-                    creator: None, 
-                    usage: Some(UsageType::Other(name)), 
-                    version: Some(BlockidVersion::Number(1)), 
-                    sbmagic: Some(magic.magic), 
-                    sbmagic_offset: Some(magic.b_offset), 
-                    size: Some(fs_size), 
-                    fs_last_block: Some(fs_last_block), 
-                    fs_block_size: Some(pagesize), 
-                    block_size: None, 
-                    endianness: Some(endian), 
-                }
-            )
-        );
+        probe.push_result(ProbeResult::Filesystem(FilesystemResult {
+            btype: Some(BlockType::LinuxSwapV1),
+            sec_type: None,
+            label,
+            uuid: Some(BlockidUUID::Uuid(uuid)),
+            log_uuid: None,
+            ext_journal: None,
+            creator: None,
+            usage: Some(UsageType::Other(name)),
+            version: Some(BlockidVersion::Number(1)),
+            sbmagic: Some(magic.magic),
+            sbmagic_offset: Some(magic.b_offset),
+            size: Some(fs_size),
+            fs_last_block: Some(fs_last_block),
+            fs_block_size: Some(pagesize),
+            block_size: None,
+            endianness: Some(endian),
+        }));
         return Ok(());
     } else {
         return Err(SwapError::UnknownFilesystem("Linux Swap v0 detected"));
     }
 }
 
-pub fn probe_swsuspend(
-        probe: &mut Probe, 
-        magic: BlockidMagic
-    ) -> Result<(), SwapError> 
-{
+pub fn probe_swsuspend(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapError> {
     let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
 
-    let (endian, pagesize, fs_size, fs_last_block,
-         name) = if magic.magic == b"S1SUSPEND" {
+    let (endian, pagesize, fs_size, fs_last_block, name) = if magic.magic == b"S1SUSPEND" {
         swap_get_info(magic, "s1suspend", header)?
     } else if magic.magic == b"S2SUSPEND" {
         swap_get_info(magic, "s2suspend", header)?
     } else if magic.magic == b"ULSUSPEND" {
         swap_get_info(magic, "ulsuspend", header)?
     } else if magic.magic == TOI_MAGIC_STRING {
-        swap_get_info(magic, "Tux On Ice",  header)?
+        swap_get_info(magic, "Tux On Ice", header)?
     } else if magic.magic == b"LINHIB0001" {
         swap_get_info(magic, "linhib0001", header)?
     } else {
         return Err(SwapError::UnknownFilesystem("Suspend magic not found"));
     };
 
-    probe.push_result(
-        ProbeResult::Filesystem(
-            FilesystemResult { 
-                btype: Some(BlockType::SwapSuspend), 
-                sec_type: None, 
-                label: None, 
-                uuid: None, 
-                log_uuid: None, 
-                ext_journal: None, 
-                creator: None, 
-                usage: Some(UsageType::Other(name)), 
-                version: None, 
-                sbmagic: Some(magic.magic), 
-                sbmagic_offset: Some(magic.b_offset), 
-                size: Some(fs_size), 
-                fs_last_block: Some(fs_last_block), 
-                fs_block_size: Some(pagesize), 
-                block_size: None, 
-                endianness: Some(endian), 
-            }
-        )
-    );
+    probe.push_result(ProbeResult::Filesystem(FilesystemResult {
+        btype: Some(BlockType::SwapSuspend),
+        sec_type: None,
+        label: None,
+        uuid: None,
+        log_uuid: None,
+        ext_journal: None,
+        creator: None,
+        usage: Some(UsageType::Other(name)),
+        version: None,
+        sbmagic: Some(magic.magic),
+        sbmagic_offset: Some(magic.b_offset),
+        size: Some(fs_size),
+        fs_last_block: Some(fs_last_block),
+        fs_block_size: Some(pagesize),
+        block_size: None,
+        endianness: Some(endian),
+    }));
     return Ok(());
 }

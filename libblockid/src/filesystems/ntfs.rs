@@ -1,13 +1,20 @@
-use std::io::{Error as IoError, Seek, Read, ErrorKind};
+use std::io::{Error as IoError, ErrorKind, Read, Seek};
 
-use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, FromBytes, 
-    Immutable, IntoBytes, Unaligned, KnownLayout};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
+    byteorder::{LittleEndian, U16, U32, U64},
+};
 
 use crate::{
-    filesystems::{volume_id::VolumeId64, FsError}, probe::{BlockType, 
-        BlockidIdinfo, BlockidMagic, Probe, BlockidUUID, Endianness, 
-        FilesystemResult, ProbeResult, UsageType}, util::{decode_utf16_lossy_from, 
-        from_file, is_power_2, probe_get_magic, read_vec_at, UtfError}, BlockidError
+    BlockidError,
+    filesystems::{FsError, volume_id::VolumeId64},
+    probe::{
+        BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, Endianness, FilesystemResult, Probe,
+        ProbeResult, UsageType,
+    },
+    util::{
+        UtfError, decode_utf16_lossy_from, from_file, is_power_2, probe_get_magic, read_vec_at,
+    },
 };
 
 #[derive(Debug)]
@@ -16,7 +23,7 @@ pub enum NtfsError {
     UnknownFilesystem(&'static str),
     NtfsHeaderError(&'static str),
     UtfError(UtfError),
-    /* 
+    /*
     #[error("NTFS Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
     ChecksumError {
         expected: CsumAlgorium,
@@ -66,17 +73,15 @@ pub const NTFS_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     usage: Some(UsageType::Filesystem),
     probe_fn: |probe, magic| {
         probe_ntfs(probe, magic)
-        .map_err(FsError::from)
-        .map_err(BlockidError::from)
+            .map_err(FsError::from)
+            .map_err(BlockidError::from)
     },
     minsz: None,
-    magics: Some(&[
-        BlockidMagic {
-            magic: b"NTFS    ",
-            len: 8,
-            b_offset: 3,
-        },
-    ])
+    magics: Some(&[BlockidMagic {
+        magic: b"NTFS    ",
+        len: 8,
+        b_offset: 3,
+    }]),
 };
 
 #[repr(C)]
@@ -145,11 +150,8 @@ const NTFS_MAX_CLUSTER_SIZE: u64 = 2097152; //2 * 1024 * 1024
 const MFT_RECORD_ATTR_VOLUME_NAME: u32 = 0x60;
 const MFT_RECORD_ATTR_END: u32 = 0xffffffff;
 
-
-fn check_ntfs(
-        ns: NtfsSuperBlock,
-    ) -> Result<(u64, u64), NtfsError> // sector_size, sectors_per_cluster
-{    
+fn check_ntfs(ns: NtfsSuperBlock) -> Result<(u64, u64), NtfsError> // sector_size, sectors_per_cluster
+{
     let sector_size = u64::from(ns.sector_size);
 
     if !(256..=4096).contains(&sector_size) || !is_power_2(sector_size) {
@@ -166,32 +168,34 @@ fn check_ntfs(
         return Err(NtfsError::NtfsHeaderError("Too mant clusters"));
     }
 
-    if u16::from(ns.reserved_sectors) != 0 
-    || u16::from(ns.root_entries) != 0
-    || u16::from(ns.sectors) != 0
-    || u16::from(ns.sectors_per_fat) != 0
-    || u32::from(ns.large_sectors) != 0
-    || ns.fats != 0 {
+    if u16::from(ns.reserved_sectors) != 0
+        || u16::from(ns.root_entries) != 0
+        || u16::from(ns.sectors) != 0
+        || u16::from(ns.sectors_per_fat) != 0
+        || u32::from(ns.large_sectors) != 0
+        || ns.fats != 0
+    {
         return Err(NtfsError::NtfsHeaderError("Unused fields must be zero"));
     }
 
     if (ns.clusters_per_mft_record as u8) < 0xe1
-    || (ns.clusters_per_mft_record as u8) > 0xf7 
-    && matches!(ns.clusters_per_mft_record, 1 | 2 | 4 | 8 | 16 | 32 | 64) {
-        return Err(NtfsError::NtfsHeaderError("wrong value: clusters_per_mft_record"));
+        || (ns.clusters_per_mft_record as u8) > 0xf7
+            && matches!(ns.clusters_per_mft_record, 1 | 2 | 4 | 8 | 16 | 32 | 64)
+    {
+        return Err(NtfsError::NtfsHeaderError(
+            "wrong value: clusters_per_mft_record",
+        ));
     }
 
     return Ok((sector_size, sectors_per_cluster));
 }
 
-fn find_label<R: Read+Seek>(
-        file: &mut R,
-        ns: NtfsSuperBlock,
-        sector_size: u64,
-        sectors_per_cluster: u64,
-    ) -> Result<Option<String>, NtfsError>
-{
-
+fn find_label<R: Read + Seek>(
+    file: &mut R,
+    ns: NtfsSuperBlock,
+    sector_size: u64,
+    sectors_per_cluster: u64,
+) -> Result<Option<String>, NtfsError> {
     let mft_record_size = if ns.clusters_per_mft_record > 0 {
         ns.clusters_per_mft_record as u64 * sectors_per_cluster * sector_size
     } else {
@@ -204,8 +208,9 @@ fn find_label<R: Read+Seek>(
 
     let nr_clusters = u64::from(ns.number_of_sectors) / sectors_per_cluster;
 
-    if u64::from(ns.mft_cluster_location) > nr_clusters ||
-        u64::from(ns.mft_mirror_cluster_location) > nr_clusters {
+    if u64::from(ns.mft_cluster_location) > nr_clusters
+        || u64::from(ns.mft_mirror_cluster_location) > nr_clusters
+    {
         return Err(NtfsError::NtfsHeaderError("Too many clusters"));
     }
 
@@ -218,7 +223,9 @@ fn find_label<R: Read+Seek>(
     let mut buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
 
     if &buf_mft[0..4] != b"FILE" {
-        return Err(NtfsError::NtfsHeaderError("buf_mft 1 missing sig: \"FILE\""));
+        return Err(NtfsError::NtfsHeaderError(
+            "buf_mft 1 missing sig: \"FILE\"",
+        ));
     }
 
     off += MFT_RECORD_VOLUME * mft_record_size;
@@ -226,20 +233,35 @@ fn find_label<R: Read+Seek>(
     buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
 
     if &buf_mft[0..4] != b"FILE" {
-        return Err(NtfsError::NtfsHeaderError("buf_mft 2 missing sig: \"FILE\""));
+        return Err(NtfsError::NtfsHeaderError(
+            "buf_mft 2 missing sig: \"FILE\"",
+        ));
     }
 
-    let mft = MasterFileTableRecord::read_from_bytes(&buf_mft[..size_of::<MasterFileTableRecord>()])
-        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to Master File Table Record"))?;
+    let mft =
+        MasterFileTableRecord::read_from_bytes(&buf_mft[..size_of::<MasterFileTableRecord>()])
+            .map_err(|_| {
+                IoError::new(
+                    ErrorKind::InvalidData,
+                    "Unable to map bytes to Master File Table Record",
+                )
+            })?;
 
     let mut attr_off = usize::from(mft.attrs_offset);
 
-    while (attr_off + size_of::<FileAttribute>()) as u64 <= mft_record_size && 
-        attr_off as u64 <= u64::from(mft.bytes_allocated) {
-        
-        let attr = FileAttribute::read_from_bytes(&buf_mft[attr_off..attr_off + size_of::<FileAttribute>()])
-            .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to File Attribute"))?;
-        
+    while (attr_off + size_of::<FileAttribute>()) as u64 <= mft_record_size
+        && attr_off as u64 <= u64::from(mft.bytes_allocated)
+    {
+        let attr = FileAttribute::read_from_bytes(
+            &buf_mft[attr_off..attr_off + size_of::<FileAttribute>()],
+        )
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::InvalidData,
+                "Unable to map bytes to File Attribute",
+            )
+        })?;
+
         let attr_len = u32::from(attr.len) as usize;
 
         if attr_len == 0 {
@@ -251,26 +273,21 @@ fn find_label<R: Read+Seek>(
         }
 
         if u32::from(attr.file_type) == MFT_RECORD_ATTR_VOLUME_NAME {
-            let attr_bytes = &buf_mft[attr_off..attr_off + attr_len]; 
+            let attr_bytes = &buf_mft[attr_off..attr_off + attr_len];
 
             let val_off = usize::from(attr.value_offset);
             let val_len = u64::from(attr.value_len);
 
             if attr_off as u64 + val_off as u64 + val_len <= mft_record_size {
                 let val = &attr_bytes[val_off..val_off + val_len as usize];
-                
+
                 if val.is_empty() {
-                    return Ok(
-                        None
-                    );
+                    return Ok(None);
                 }
 
-                return Ok(
-                    Some(
-                        decode_utf16_lossy_from(val, Endianness::Little)
-                        .to_string()
-                    )
-                );
+                return Ok(Some(
+                    decode_utf16_lossy_from(val, Endianness::Little).to_string(),
+                ));
             }
         }
         attr_off += attr_len;
@@ -279,51 +296,40 @@ fn find_label<R: Read+Seek>(
     return Err(NtfsError::NtfsHeaderError("Unable to find offset of label"));
 }
 
-pub fn probe_is_ntfs(
-        probe: &mut Probe
-    ) -> Result<(), NtfsError>
-{
+pub fn probe_is_ntfs(probe: &mut Probe) -> Result<(), NtfsError> {
     let ns: NtfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
-    
+
     probe_get_magic(&mut probe.file(), &NTFS_ID_INFO)?;
     check_ntfs(ns)?;
 
     return Ok(());
 }
 
-pub fn probe_ntfs(
-        probe: &mut Probe, 
-        magic: BlockidMagic
-    ) -> Result<(), NtfsError> 
-{
+pub fn probe_ntfs(probe: &mut Probe, magic: BlockidMagic) -> Result<(), NtfsError> {
     let ns: NtfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
 
     let (sector_size, sectors_per_cluster) = check_ntfs(ns)?;
 
     let label = find_label(&mut probe.file(), ns, sector_size, sectors_per_cluster)?;
 
-    probe.push_result(
-        ProbeResult::Filesystem(
-            FilesystemResult { 
-                btype: Some(BlockType::Ntfs), 
-                sec_type: None, 
-                label, 
-                uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))), 
-                log_uuid: None, 
-                ext_journal: None, 
-                creator: None, 
-                usage: Some(UsageType::Filesystem), 
-                version: None, 
-                sbmagic: Some(magic.magic), 
-                sbmagic_offset: Some(magic.b_offset), 
-                size: Some(u64::from(ns.number_of_sectors) * sector_size), 
-                fs_last_block: None, 
-                fs_block_size: Some(sector_size * sectors_per_cluster), 
-                block_size: Some(sector_size), 
-                endianness: None 
-            }
-        )
-    );
+    probe.push_result(ProbeResult::Filesystem(FilesystemResult {
+        btype: Some(BlockType::Ntfs),
+        sec_type: None,
+        label,
+        uuid: Some(BlockidUUID::VolumeId64(VolumeId64::new(ns.volume_serial))),
+        log_uuid: None,
+        ext_journal: None,
+        creator: None,
+        usage: Some(UsageType::Filesystem),
+        version: None,
+        sbmagic: Some(magic.magic),
+        sbmagic_offset: Some(magic.b_offset),
+        size: Some(u64::from(ns.number_of_sectors) * sector_size),
+        fs_last_block: None,
+        fs_block_size: Some(sector_size * sectors_per_cluster),
+        block_size: Some(sector_size),
+        endianness: None,
+    }));
 
     return Ok(());
 }

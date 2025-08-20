@@ -1,18 +1,27 @@
-use std::io::{Error as IoError, ErrorKind, Seek, Read};
+use std::io::{Error as IoError, ErrorKind, Read, Seek};
 
-use zerocopy::{byteorder::{LittleEndian, U16, U32, U64}, 
-    FromBytes, Immutable, IntoBytes, Unaligned, KnownLayout};
 use uuid::Uuid;
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
+    byteorder::{LittleEndian, U16, U32, U64},
+};
 
 // use crate::{
-//     checksum::verify_crc32_iso_hdlc, partitions::{dos::{DosTable, 
-//     MbrPartitionType}, PtError}, probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, CommonResult, Endianness, PartEntryAttributes, PartEntryType, PartTableExtra, PartitionResults, ProbeFlags, ProbeResults, UsageType}, util::{decode_utf16_lossy_from, 
+//     checksum::verify_crc32_iso_hdlc, partitions::{dos::{DosTable,
+//     MbrPartitionType}, PtError}, probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, CommonResult, Endianness, PartEntryAttributes, PartEntryType, PartTableExtra, PartitionResults, ProbeFlags, ProbeResults, UsageType}, util::{decode_utf16_lossy_from,
 //     read_sector_at, read_vec_at}, BlockidError
 // };
 
 use crate::{
-    checksum::verify_crc32_iso_hdlc, partitions::{PtError}, probe::{BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, CommonResult, Endianness, PartEntryAttributes, PartEntryType, PartTableExtra, PartitionResults, ProbeFlags, ProbeResults, UsageType}, util::{decode_utf16_lossy_from, 
-    read_sector_at, read_vec_at}, BlockidError
+    BlockidError,
+    checksum::verify_crc32_iso_hdlc,
+    partitions::PtError,
+    probe::{
+        BlockType, BlockidIdinfo, BlockidMagic, BlockidProbe, BlockidUUID, CommonResult,
+        Endianness, PartEntryAttributes, PartEntryType, PartTableExtra, PartitionResults,
+        ProbeFlags, ProbeResults, UsageType,
+    },
+    util::{decode_utf16_lossy_from, read_sector_at, read_vec_at},
 };
 
 #[derive(Debug)]
@@ -55,10 +64,10 @@ pub const GPT_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     minsz: None,
     probe_fn: |probe, magic| {
         probe_gpt_pt(probe, magic)
-        .map_err(PtError::from)
-        .map_err(BlockidError::from)
+            .map_err(PtError::from)
+            .map_err(BlockidError::from)
     },
-    magics: None
+    magics: None,
 };
 
 pub const PMBR_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -68,16 +77,14 @@ pub const PMBR_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     minsz: None,
     probe_fn: |probe, magic| {
         probe_pmbr_pt(probe, magic)
-        .map_err(PtError::from)
-        .map_err(BlockidError::from)
+            .map_err(PtError::from)
+            .map_err(BlockidError::from)
     },
-    magics: Some(&[
-        BlockidMagic {
-            magic: b"\x55\xAA",
-            len: 2,
-            b_offset: 510,
-        }
-    ])
+    magics: Some(&[BlockidMagic {
+        magic: b"\x55\xAA",
+        len: 2,
+        b_offset: 510,
+    }]),
 };
 
 #[repr(C)]
@@ -98,7 +105,7 @@ impl EfiGuid {
         time_hi_and_version: U16::new(0),
         clock_seq_hi: 0,
         clock_seq_low: 0,
-        node: [0u8; 6]
+        node: [0u8; 6],
     };
 
     fn is_zero(&self) -> bool {
@@ -109,12 +116,19 @@ impl EfiGuid {
 impl From<EfiGuid> for Uuid {
     fn from(uuid: EfiGuid) -> Self {
         Uuid::from_fields(
-            u32::from(uuid.time_low), 
-            u16::from(uuid.time_mid), 
-            u16::from(uuid.time_hi_and_version), 
-            &[uuid.clock_seq_hi, uuid.clock_seq_low, 
-                uuid.node[0], uuid.node[1], uuid.node[2], 
-                uuid.node[3], uuid.node[4], uuid.node[5]]
+            u32::from(uuid.time_low),
+            u16::from(uuid.time_mid),
+            u16::from(uuid.time_hi_and_version),
+            &[
+                uuid.clock_seq_hi,
+                uuid.clock_seq_low,
+                uuid.node[0],
+                uuid.node[1],
+                uuid.node[2],
+                uuid.node[3],
+                uuid.node[4],
+                uuid.node[5],
+            ],
         )
     }
 }
@@ -128,7 +142,7 @@ pub struct GptTable {
     pub header_crc32: U32<LittleEndian>,
 
     pub reserved1: U32<LittleEndian>,
-    
+
     pub my_lba: U64<LittleEndian>,
     pub alternate_lba: U64<LittleEndian>,
     pub first_usable_lba: U64<LittleEndian>,
@@ -151,7 +165,7 @@ pub struct GptEntry {
     ending_lba: U64<LittleEndian>,
 
     attributes: U64<LittleEndian>,
-    partition_name: [u8; 72]
+    partition_name: [u8; 72],
 }
 
 impl GptTable {
@@ -159,8 +173,13 @@ impl GptTable {
     const HEADER_SIGNATURE_STR: &[u8] = b"EFI PART";
 }
 
-fn get_lba_buffer<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, offset: u64) -> Result<Vec<u8>, IoError> {
-    return Ok(read_vec_at(file, (lba * ssz) + offset, ssz as usize)?)
+fn get_lba_buffer<R: Seek + Read>(
+    file: &mut R,
+    ssz: u64,
+    lba: u64,
+    offset: u64,
+) -> Result<Vec<u8>, IoError> {
+    return Ok(read_vec_at(file, (lba * ssz) + offset, ssz as usize)?);
 }
 
 fn last_lba(probe: &mut BlockidProbe) -> Option<u64> {
@@ -180,7 +199,7 @@ fn last_lba(probe: &mut BlockidProbe) -> Option<u64> {
 //     }
 
 //     let data = read_sector_at(&mut probe.file(), probe.offset() / 512)?;
-    
+
 //     let mbr = DosTable::ref_from_bytes(&data)
 //         .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to MBR partition table"))?;
 
@@ -193,11 +212,21 @@ fn last_lba(probe: &mut BlockidProbe) -> Option<u64> {
 //     return Ok(false);
 // }
 
-fn get_gpt_header<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, last_lba: u64, offset: u64) -> Result<ProbeResults, GptPtError>{
+fn get_gpt_header<R: Seek + Read>(
+    file: &mut R,
+    ssz: u64,
+    lba: u64,
+    last_lba: u64,
+    offset: u64,
+) -> Result<ProbeResults, GptPtError> {
     let raw = get_lba_buffer(file, ssz, lba, offset)?;
 
-    let header = GptTable::ref_from_bytes(&raw[..92])
-        .map_err(|_| IoError::new(ErrorKind::InvalidData, "Unable to map bytes to GPT partition table"))?;
+    let header = GptTable::ref_from_bytes(&raw[..92]).map_err(|_| {
+        IoError::new(
+            ErrorKind::InvalidData,
+            "Unable to map bytes to GPT partition table",
+        )
+    })?;
 
     if u64::from(header.signature) != GptTable::HEADER_SIGNATURE {
         return Err(GptPtError::GptPTHeaderError("Invalid GPT header signature"));
@@ -208,7 +237,7 @@ fn get_gpt_header<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, last_lba: u64,
     if hsz > ssz || hsz < size_of::<GptTable>() as u64 {
         return Err(GptPtError::GptPTHeaderError("GPT header size too large"));
     }
-    
+
     let stored_crc = u32::from(header.header_crc32);
 
     let mut header_bytes = raw[..size_of::<GptTable>()].to_vec();
@@ -219,33 +248,45 @@ fn get_gpt_header<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, last_lba: u64,
     }
 
     if u64::from(header.my_lba) != lba {
-        return Err(GptPtError::GptPTHeaderError("GPT->MyLBA mismatch with real position"));
+        return Err(GptPtError::GptPTHeaderError(
+            "GPT->MyLBA mismatch with real position",
+        ));
     }
 
     let fu = u64::from(header.first_usable_lba);
     let lu = u64::from(header.last_usable_lba);
 
     if lu < fu || fu > last_lba || lu > last_lba {
-        return Err(GptPtError::GptPTHeaderError("GPT->{First,Last}UsableLBA out of range"));
+        return Err(GptPtError::GptPTHeaderError(
+            "GPT->{First,Last}UsableLBA out of range",
+        ));
     }
 
     if fu < lba && lba < lu {
-        return Err(GptPtError::GptPTHeaderError("GPT header is inside usable area"));
+        return Err(GptPtError::GptPTHeaderError(
+            "GPT header is inside usable area",
+        ));
     }
 
-    let esz = header.num_partition_entries *
-        header.sizeof_partition_entry;
+    let esz = header.num_partition_entries * header.sizeof_partition_entry;
 
-    if esz == 0 || esz >= u32::MAX ||
-        u32::from(header.sizeof_partition_entry) != size_of::<GptEntry>() as u32 {
+    if esz == 0
+        || esz >= u32::MAX
+        || u32::from(header.sizeof_partition_entry) != size_of::<GptEntry>() as u32
+    {
         return Err(GptPtError::GptPTHeaderError("GPT entries undefined"));
     }
 
-    let entry_buffers: &[u8] = &get_lba_buffer(file, u64::from(header.partition_entries_lba), u64::from(esz), offset)?;
+    let entry_buffers: &[u8] = &get_lba_buffer(
+        file,
+        u64::from(header.partition_entries_lba),
+        u64::from(esz),
+        offset,
+    )?;
     let count = entry_buffers.len() / size_of::<GptEntry>();
 
     println!("{}", count);
-    
+
     let entry_size = u32::from(header.sizeof_partition_entry);
     let ssf = ssz / 512;
 
@@ -264,8 +305,7 @@ fn get_gpt_header<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, last_lba: u64,
         })
         .filter_map(|(entry_no, entry)| {
             let start = u64::from(entry.starting_lba);
-            let size = u64::from(entry.ending_lba) -
-                u64::from(entry.starting_lba) + 1;
+            let size = u64::from(entry.ending_lba) - u64::from(entry.starting_lba) + 1;
 
             if start < fu || start + size - 1 > lu {
                 return None;
@@ -276,56 +316,52 @@ fn get_gpt_header<R: Seek+Read>(file: &mut R, ssz: u64, lba: u64, last_lba: u64,
             } else {
                 None
             };
-            
-            return Some(
-                PartitionResults { 
-                    offset: Some(start * ssf), 
-                    size: Some(size * ssf), 
-                    partno: Some(entry_no as u64), 
-                    part_uuid: Some(BlockidUUID::Uuid(Uuid::from(entry.unique_partition_guid))), 
-                    name,
-                    entry_type: Some(PartEntryType::Uuid(Uuid::from(entry.partition_type_guid))), 
-                    entry_attributes: Some(PartEntryAttributes::Gpt(u64::from(entry.attributes))) 
-                }
-            );
-        })
-    .collect();
 
-    return Ok(
-        ProbeResults::PartTable(
-            CommonResult {
-                btype: Some(BlockType::Gpt),
-                sec_type: None,
-                uuid: Some(BlockidUUID::Uuid(Uuid::from(header.disk_guid))),
-                creator: None,
-                usage: Some(UsageType::PartitionTable),
-                version: None,
-                sbmagic: Some(GptTable::HEADER_SIGNATURE_STR),
-                sbmagic_offset: Some(ssz * lba),
-                endianness: None,
-            }, 
-            PartTableExtra {
-                partitions: Some(partitions)
-            }
-        ) 
-    );
+            return Some(PartitionResults {
+                offset: Some(start * ssf),
+                size: Some(size * ssf),
+                partno: Some(entry_no as u64),
+                part_uuid: Some(BlockidUUID::Uuid(Uuid::from(entry.unique_partition_guid))),
+                name,
+                entry_type: Some(PartEntryType::Uuid(Uuid::from(entry.partition_type_guid))),
+                entry_attributes: Some(PartEntryAttributes::Gpt(u64::from(entry.attributes))),
+            });
+        })
+        .collect();
+
+    return Ok(ProbeResults::PartTable(
+        CommonResult {
+            btype: Some(BlockType::Gpt),
+            sec_type: None,
+            uuid: Some(BlockidUUID::Uuid(Uuid::from(header.disk_guid))),
+            creator: None,
+            usage: Some(UsageType::PartitionTable),
+            version: None,
+            sbmagic: Some(GptTable::HEADER_SIGNATURE_STR),
+            sbmagic_offset: Some(ssz * lba),
+            endianness: None,
+        },
+        PartTableExtra {
+            partitions: Some(partitions),
+        },
+    ));
 }
 
-pub fn probe_gpt_pt(
-        probe: &mut BlockidProbe, 
-        _mag: BlockidMagic
-    ) -> Result<(), GptPtError> 
-{   
+pub fn probe_gpt_pt(probe: &mut BlockidProbe, _mag: BlockidMagic) -> Result<(), GptPtError> {
     let lastlba = match last_lba(probe) {
         Some(t) => t,
-        None => return Err(GptPtError::GptPTHeaderError("Unable to get last lba"))
+        None => return Err(GptPtError::GptPTHeaderError("Unable to get last lba")),
     };
 
     let result = match get_gpt_header(&mut probe.file(), probe.ssz(), 1, lastlba, probe.offset()) {
         Ok(t) => t,
-        Err(_) => {
-            get_gpt_header(&mut probe.file(), probe.ssz(), lastlba, lastlba, probe.offset())?
-        }
+        Err(_) => get_gpt_header(
+            &mut probe.file(),
+            probe.ssz(),
+            lastlba,
+            lastlba,
+            probe.offset(),
+        )?,
     };
 
     probe.push_result(result);
@@ -333,22 +369,26 @@ pub fn probe_gpt_pt(
     return Ok(());
 }
 
-pub fn probe_pmbr_pt(
-        probe: &mut BlockidProbe, 
-        _mag: BlockidMagic
-    ) -> Result<(), GptPtError> 
-{
+pub fn probe_pmbr_pt(probe: &mut BlockidProbe, _mag: BlockidMagic) -> Result<(), GptPtError> {
     let lastlba = match last_lba(probe) {
         Some(t) => t,
-        None => return Err(GptPtError::GptPTHeaderError("Unable to get last lba"))
+        None => return Err(GptPtError::GptPTHeaderError("Unable to get last lba")),
     };
 
     // if !is_pmbr_valid(probe)? {
     //     return Err(GptPtError::UnknownPartitionTable("PT does not contain PMBR"));
     // }
-    
-    if get_gpt_header(&mut probe.file(), probe.ssz(), 1, lastlba, probe.offset()).is_err() &&
-        get_gpt_header(&mut probe.file(), probe.ssz(), lastlba, lastlba, probe.offset()).is_err() {
+
+    if get_gpt_header(&mut probe.file(), probe.ssz(), 1, lastlba, probe.offset()).is_err()
+        && get_gpt_header(
+            &mut probe.file(),
+            probe.ssz(),
+            lastlba,
+            lastlba,
+            probe.offset(),
+        )
+        .is_err()
+    {
         return Ok(());
     }
 
