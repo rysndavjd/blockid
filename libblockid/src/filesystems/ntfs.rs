@@ -23,13 +23,6 @@ pub enum NtfsError {
     UnknownFilesystem(&'static str),
     NtfsHeaderError(&'static str),
     UtfError(UtfError),
-    /*
-    #[error("NTFS Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
-    ChecksumError {
-        expected: CsumAlgorium,
-        got: CsumAlgorium,
-    }
-    */
 }
 
 impl std::fmt::Display for NtfsError {
