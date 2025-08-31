@@ -26,6 +26,7 @@ use crate::{
         linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO},
         ntfs::NTFS_ID_INFO,
         vfat::VFAT_ID_INFO,
+        xfs::XFS_ID_INFO,
         volume_id::{VolumeId32, VolumeId64},
     },
     partitions::{
@@ -35,21 +36,9 @@ use crate::{
 };
 
 static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
-    (
-        ProbeFilter::SKIP_CONT,
-        ProbeFilter::SKIP_LUKS1,
-        LUKS1_ID_INFO,
-    ),
-    (
-        ProbeFilter::SKIP_CONT,
-        ProbeFilter::SKIP_LUKS2,
-        LUKS2_ID_INFO,
-    ),
-    (
-        ProbeFilter::SKIP_CONT,
-        ProbeFilter::SKIP_LUKS_OPAL,
-        LUKS_OPAL_ID_INFO,
-    ),
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS1, LUKS1_ID_INFO),
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS2, LUKS2_ID_INFO),
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS_OPAL, LUKS_OPAL_ID_INFO),
     (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_DOS, DOS_PT_ID_INFO),
     //(ProbeFilter::SKIP_PT, ProbeFilter::SKIP_GPT, GPT_PT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXFAT, EXFAT_ID_INFO),
@@ -57,18 +46,11 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT3, EXT3_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT4, EXT4_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_JBD, JBD_ID_INFO),
-    (
-        ProbeFilter::SKIP_FS,
-        ProbeFilter::SKIP_LINUX_SWAP_V0,
-        LINUX_SWAP_V0_ID_INFO,
-    ),
-    (
-        ProbeFilter::SKIP_FS,
-        ProbeFilter::SKIP_LINUX_SWAP_V1,
-        LINUX_SWAP_V1_ID_INFO,
-    ),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V0, LINUX_SWAP_V0_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V1, LINUX_SWAP_V1_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_NTFS, NTFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_VFAT, VFAT_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_XFS, XFS_ID_INFO),
 ];
 
 #[derive(Debug)]
@@ -368,6 +350,7 @@ bitflags! {
         const SKIP_LINUX_SWAP_V1 = 1 << 14;
         const SKIP_NTFS = 1 << 15;
         const SKIP_VFAT = 1 << 16;
+        const SKIP_XFS = 1 << 17;
     }
 }
 
@@ -617,6 +600,7 @@ pub enum BlockType {
     SwapSuspend,
     Ntfs,
     Vfat,
+    Xfs,
 }
 
 impl fmt::Display for BlockType {
@@ -637,6 +621,7 @@ impl fmt::Display for BlockType {
             Self::LinuxSwapV1 => write!(f, "Linux Swap V1"),
             Self::SwapSuspend => write!(f, "Swap Suspend"),
             Self::Vfat => write!(f, "Vfat"),
+            Self::Xfs => write!(f, "Xfs"),
         }
     }
 }

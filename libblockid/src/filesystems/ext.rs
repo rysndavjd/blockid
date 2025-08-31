@@ -7,10 +7,11 @@ use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64,
 };
+use crc_fast::{checksum, CrcAlgorithm::Crc32Iscsi};
 
 use crate::{
     BlockidError,
-    checksum::{CsumAlgorium, get_crc32c, verify_crc32c},
+    checksum::CsumAlgorium,
     filesystems::FsError,
     probe::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, FilesystemResult,
@@ -54,7 +55,7 @@ impl From<ExtError> for FsError {
             ExtError::IoError(e) => FsError::IoError(e),
             ExtError::ExtFeatureError(feature) => FsError::InvalidHeader(feature),
             ExtError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
-            ExtError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
+            ExtError::ChecksumError { expected, got } => FsError::ChecksumError("EXT Header Checksum Invalid"),
         }
     }
 }
@@ -356,12 +357,12 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
 
     if ro_compat.contains(ExtFeatureRoCompat::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
         let s_checksum = es.s_checksum;
-        let csum = get_crc32c(&s_checksum.to_bytes());
-
-        if !verify_crc32c(&s_checksum.to_bytes(), csum) {
+        
+        let sum = checksum(Crc32Iscsi, &s_checksum.to_bytes());
+        if sum != u64::from(s_checksum) {
             return Err(ExtError::ChecksumError {
-                expected: CsumAlgorium::Crc32c(u32::from(s_checksum)),
-                got: CsumAlgorium::Crc32c(csum),
+                expected: CsumAlgorium::Crc32c(u64::from(s_checksum)),
+                got: CsumAlgorium::Crc32c(2),
             });
         };
     } else if u32::from(es.s_log_block_size) >= 256 {
@@ -389,7 +390,6 @@ fn ext_get_info(
 > {
     let fc = es.feature_compat();
     let fi = es.feature_incompat();
-    //let frc = es.s_feature_ro_compat;
 
     let label: Option<String> = if es.s_volume_name[0] != 0 {
         Some(decode_utf8_lossy_from(&es.s_volume_name))

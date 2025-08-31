@@ -19,9 +19,6 @@ pub enum FsError {
     UnknownFilesystem(&'static str),
     #[error("UTF Error: {0}")]
     UtfError(#[from] UtfError),
-    #[error("Filesystem Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\"")]
-    ChecksumError {
-        expected: CsumAlgorium,
-        got: CsumAlgorium,
-    }
+    #[error("FS Checksum Error: {0}")]
+    ChecksumError(&'static str)
 }
