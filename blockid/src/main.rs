@@ -42,6 +42,14 @@ enum OutputTags {
 }
 
 fn main() -> Result<(), BlockidError> {
+    let mut p = ProbeBuilder::new().path("/dev/sdb1").build().unwrap();
+
+    p.probe_values().unwrap();
+
+    let r = p.result().unwrap().as_filesystem().unwrap();
+
+    println!("{r:?}");
+
     let matches = Command::new("blockid")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Lists block infomation")

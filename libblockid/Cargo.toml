@@ -20,5 +20,6 @@ uuid = { version = "1.16.0", default-features = false, features = ["zerocopy", "
 rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc", "stdio", "std"] }
 widestring = { version = "1.2.0", default-features = false, features = ["alloc", "std"] }
 log = "0.4.27"
-thiserror = { version = "2.0.12", default-features = false, features = ["std"]}
+thiserror = { version = "2.0.12", default-features = false, features = ["std"] }
 glob = "0.3.3"
+crc-fast = { version = "1.4.0", default-features = false, features = ["alloc", "optimize_crc32_auto"] }

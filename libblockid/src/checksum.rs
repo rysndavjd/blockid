@@ -1,9 +1,7 @@
-use crc::{Crc, CRC_32_ISO_HDLC, CRC_32_ISCSI};
-
 #[derive(Debug)]
 pub enum CsumAlgorium {
-    Crc32(u32),
-    Crc32c(u32),
+    Crc32(u64),
+    Crc32c(u64),
     Exfat(u32),
     Ntfs(u32)
 }
@@ -40,42 +38,3 @@ impl std::fmt::LowerHex for CsumAlgorium {
         }
     }
 }
-
-pub fn verify_crc32_iso_hdlc(
-        bytes: &[u8],
-        checksum: u32,
-    ) -> bool
-{
-    return get_crc32_iso_hdlc(bytes) == checksum;
-}
-
-pub fn get_crc32_iso_hdlc(
-        bytes: &[u8],
-    ) -> u32
-{
-    let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
-    let mut digest = crc.digest();
-    digest.update(bytes);
-
-    return digest.finalize();
-}
-
-pub fn verify_crc32c(
-        bytes: &[u8],
-        checksum: u32,
-    ) -> bool
-{
-    return get_crc32c(bytes) == checksum;
-}
-
-pub fn get_crc32c(
-        bytes: &[u8],
-    ) -> u32
-{
-    let crc = Crc::<u32>::new(&CRC_32_ISCSI);
-    let mut digest = crc.digest();
-    digest.update(bytes);
-
-    return digest.finalize();
-}
-

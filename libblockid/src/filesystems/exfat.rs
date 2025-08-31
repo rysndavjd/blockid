@@ -53,7 +53,9 @@ impl From<ExFatError> for FsError {
             ExFatError::ExfatHeaderError(info) => FsError::InvalidHeader(info),
             ExFatError::UtfError(_) => FsError::InvalidHeader("Invalid utf16 to convert to utf8"),
             ExFatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
-            ExFatError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
+            ExFatError::ChecksumError { expected, got } => {
+                FsError::ChecksumError("EXFAT Header Checksum Invalid")
+            }
         }
     }
 }
