@@ -15,7 +15,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, FilesystemResult, Probe, ProbeResult,
         UsageType,
     },
-    util::{decode_utf8_lossy_from, from_file},
+    util::{decode_utf8_lossy_from, from_file, read_vec_at},
 };
 
 #[derive(Debug, Error)]
@@ -158,7 +158,7 @@ fn xfs_min_dblocks(sb: XfsSuperBlock) -> u64 {
 const XFS_SB_VERSION_MOREBITSBIT: u16 = 0x8000;
 const XFS_SB_VERSION2_CRCBIT: u32 = 0x00000100;
 
-pub fn xfs_verify(sb: XfsSuperBlock) -> Result<(), XfsError> {
+pub fn xfs_verify(sb: XfsSuperBlock, crc_area: Vec<u8>) -> Result<(), XfsError> {
     if sb.agcount.get() == 0
         || sb.sectsize.get() < XFS_MIN_SECTORSIZE
         || sb.sectsize.get() > XFS_MAX_SECTORSIZE
@@ -195,8 +195,17 @@ pub fn xfs_verify(sb: XfsSuperBlock) -> Result<(), XfsError> {
             return Err(XfsError::InvalidHeaderFeatures);
         };
 
-        // Need to do crc check later because I am going insane from it not working
+        let mut digest = Digest::new(Crc32Iscsi);
 
+        digest.update(&crc_area[0..224]);
+        digest.update(&[0u8; 4]);
+        digest.update(&crc_area[228..]);
+
+        let crc_bytes = digest.finalize().to_le_bytes();
+
+        if sb.crc.as_bytes() != [crc_bytes[0], crc_bytes[1], crc_bytes[2], crc_bytes[3]] {
+            return Err(XfsError::HeaderChecksumInvalid);
+        }
     }
     return Ok(());
 }
@@ -216,11 +225,9 @@ pub fn xfs_fssize(sb: XfsSuperBlock) -> u64 {
 
 pub fn probe_xfs(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), XfsError> {
     let sb: XfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
+    let crc_area = read_vec_at(&mut probe.file(), probe.offset(), usize::from(sb.sectsize))?;
 
-    println!("uea");
-    let e = xfs_verify(sb);
-
-    println!("{}", e.unwrap_err());
+    xfs_verify(sb, crc_area)?;
 
     let label = if sb.fname[0] != 0 {
         Some(decode_utf8_lossy_from(&sb.fname))
