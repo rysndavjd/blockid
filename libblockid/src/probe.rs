@@ -26,8 +26,8 @@ use crate::{
         linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO},
         ntfs::NTFS_ID_INFO,
         vfat::VFAT_ID_INFO,
-        xfs::XFS_ID_INFO,
         volume_id::{VolumeId32, VolumeId64},
+        xfs::XFS_ID_INFO,
     },
     partitions::{
         dos::DOS_PT_ID_INFO,
@@ -36,9 +36,21 @@ use crate::{
 };
 
 static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
-    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS1, LUKS1_ID_INFO),
-    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS2, LUKS2_ID_INFO),
-    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS_OPAL, LUKS_OPAL_ID_INFO),
+    (
+        ProbeFilter::SKIP_CONT,
+        ProbeFilter::SKIP_LUKS1,
+        LUKS1_ID_INFO,
+    ),
+    (
+        ProbeFilter::SKIP_CONT,
+        ProbeFilter::SKIP_LUKS2,
+        LUKS2_ID_INFO,
+    ),
+    (
+        ProbeFilter::SKIP_CONT,
+        ProbeFilter::SKIP_LUKS_OPAL,
+        LUKS_OPAL_ID_INFO,
+    ),
     (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_DOS, DOS_PT_ID_INFO),
     //(ProbeFilter::SKIP_PT, ProbeFilter::SKIP_GPT, GPT_PT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXFAT, EXFAT_ID_INFO),
@@ -46,8 +58,16 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT3, EXT3_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT4, EXT4_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_JBD, JBD_ID_INFO),
-    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V0, LINUX_SWAP_V0_ID_INFO),
-    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V1, LINUX_SWAP_V1_ID_INFO),
+    (
+        ProbeFilter::SKIP_FS,
+        ProbeFilter::SKIP_LINUX_SWAP_V0,
+        LINUX_SWAP_V0_ID_INFO,
+    ),
+    (
+        ProbeFilter::SKIP_FS,
+        ProbeFilter::SKIP_LINUX_SWAP_V1,
+        LINUX_SWAP_V1_ID_INFO,
+    ),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_NTFS, NTFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_VFAT, VFAT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_XFS, XFS_ID_INFO),
@@ -118,6 +138,7 @@ impl Probe {
             buffer: None,
             offset,
             size,
+            #[allow(clippy::useless_conversion)] /* Some architectures uses different integer size in blksize in its fstat field */
             io_size: stat.st_blksize.into(),
             devno: stat.st_rdev,
             disk_devno: stat.st_dev,
@@ -220,6 +241,7 @@ impl Probe {
         return Ok(probe);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn inner_result(&self) -> Option<&ProbeResult> {
         self.value.as_ref()
     }

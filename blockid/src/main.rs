@@ -3,6 +3,7 @@ use clap::{
     Arg, ArgAction, Command, ValueEnum, builder::EnumValueParser, parser::ValuesRef, value_parser,
 };
 use libblockid::{BlockidError as LibblockidError, Probe, ProbeBuilder};
+use simple_logger::init;
 use std::{
     io::{Error as IoError, ErrorKind},
     path::{Path, PathBuf},
@@ -42,6 +43,8 @@ enum OutputTags {
 }
 
 fn main() -> Result<(), BlockidError> {
+    init().unwrap();
+
     let mut p = ProbeBuilder::new().path("/dev/sdb1").build().unwrap();
 
     p.probe_values().unwrap();
