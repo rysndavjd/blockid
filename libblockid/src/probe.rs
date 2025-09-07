@@ -115,22 +115,30 @@ impl Probe {
     ) -> Result<Probe, BlockidError> {
         let stat = fstat(file.as_fd())?;
 
-        let sector_size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
-            u64::from(logical_block_size(file.as_fd())?)
-        } else {
-            512
-        };
+        #[cfg(target_os = "linux")]
+        let (sector_size, size, zone_size) =
+            if FileType::from_raw_mode(stat.st_mode).is_block_device() {
+                (
+                    u64::from(logical_block_size(file.as_fd())?),
+                    device_size_bytes(file.as_fd())?,
+                    u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9),
+                )
+            } else {
+                (512, stat.st_size as u64, 0)
+            };
 
-        let size: u64 = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
-            device_size_bytes(file.as_fd())?
+        #[cfg(not(target_os = "linux"))]
+        let (sector_size, size) = if FileType::from_raw_mode(stat.st_mode).is_block_device() {
+            (
+                u64::from(logical_block_size(file.as_fd())?),
+                device_size_bytes(file.as_fd())?,
+                u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9),
+            )
         } else {
-            stat.st_size as u64
+            (512, stat.st_size as u64)
         };
 
         //let buffer = BufReader::with_capacity(stat.st_blksize as usize, file.try_clone()?);
-
-        #[cfg(target_os = "linux")]
-        let zone_size = u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9);
 
         Ok(Self {
             file,
@@ -185,7 +193,7 @@ impl Probe {
                     return Ok(());
                 }
             }
-            return Err(BlockidError::ProbeError("All probe functions exhasted"));
+            return Err(BlockidError::ProbesExhausted);
         }
 
         let filtered_probe: Vec<BlockidIdinfo> = PROBES
@@ -213,9 +221,7 @@ impl Probe {
             }
         }
 
-        return Err(BlockidError::ProbeError(
-            "All probe filtered functions exhasted",
-        ));
+        return Err(BlockidError::ProbesExhausted);
     }
 
     pub(crate) fn push_result(&mut self, result: ProbeResult) {
@@ -223,7 +229,9 @@ impl Probe {
             log::error!(
                 "Probe already has a result, first: {:?}, second: {result:?}",
                 self.value
-            )
+            );
+            // If a probe has multiple results there is a serious issue with the probing logic
+            panic!("Probe already has a result");
         }
         self.value = Some(result)
     }

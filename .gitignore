@@ -1,2 +1,3 @@
 target
-/libblockid/test-headers/extracted/*
+/libblockid/tests/*.bin*
+/libblockid/tests/*.img*

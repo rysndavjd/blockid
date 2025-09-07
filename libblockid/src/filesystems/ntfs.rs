@@ -43,7 +43,6 @@ impl From<NtfsError> for FsError {
             NtfsError::NtfsHeaderError(info) => FsError::InvalidHeader(info),
             NtfsError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
             NtfsError::UtfError(e) => FsError::UtfError(e),
-            //NtfsError::ChecksumError { expected, got } => FsError::ChecksumError { expected, got },
         }
     }
 }

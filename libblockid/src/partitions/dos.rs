@@ -142,6 +142,7 @@ impl DosPartitionEntry {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct MbrPartitionType(u8);
 
+#[allow(dead_code)]
 impl MbrPartitionType {
     pub const MBR_EMPTY_PARTITION: Self = Self(0x00);
     pub const MBR_FAT12_PARTITION: Self = Self(0x01);
