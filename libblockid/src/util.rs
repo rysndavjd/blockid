@@ -1,12 +1,12 @@
 use std::{
-    fs::read_dir,
+    fs::read_link,
     io::{Error as IoError, ErrorKind, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     str::Utf8Error,
 };
 
 use glob::glob;
-use rustix::fs::{Dev, FileType, stat};
+use rustix::fs::{Dev, FileType, major, minor, stat};
 use thiserror::Error;
 use widestring::{error::Utf16Error, utfstring::Utf16String};
 use zerocopy::FromBytes;
@@ -79,21 +79,11 @@ pub fn is_power_2(num: u64) -> bool {
     return num != 0 && ((num & (num - 1)) == 0);
 }
 
-pub fn devno_to_path(dev: Dev) -> Result<PathBuf, IoError> {
-    let dev_dir = read_dir(Path::new("/dev"))?;
+pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
+    let path = read_link(format!("/sys/dev/block/{}:{}", major(dev), minor(dev))).ok()?;
+    let target = path.file_name()?.to_str()?;
 
-    for entry in dev_dir.flatten() {
-        let path = entry.path();
-        let stat = stat(&path)?;
-
-        if FileType::from_raw_mode(stat.st_mode).is_block_device() && stat.st_rdev == dev {
-            return Ok(path);
-        }
-    }
-    return Err(IoError::new(
-        ErrorKind::NotFound,
-        "Unable to find path from devno",
-    ));
+    return Some(PathBuf::from("/dev/").join(target));
 }
 
 pub fn path_to_devno<P: AsRef<Path>>(path: P) -> Result<Dev, IoError> {
@@ -171,7 +161,7 @@ pub fn read_sector_at<R: Read + Seek>(file: &mut R, sector: u64) -> Result<[u8; 
     return read_exact_at::<512, R>(file, sector << 9);
 }
 
-pub fn device_from(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
+pub fn block_from_uuid(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
     let patterns = [
         "/dev/sd*",
         "/dev/hd*",
@@ -183,7 +173,7 @@ pub fn device_from(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
     ];
 
     for pattern in patterns {
-        for entry in glob(pattern).expect("THIS SHOULD NOT FAIL") {
+        for entry in glob(pattern).expect("GLOB patterns should never fail") {
             let path = entry?;
             let stat = stat(&path)?;
 
@@ -191,21 +181,18 @@ pub fn device_from(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
                 Probe::from_filename(&path, ProbeFlags::empty(), ProbeFilter::empty(), 0)?;
             probe.probe_values()?;
 
-            let value = match probe
-                .inner_result()
-                .ok_or(BlockidError::ProbeError("No device found"))?
-            {
+            let value = match probe.inner_result().ok_or(BlockidError::NoResultPresent)? {
                 ProbeResult::Container(r) => r.uuid,
                 ProbeResult::PartTable(r) => r.uuid,
                 ProbeResult::Filesystem(r) => r.uuid,
             };
 
             if FileType::from_raw_mode(stat.st_mode).is_block_device()
-                && &value.ok_or(BlockidError::ProbeError("AHHH"))? == uuid
+                && &value.ok_or(BlockidError::NoResultPresent)? == uuid
             {
                 return Ok(path);
             }
         }
     }
-    return Err(BlockidError::ResultError("AHHH"));
+    return Err(BlockidError::BlockNotFound);
 }

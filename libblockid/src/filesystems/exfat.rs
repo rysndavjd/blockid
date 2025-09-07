@@ -8,7 +8,6 @@ use zerocopy::{
 
 use crate::{
     BlockidError,
-    checksum::CsumAlgorium,
     filesystems::{FsError, vfat::VFAT_ID_INFO, volume_id::VolumeId32},
     probe::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, Endianness,
@@ -25,10 +24,7 @@ pub enum ExFatError {
     UnknownFilesystem(&'static str),
     ExfatHeaderError(&'static str),
     UtfError(UtfError),
-    ChecksumError {
-        expected: CsumAlgorium,
-        got: CsumAlgorium,
-    },
+    ChecksumError,
 }
 
 impl std::fmt::Display for ExFatError {
@@ -38,10 +34,7 @@ impl std::fmt::Display for ExFatError {
             ExFatError::ExfatHeaderError(e) => write!(f, "Not an Exfat superblock: {e}"),
             ExFatError::UnknownFilesystem(e) => write!(f, "Exfat header error: {e}"),
             ExFatError::UtfError(e) => write!(f, "Unable to get UTF-16 string: {e}"),
-            ExFatError::ChecksumError { expected, got } => write!(
-                f,
-                "Exfat Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\""
-            ),
+            ExFatError::ChecksumError => write!(f, "Exfat Checksum failed"),
         }
     }
 }
@@ -53,9 +46,7 @@ impl From<ExFatError> for FsError {
             ExFatError::ExfatHeaderError(info) => FsError::InvalidHeader(info),
             ExFatError::UtfError(_) => FsError::InvalidHeader("Invalid utf16 to convert to utf8"),
             ExFatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
-            ExFatError::ChecksumError { expected, got } => {
-                FsError::ChecksumError("EXFAT Header Checksum Invalid")
-            }
+            ExFatError::ChecksumError => FsError::ChecksumError("EXFAT Header Checksum Invalid"),
         }
     }
 }
@@ -200,10 +191,7 @@ fn verify_exfat_checksum(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), E
             let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]); // FIX later
 
             if checksum != expected {
-                return Err(ExFatError::ChecksumError {
-                    expected: CsumAlgorium::Exfat(expected),
-                    got: CsumAlgorium::Exfat(checksum),
-                });
+                return Err(ExFatError::ChecksumError);
             }
         } else {
             return Err(ExFatError::ExfatHeaderError(

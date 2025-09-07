@@ -15,7 +15,7 @@ pub(crate) mod partitions;
 
 use std::{
     fs::File,
-    io::Error as IoError,
+    io::{Error as IoError, ErrorKind as IoErrorKind},
     path::{Path, PathBuf},
 };
 
@@ -27,7 +27,7 @@ use crate::{containers::ContError, filesystems::FsError, partitions::PtError};
 
 pub use crate::{
     probe::{Probe, ProbeFilter, ProbeFlags},
-    util::{devno_to_path, path_to_devno},
+    util::{devno_to_path, path_to_devno, block_from_uuid},
 };
 
 #[derive(Debug, Error)]
@@ -38,8 +38,12 @@ pub enum BlockidError {
     ArgumentError(&'static str),
     #[error("Result Error: {0}")]
     ResultError(&'static str),
-    #[error("Probe failed: {0}")]
-    ProbeError(&'static str),
+    #[error("All implemented probes exhausted")]
+    ProbesExhausted,
+    #[error("No Result is present")]
+    NoResultPresent,
+    #[error("Block was not found")]
+    BlockNotFound,
     #[error("Filesystem probe failed: {0}")]
     FsError(#[from] FsError),
     #[error("Partition Table probe failed: {0}")]
@@ -104,7 +108,10 @@ impl ProbeBuilder {
         let (file, path) = match id {
             IdType::Path(path) => (File::open(&path)?, path),
             IdType::Devno(devno) => {
-                let path = devno_to_path(devno)?;
+                let path = devno_to_path(devno).ok_or(IoError::new(
+                    IoErrorKind::InvalidInput,
+                    "Devno doesnt point to a path",
+                ))?;
                 (File::open(&path)?, path)
             }
         };

@@ -1,17 +1,16 @@
 use std::io::Error as IoError;
 
 use bitflags::bitflags;
+use crc_fast::{CrcAlgorithm::Crc32Iscsi, checksum};
 use rustix::fs::makedev;
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64,
 };
-use crc_fast::{checksum, CrcAlgorithm::Crc32Iscsi};
 
 use crate::{
     BlockidError,
-    checksum::CsumAlgorium,
     filesystems::FsError,
     probe::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, FilesystemResult,
@@ -29,10 +28,7 @@ pub enum ExtError {
     IoError(IoError),
     ExtFeatureError(&'static str),
     UnknownFilesystem(&'static str),
-    ChecksumError {
-        expected: CsumAlgorium,
-        got: CsumAlgorium,
-    },
+    ChecksumError,
 }
 
 impl std::fmt::Display for ExtError {
@@ -41,10 +37,7 @@ impl std::fmt::Display for ExtError {
             ExtError::IoError(e) => write!(f, "I/O operation failed: {e}"),
             ExtError::ExtFeatureError(e) => write!(f, "{e}"),
             ExtError::UnknownFilesystem(e) => write!(f, "{e}"),
-            ExtError::ChecksumError { expected, got } => write!(
-                f,
-                "Crc32c Checksum failed, expected: \"{expected:X}\" and got: \"{got:X})\""
-            ),
+            ExtError::ChecksumError => write!(f, "EXT, Crc32c Checksum Invalid"),
         }
     }
 }
@@ -55,7 +48,9 @@ impl From<ExtError> for FsError {
             ExtError::IoError(e) => FsError::IoError(e),
             ExtError::ExtFeatureError(feature) => FsError::InvalidHeader(feature),
             ExtError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
-            ExtError::ChecksumError { expected, got } => FsError::ChecksumError("EXT Header Checksum Invalid"),
+            ExtError::ChecksumError => {
+                FsError::ChecksumError("EXT, Crc32c Checksum Invalid")
+            }
         }
     }
 }
@@ -357,13 +352,10 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
 
     if ro_compat.contains(ExtFeatureRoCompat::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
         let s_checksum = es.s_checksum;
-        
+
         let sum = checksum(Crc32Iscsi, &s_checksum.to_bytes());
         if sum != u64::from(s_checksum) {
-            return Err(ExtError::ChecksumError {
-                expected: CsumAlgorium::Crc32c(u64::from(s_checksum)),
-                got: CsumAlgorium::Crc32c(2),
-            });
+            return Err(ExtError::ChecksumError);
         };
     } else if u32::from(es.s_log_block_size) >= 256 {
         return Err(ExtError::ExtFeatureError("legacy fs"));
