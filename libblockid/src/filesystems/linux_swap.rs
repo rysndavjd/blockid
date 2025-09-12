@@ -1,5 +1,6 @@
 use std::io::Error as IoError;
 
+use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned};
 
@@ -13,37 +14,18 @@ use crate::{
     util::{decode_utf8_lossy_from, from_file, read_exact_at},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SwapError {
-    IoError(IoError),
-    SwapHeaderError(&'static str),
-    UnknownFilesystem(&'static str),
-}
-
-impl std::fmt::Display for SwapError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SwapError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            SwapError::SwapHeaderError(e) => write!(f, "Swap header error: {e}"),
-            SwapError::UnknownFilesystem(e) => write!(f, "Not an Swap superblock: {e}"),
-        }
-    }
-}
-
-impl From<SwapError> for FsError {
-    fn from(err: SwapError) -> Self {
-        match err {
-            SwapError::IoError(e) => FsError::IoError(e),
-            SwapError::SwapHeaderError(e) => FsError::InvalidHeader(e),
-            SwapError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
-        }
-    }
-}
-
-impl From<IoError> for SwapError {
-    fn from(err: IoError) -> Self {
-        SwapError::IoError(err)
-    }
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("Filesystem has TuxOnIce magic signature")]
+    ProbablyTuxOnIce,
+    #[error("Swap Version 1 detected")]
+    SwapVOneDetected,
+    #[error("Swap Version 0 detected")]
+    SwapVZeroDetected,
+    #[error("Suspend magic not found")]
+    SuspendMagicNotFound,
 }
 
 //const PAGESIZE_MIN: u32 = 0xff6;
@@ -284,7 +266,7 @@ pub fn probe_swap_v0(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapE
     let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
-        return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
+        return Err(SwapError::ProbablyTuxOnIce);
     }
 
     if magic.magic == b"SWAP-SPACE" {
@@ -313,7 +295,7 @@ pub fn probe_swap_v0(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapE
         }));
         return Ok(());
     } else {
-        return Err(SwapError::UnknownFilesystem("Linux Swap v1 detected"));
+        return Err(SwapError::SwapVOneDetected);
     }
 }
 
@@ -321,7 +303,7 @@ pub fn probe_swap_v1(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapE
     let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
-        return Err(SwapError::UnknownFilesystem("TuxOnIce signature detected"));
+        return Err(SwapError::ProbablyTuxOnIce);
     }
 
     if magic.magic == b"SWAPSPACE2" {
@@ -357,7 +339,7 @@ pub fn probe_swap_v1(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapE
         }));
         return Ok(());
     } else {
-        return Err(SwapError::UnknownFilesystem("Linux Swap v0 detected"));
+        return Err(SwapError::SwapVZeroDetected);
     }
 }
 
@@ -375,7 +357,7 @@ pub fn probe_swsuspend(probe: &mut Probe, magic: BlockidMagic) -> Result<(), Swa
     } else if magic.magic == b"LINHIB0001" {
         swap_get_info(magic, "linhib0001", header)?
     } else {
-        return Err(SwapError::UnknownFilesystem("Suspend magic not found"));
+        return Err(SwapError::SuspendMagicNotFound);
     };
 
     probe.push_result(ProbeResult::Filesystem(FilesystemResult {

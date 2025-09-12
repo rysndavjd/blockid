@@ -1,6 +1,7 @@
 use std::io::{Error as IoError, Read, Seek};
 
 use rustix::fs::makedev;
+use thiserror::Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64, transmute,
@@ -18,49 +19,38 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ExFatError {
-    IoError(IoError),
-    UnknownFilesystem(&'static str),
-    ExfatHeaderError(&'static str),
-    UtfError(UtfError),
-    ChecksumError,
-}
-
-impl std::fmt::Display for ExFatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExFatError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            ExFatError::ExfatHeaderError(e) => write!(f, "Not an Exfat superblock: {e}"),
-            ExFatError::UnknownFilesystem(e) => write!(f, "Exfat header error: {e}"),
-            ExFatError::UtfError(e) => write!(f, "Unable to get UTF-16 string: {e}"),
-            ExFatError::ChecksumError => write!(f, "Exfat Checksum failed"),
-        }
-    }
-}
-
-impl From<ExFatError> for FsError {
-    fn from(err: ExFatError) -> Self {
-        match err {
-            ExFatError::IoError(e) => FsError::IoError(e),
-            ExFatError::ExfatHeaderError(info) => FsError::InvalidHeader(info),
-            ExFatError::UtfError(_) => FsError::InvalidHeader("Invalid utf16 to convert to utf8"),
-            ExFatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
-            ExFatError::ChecksumError => FsError::ChecksumError("EXFAT Header Checksum Invalid"),
-        }
-    }
-}
-
-impl From<IoError> for ExFatError {
-    fn from(err: IoError) -> Self {
-        ExFatError::IoError(err)
-    }
-}
-
-impl From<UtfError> for ExFatError {
-    fn from(err: UtfError) -> Self {
-        ExFatError::UtfError(err)
-    }
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("UTF operation failed: {0}")]
+    UtfError(#[from] UtfError),
+    #[error("Invalid header checksum")]
+    HeaderChecksumInvalid,
+    #[error("Filesystem looks like DOS/MBR")]
+    ProbablyDOS,
+    #[error("Filesystem looks like VFAT")]
+    ProbablyVfat,
+    #[error("Invalid cluster size")]
+    InvalidClusterSize,
+    #[error("Invalid boot jump")]
+    InvalidBootJump,
+    #[error("Invalid filesystem name")]
+    InvalidFsName,
+    #[error("Invalid must_be_zero field")]
+    InvalidMustBeZero,
+    #[error("Invalid range of number of fats")]
+    InvalidRangeNumberOfFats,
+    #[error("Invalid range of bytes per sector shift")]
+    InvalidRangeOfBytesPerSectorShift,
+    #[error("Invalid range of sectors per cluster shift")]
+    InvalidRangeOfSectorsPerClusterShift,
+    #[error("Invalid range of fat offset")]
+    InvalidRangeOfFatOffset,
+    #[error("Invalid range of clustor heap offset")]
+    InvalidRangeOfClustorHeapOffset,
+    #[error("Invalid range of first clustor of root")]
+    InvalidRangeOfFirstClustorOfRoot,
 }
 
 pub const EXFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -188,15 +178,13 @@ fn verify_exfat_checksum(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), E
     for i in 0..(sector_size / 4) {
         let offset = sector_size * 11 + i * 4;
         if let Some(bytes) = data.get(offset..offset + 4) {
-            let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]); // FIX later
+            let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
 
             if checksum != expected {
-                return Err(ExFatError::ChecksumError);
+                return Err(ExFatError::HeaderChecksumInvalid);
             }
         } else {
-            return Err(ExFatError::ExfatHeaderError(
-                "Checksum buffer not big enough to read checksum",
-            ));
+            return Err(ExFatError::HeaderChecksumInvalid);
         }
     }
 
@@ -210,43 +198,31 @@ fn in_range_inclusive<T: PartialOrd>(val: T, start: T, stop: T) -> bool {
 
 fn valid_exfat(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError> {
     if u16::from(sb.boot_signature) != 0xAA55 {
-        return Err(ExFatError::UnknownFilesystem(
-            "Block is not exfat likely a mbr partiton table",
-        ));
+        return Err(ExFatError::ProbablyDOS);
     }
 
     if sb.cluster_size() == 0 {
-        return Err(ExFatError::ExfatHeaderError("Clustor size should not be 0"));
+        return Err(ExFatError::InvalidClusterSize);
     }
 
     if sb.bootjmp != [0xEB, 0x76, 0x90] {
-        return Err(ExFatError::ExfatHeaderError(
-            "No idea why boot jump should be \\xEB\\x76\\x90",
-        ));
+        return Err(ExFatError::InvalidBootJump);
     }
 
     if &sb.fs_name != b"EXFAT   " {
-        return Err(ExFatError::ExfatHeaderError(
-            "fs_name should be \"EXFAT   \"",
-        ));
+        return Err(ExFatError::InvalidFsName);
     }
 
     if sb.must_be_zero != [0u8; 53] {
-        return Err(ExFatError::ExfatHeaderError(
-            "must_be_zero region is not all zero",
-        ));
+        return Err(ExFatError::InvalidMustBeZero);
     }
 
     if !in_range_inclusive(sb.number_of_fats, 1, 2) {
-        return Err(ExFatError::ExfatHeaderError(
-            "number of fats needs to be val >= 1 && val <= 2",
-        ));
+        return Err(ExFatError::InvalidRangeNumberOfFats);
     }
 
     if !in_range_inclusive(sb.bytes_per_sector_shift, 9, 12) {
-        return Err(ExFatError::ExfatHeaderError(
-            "bytes_per_sector_shift needs to be val >= 9 && val <= 12",
-        ));
+        return Err(ExFatError::InvalidRangeOfBytesPerSectorShift);
     }
 
     if !in_range_inclusive(
@@ -254,9 +230,7 @@ fn valid_exfat(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError>
         0,
         25 - sb.bytes_per_sector_shift,
     ) {
-        return Err(ExFatError::ExfatHeaderError(
-            "sectors_per_cluster_shift needs to be val >= 0 && val <= 25 - bytes_per_sector_shift",
-        ));
+        return Err(ExFatError::InvalidRangeOfSectorsPerClusterShift);
     }
 
     if !in_range_inclusive(
@@ -264,9 +238,7 @@ fn valid_exfat(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError>
         24,
         u32::from(sb.clustor_heap_offset) - (u32::from(sb.fat_length) * sb.number_of_fats as u32),
     ) {
-        return Err(ExFatError::ExfatHeaderError(
-            "fat_offset needs to be val >= 24 && val <= clustor_heap_offset - fat_length * number_of_fats ",
-        ));
+        return Err(ExFatError::InvalidRangeOfFatOffset);
     }
 
     if !in_range_inclusive(
@@ -274,9 +246,7 @@ fn valid_exfat(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError>
         u32::from(sb.fat_offset) + u32::from(sb.fat_length) * sb.number_of_fats as u32,
         1u32 << (32 - 1),
     ) {
-        return Err(ExFatError::ExfatHeaderError(
-            "clustor_heap_offset needs to be val >= fat_offset + fat_length * number_of_fats && val <= 1u32 << (32 - 1)",
-        ));
+        return Err(ExFatError::InvalidRangeOfClustorHeapOffset);
     }
 
     if !in_range_inclusive(
@@ -284,9 +254,7 @@ fn valid_exfat(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError>
         2,
         u32::from(sb.clustor_count) + 1,
     ) {
-        return Err(ExFatError::ExfatHeaderError(
-            "first_clustor_of_root needs to be val >= 2 && val <= clustor_count + 1",
-        ));
+        return Err(ExFatError::InvalidRangeOfFirstClustorOfRoot);
     }
 
     verify_exfat_checksum(probe, sb)?;
@@ -298,9 +266,7 @@ pub fn probe_is_exfat(probe: &mut Probe) -> Result<(), ExFatError> {
     let sb: ExFatSuperBlock = from_file(&mut probe.file(), probe.offset())?;
 
     if probe_get_magic(&mut probe.file(), &VFAT_ID_INFO).is_ok() {
-        return Err(ExFatError::UnknownFilesystem(
-            "Block is detected with a VFAT magic",
-        ));
+        return Err(ExFatError::ProbablyVfat);
     }
 
     valid_exfat(probe, sb)?;

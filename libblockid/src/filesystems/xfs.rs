@@ -32,22 +32,6 @@ pub enum XfsError {
     HeaderChecksumInvalid,
 }
 
-impl From<XfsError> for FsError {
-    fn from(err: XfsError) -> Self {
-        match err {
-            XfsError::IoError(e) => FsError::IoError(e),
-            XfsError::InvalidHeaderRanges => FsError::InvalidHeader("XFS Invalid Header Ranges"),
-            XfsError::InvalidHeaderVersion => FsError::InvalidHeader("XFS Invalid Header Version"),
-            XfsError::InvalidHeaderFeatures => {
-                FsError::InvalidHeader("XFS Invalid Header Features")
-            }
-            XfsError::HeaderChecksumInvalid => {
-                FsError::ChecksumError("XFS Header Checksum Invalid")
-            }
-        }
-    }
-}
-
 pub const XFS_ID_INFO: BlockidIdinfo = BlockidIdinfo {
     name: Some("xfs"),
     btype: Some(BlockType::Xfs),
@@ -143,7 +127,7 @@ const XFS_DINODE_MIN_SIZE: u16 = 1 << XFS_DINODE_MIN_LOG;
 const XFS_DINODE_MAX_SIZE: u16 = 1 << XFS_DINODE_MAX_LOG;
 
 const XFS_MAX_RTEXTSIZE: u32 = 1024 * 1024 * 1024;
-const XFS_DFL_RTEXTSIZE: u32 = 64 * 1024;
+//const XFS_DFL_RTEXTSIZE: u32 = 64 * 1024;
 const XFS_MIN_RTEXTSIZE: u32 = 4 * 1024;
 const XFS_MIN_AG_BLOCKS: u32 = 64;
 
