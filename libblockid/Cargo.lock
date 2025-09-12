@@ -168,6 +168,7 @@ dependencies = [
  "crc",
  "crc-fast",
  "glob",
+ "libc",
  "log",
  "rustix",
  "sha2",

@@ -1,6 +1,7 @@
 use std::io::{Error as IoError, ErrorKind, Read, Seek, SeekFrom};
 
 use bitflags::bitflags;
+use thiserror::Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::LittleEndian,
     byteorder::U16, byteorder::U32, transmute,
@@ -18,37 +19,36 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum FatError {
-    IoError(IoError),
-    FatHeaderError(&'static str),
-    UnknownFilesystem(&'static str),
-}
-
-impl std::fmt::Display for FatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FatError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            FatError::FatHeaderError(e) => write!(f, "Fat Header Error: {e}"),
-            FatError::UnknownFilesystem(e) => write!(f, "Not an Fat superblock: {e}"),
-        }
-    }
-}
-
-impl From<FatError> for FsError {
-    fn from(err: FatError) -> Self {
-        match err {
-            FatError::IoError(e) => FsError::IoError(e),
-            FatError::FatHeaderError(info) => FsError::InvalidHeader(info),
-            FatError::UnknownFilesystem(info) => FsError::UnknownFilesystem(info),
-        }
-    }
-}
-
-impl From<IoError> for FatError {
-    fn from(err: IoError) -> Self {
-        FatError::IoError(err)
-    }
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("Filesystem not FAT12/16 or FAT32")]
+    InvalidVFat,
+    #[error("Invalid VFAT signature")]
+    InvalidFatSignature,
+    #[error("Filesystem looks like DOS/MBR")]
+    ProbablyDOS,
+    #[error("Filesystem has JFS magic number")]
+    ProbablyJFS,
+    #[error("Filesystem has HPFS magic number")]
+    ProbablyHPFS,
+    #[error("Should be atleast one fat table")]
+    InvalidFatTableCount,
+    #[error("ms_reserved is invalid")]
+    InvalidReservedValue,
+    #[error("Cluster size not a power of 2")]
+    ClusterSizeNotPowerOfTwo,
+    #[error("Cluster count greater then max cluster count")]
+    ClusterCountGreaterThenMax,
+    #[error("Invalid cluster count")]
+    InvalidClusterCount,
+    #[error("Invalid ext_boot_sign")]
+    InvalidExtBootSign,
+    #[error("Invalid fsinfo.signature1")]
+    InvalidFsInfoSignatureOne,
+    #[error("Invalid fsinfo.signature2")]
+    InvalidFsInfoSignatureTwo,
 }
 
 pub const VFAT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -290,12 +290,10 @@ pub fn valid_fat(
 ) -> Result<SecType, FatError> {
     if mag.len <= 2 {
         if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
-            return Err(FatError::UnknownFilesystem(
-                "Given block is not Fat likely MBR",
-            ));
+            return Err(FatError::ProbablyDOS);
         }
 
-        /* Straight From libblkid
+        /* Note From libblkid:
          * OS/2 and apparently DFSee will place a FAT12/16-like
          * pseudo-superblock in the first 512 bytes of non-FAT
          * filesystems --- at least JFS and HPFS, and possibly others.
@@ -305,20 +303,22 @@ pub fn valid_fat(
          * FAT-like pseudo-header.
          */
 
-        if &ms.ms_magic == b"JFS     " || &ms.ms_magic == b"HPFS    " {
-            return Err(FatError::UnknownFilesystem("JFS/HPFS found"));
+        if &ms.ms_magic == b"JFS     " {
+            return Err(FatError::ProbablyJFS);
+        } else if &ms.ms_magic == b"HPFS    " {
+            return Err(FatError::ProbablyHPFS);
         }
     }
 
     if ms.ms_fats == 0 {
-        return Err(FatError::FatHeaderError("Should be atleast one fat table"));
+        return Err(FatError::InvalidFatTableCount);
     }
     if ms.ms_reserved == 0 {
-        return Err(FatError::FatHeaderError("ms_reserved should not be 0"));
+        return Err(FatError::InvalidReservedValue);
     }
 
     if !is_power_2(ms.ms_cluster_size.into()) {
-        return Err(FatError::FatHeaderError("cluster_size is not ^2"));
+        return Err(FatError::ClusterSizeNotPowerOfTwo);
     }
 
     let cluster_count: u32 = get_cluster_count(ms, vs);
@@ -332,7 +332,7 @@ pub fn valid_fat(
     };
 
     if cluster_count > max_count {
-        return Err(FatError::FatHeaderError("Too many clusters"));
+        return Err(FatError::ClusterCountGreaterThenMax);
     }
 
     if cluster_count < FAT12_MAX {
@@ -342,7 +342,7 @@ pub fn valid_fat(
     } else if cluster_count < FAT32_MAX {
         return Ok(SecType::Fat32);
     } else {
-        return Err(FatError::UnknownFilesystem("Unknown fat type"));
+        return Err(FatError::InvalidClusterCount);
     }
 }
 
@@ -364,7 +364,7 @@ pub fn probe_is_vfat(probe: &mut Probe) -> Result<(), FatError> {
 
     let mag: BlockidMagic = match probe_get_magic(&mut probe.file(), &VFAT_ID_INFO)? {
         Some(t) => t,
-        None => return Err(FatError::UnknownFilesystem("Invalid magic sig")),
+        None => return Err(FatError::InvalidFatSignature),
     };
 
     valid_fat(ms, vs, &mag)?;
@@ -423,7 +423,7 @@ fn probe_fat16<R: Read + Seek>(
     let vol_serno = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
         VolumeId32::new(ms.ms_serno)
     } else {
-        return Err(FatError::FatHeaderError("ext_boot_sign not 0x28 or 0x29"));
+        return Err(FatError::InvalidExtBootSign);
     };
 
     return Ok((vol_label, vol_serno));
@@ -484,11 +484,11 @@ fn probe_fat32<R: Read + Seek>(
             && &fsinfo.signature1 != b"\x52\x52\x64\x41"
             && &fsinfo.signature1 != b"\x00\x00\x00\x00"
         {
-            return Err(FatError::FatHeaderError("Invalid fsinfo.signature1"));
+            return Err(FatError::InvalidFsInfoSignatureOne);
         }
 
         if &fsinfo.signature2 != b"\x72\x72\x41\x61" && &fsinfo.signature2 != b"\x00\x00\x00\x00" {
-            return Err(FatError::FatHeaderError("Invalid fsinfo.signature2"));
+            return Err(FatError::InvalidFsInfoSignatureTwo);
         }
     }
 
@@ -520,7 +520,7 @@ pub fn probe_vfat(probe: &mut Probe, mag: BlockidMagic) -> Result<(), FatError> 
     } else if vs.vs_fat32_length != 0 {
         probe_fat32(&mut probe.file(), ms, vs, fat_size)?
     } else {
-        return Err(FatError::UnknownFilesystem("Block is not fat filesystem"));
+        return Err(FatError::InvalidVFat);
     };
 
     let creator = String::from_utf8_lossy(&ms.ms_sysid).to_string();

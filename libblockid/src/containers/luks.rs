@@ -5,6 +5,7 @@ use std::{
 
 #[cfg(not(target_os = "linux"))]
 use log::warn;
+use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::BigEndian, byteorder::U16,
@@ -16,7 +17,7 @@ use crate::{
     containers::ContError,
     probe::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, ContainerResult,
-        Endianness, ProbeResult, UsageType,
+        ProbeResult, UsageType,
     },
     util::{UtfError, decode_utf8_from, from_file},
 };
@@ -27,66 +28,22 @@ use crate::{
  * https://gitlab.com/cryptsetup/LUKS2-docs
 */
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum LuksError {
-    IoError(IoError),
-    UuidConversionError(uuid::Error),
-    UtfError(UtfError),
-    LuksHeaderError(&'static str),
-    UnknownFilesystem(&'static str),
-    NixError(rustix::io::Errno),
-}
-
-impl std::fmt::Display for LuksError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LuksError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            LuksError::UuidConversionError(e) => write!(f, "Converting uuid from disk failed: {e}"),
-            LuksError::UtfError(e) => write!(f, "UTF-8 error: {e}"),
-            LuksError::LuksHeaderError(e) => write!(f, "Luks Header Error: {e}"),
-            LuksError::UnknownFilesystem(e) => write!(f, "Not an LUKS superblock: {e}"),
-            LuksError::NixError(e) => write!(f, "*Nix operation failed: {e}"),
-        }
-    }
-}
-
-impl From<LuksError> for ContError {
-    fn from(err: LuksError) -> Self {
-        match err {
-            LuksError::IoError(e) => ContError::IoError(e),
-            LuksError::UuidConversionError(_) => {
-                ContError::InvalidHeader("Invalid string to convert to uuid")
-            }
-            LuksError::UtfError(_) => ContError::InvalidHeader("Invalid utf8 to convert to string"),
-            LuksError::LuksHeaderError(info) => ContError::InvalidHeader(info),
-            LuksError::UnknownFilesystem(info) => ContError::UnknownContainer(info),
-            LuksError::NixError(e) => ContError::NixError(e),
-        }
-    }
-}
-
-impl From<IoError> for LuksError {
-    fn from(err: IoError) -> Self {
-        LuksError::IoError(err)
-    }
-}
-
-impl From<uuid::Error> for LuksError {
-    fn from(err: uuid::Error) -> Self {
-        LuksError::UuidConversionError(err)
-    }
-}
-
-impl From<UtfError> for LuksError {
-    fn from(err: UtfError) -> Self {
-        LuksError::UtfError(err)
-    }
-}
-
-impl From<rustix::io::Errno> for LuksError {
-    fn from(err: rustix::io::Errno) -> Self {
-        LuksError::NixError(err)
-    }
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("I/O operation failed: {0}")]
+    UuidConversionError(#[from] uuid::Error),
+    #[error("UTF operation failed: {0}")]
+    UtfError(#[from] UtfError),
+    #[error("*Nix operation failed: {0}")]
+    NixError(#[from] rustix::io::Errno),
+    #[error("Invalid LUKS1 header")]
+    InvalidLuksOne,
+    #[error("Invalid LUKS2 header")]
+    InvalidLuksTwo,
+    #[error("Invalid LUKS2 Opal header")]
+    InvalidLuksTwoOpal,
 }
 
 pub const LUKS1_MAGIC: [u8; 6] = *b"LUKS\xba\xbe";
@@ -214,9 +171,7 @@ pub fn probe_luks1(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
     let header: Luks1Header = from_file(&mut probe.file(), probe.offset())?;
 
     if !header.luks_valid() {
-        return Err(LuksError::LuksHeaderError(
-            "Luks is not valid luks1 container",
-        ));
+        return Err(LuksError::InvalidLuksOne);
     }
 
     probe.push_result(ProbeResult::Container(ContainerResult {
@@ -231,7 +186,7 @@ pub fn probe_luks1(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
         version: Some(BlockidVersion::Number(u64::from(header.version))),
         sbmagic: Some(&LUKS1_MAGIC),
         sbmagic_offset: Some(0),
-        endianness: Some(Endianness::Big),
+        endianness: None,
     }));
     return Ok(());
 }
@@ -240,9 +195,7 @@ pub fn probe_luks2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
     let header: Luks2Header = from_file(&mut probe.file(), probe.offset())?;
 
     if !header.luks_valid(&mut probe.file()) {
-        return Err(LuksError::LuksHeaderError(
-            "Luks is not valid luks2 container",
-        ));
+        return Err(LuksError::InvalidLuksTwo);
     }
 
     probe.push_result(ProbeResult::Container(ContainerResult {
@@ -257,7 +210,7 @@ pub fn probe_luks2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
         version: Some(BlockidVersion::Number(u64::from(header.version))),
         sbmagic: Some(&LUKS2_MAGIC),
         sbmagic_offset: Some(0),
-        endianness: Some(Endianness::Big),
+        endianness: None,
     }));
     return Ok(());
 }
@@ -266,15 +219,11 @@ pub fn probe_luks_opal(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), Lu
     let header: Luks2Header = from_file(&mut probe.file(), probe.offset())?;
 
     if !header.luks_valid(&mut probe.file()) {
-        return Err(LuksError::LuksHeaderError(
-            "Luks is not valid luks2 opal container",
-        ));
+        return Err(LuksError::InvalidLuksTwoOpal);
     }
 
     if header.subsystem[0..7] == LUKS2_HW_OPAL_SUBSYSTEM {
-        return Err(LuksError::LuksHeaderError(
-            "Luks2 does not contain opal subsystem to be opal",
-        ));
+        return Err(LuksError::InvalidLuksTwoOpal);
     }
 
     #[cfg(target_os = "linux")]
@@ -298,7 +247,7 @@ pub fn probe_luks_opal(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), Lu
         version: Some(BlockidVersion::Number(u64::from(header.version))),
         sbmagic: Some(&LUKS1_MAGIC),
         sbmagic_offset: Some(0),
-        endianness: Some(Endianness::Big),
+        endianness: None,
     }));
     return Ok(());
 }

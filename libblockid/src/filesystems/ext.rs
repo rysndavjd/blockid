@@ -3,6 +3,7 @@ use std::io::Error as IoError;
 use bitflags::bitflags;
 use crc_fast::{CrcAlgorithm::Crc32Iscsi, checksum};
 use rustix::fs::makedev;
+use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
@@ -23,44 +24,34 @@ use crate::{
 https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 */
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ExtError {
-    IoError(IoError),
-    ExtFeatureError(&'static str),
-    UnknownFilesystem(&'static str),
-    ChecksumError,
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("log_block_size greater than 32")]
+    LogBlockSizeInvalid,
+    #[error("Filesystem detected as legacy EXT")]
+    ProbablyLegacyExt,
+    #[error("Filesystem detected as EXT4dev")]
+    ProbablyExtFour,
+    #[error("Invalid header checksum")]
+    HeaderChecksumInvalid,
+    #[error("EXT2 does not have a journal")]
+    Ext2BlockHasJournal,
+    #[error("EXT3 requires to have a journal")]
+    Ext3BlockMissingJournal,
+    #[error("Missing EXT3 Feature Incompat Journal Dev")]
+    MissingExtThreeFeatureIncompatJournalDev,
+    #[error("Invalid EXT2 features")]
+    InvalidExtTwoFeatures,
+    #[error("Invalid EXT3 features")]
+    InvalidExtThreeFeatures,
+    #[error("EXT4 detected as JBD")]
+    Ext4DetectedAsJbd,
+    #[error("Invalid EXT4 features")]
+    InvalidExtFourFeatures,
 }
-
-impl std::fmt::Display for ExtError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExtError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            ExtError::ExtFeatureError(e) => write!(f, "{e}"),
-            ExtError::UnknownFilesystem(e) => write!(f, "{e}"),
-            ExtError::ChecksumError => write!(f, "EXT, Crc32c Checksum Invalid"),
-        }
-    }
-}
-
-impl From<ExtError> for FsError {
-    fn from(err: ExtError) -> Self {
-        match err {
-            ExtError::IoError(e) => FsError::IoError(e),
-            ExtError::ExtFeatureError(feature) => FsError::InvalidHeader(feature),
-            ExtError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
-            ExtError::ChecksumError => {
-                FsError::ChecksumError("EXT, Crc32c Checksum Invalid")
-            }
-        }
-    }
-}
-
-impl From<IoError> for ExtError {
-    fn from(err: IoError) -> Self {
-        ExtError::IoError(err)
-    }
-}
-
+// Ext missing \"EXT3_FEATURE_INCOMPAT_JOURNAL_DEV\" to be JBD fs
 const EXT_MAGIC: [u8; 2] = [0x53, 0xEF];
 const EXT_OFFSET: u64 = 0x438;
 
@@ -355,10 +346,10 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
 
         let sum = checksum(Crc32Iscsi, &s_checksum.to_bytes());
         if sum != u64::from(s_checksum) {
-            return Err(ExtError::ChecksumError);
+            return Err(ExtError::HeaderChecksumInvalid);
         };
     } else if u32::from(es.s_log_block_size) >= 256 {
-        return Err(ExtError::ExtFeatureError("legacy fs"));
+        return Err(ExtError::ProbablyLegacyExt);
     }
 
     return Ok(());
@@ -408,8 +399,12 @@ fn ext_get_info(
     ));
 
     let log_block_size = u32::from(es.s_log_block_size);
-    assert!(log_block_size < 32, "Shift too large");
-    let block_size: u64 = (1024u32 << log_block_size).into();
+
+    if log_block_size < 32 {
+        return Err(ExtError::LogBlockSizeInvalid);
+    }
+
+    let block_size: u64 = u64::from(1024u32 << log_block_size);
 
     let fslastblock: u64 = u64::from(u32::from(es.s_blocks_count))
         | if fi.contains(ExtFeatureIncompat::EXT4_FEATURE_INCOMPAT_64BIT) {
@@ -440,9 +435,7 @@ pub fn probe_jbd(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtError
     let fi = es.feature_incompat();
 
     if !fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
-        return Err(ExtError::ExtFeatureError(
-            "Ext missing \"EXT3_FEATURE_INCOMPAT_JOURNAL_DEV\" to be JBD fs",
-        ));
+        return Err(ExtError::MissingExtThreeFeatureIncompatJournalDev);
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
@@ -479,17 +472,13 @@ pub fn probe_ext2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtErro
     let frc = es.feature_rocompat();
 
     if fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
-        return Err(ExtError::UnknownFilesystem(
-            "Block has a journal so its not ext2",
-        ));
+        return Err(ExtError::Ext2BlockHasJournal);
     };
 
     if frc.intersects(EXT2_FEATURE_RO_COMPAT_UNSUPPORTED)
         || fi.intersects(EXT2_FEATURE_INCOMPAT_UNSUPPORTED)
     {
-        return Err(ExtError::ExtFeatureError(
-            "Block has features unsupported by ext2",
-        ));
+        return Err(ExtError::InvalidExtTwoFeatures);
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
@@ -526,15 +515,13 @@ pub fn probe_ext3(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtErro
     let frc = es.feature_rocompat();
 
     if !fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
-        return Err(ExtError::ExtFeatureError("Block is missing journal"));
+        return Err(ExtError::Ext3BlockMissingJournal);
     };
 
     if frc.intersects(EXT3_FEATURE_RO_COMPAT_UNSUPPORTED)
         || fi.intersects(EXT3_FEATURE_INCOMPAT_UNSUPPORTED)
     {
-        return Err(ExtError::ExtFeatureError(
-            "Block contains features unsupported by ext3",
-        ));
+        return Err(ExtError::InvalidExtThreeFeatures);
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
@@ -571,19 +558,17 @@ pub fn probe_ext4(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtErro
     let flags = es.ext_flags();
 
     if fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
-        return Err(ExtError::UnknownFilesystem("Block is jbd"));
+        return Err(ExtError::Ext4DetectedAsJbd);
     }
 
     if !frc.intersects(EXT3_FEATURE_RO_COMPAT_UNSUPPORTED)
         && !fi.intersects(EXT3_FEATURE_INCOMPAT_UNSUPPORTED)
     {
-        return Err(ExtError::ExtFeatureError(
-            "Block missing supported features of ext4",
-        ));
+        return Err(ExtError::InvalidExtFourFeatures);
     }
 
     if flags.contains(ExtFlags::EXT2_FLAGS_TEST_FILESYS) {
-        return Err(ExtError::UnknownFilesystem("Ext is ext4dev"));
+        return Err(ExtError::ProbablyExtFour);
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =

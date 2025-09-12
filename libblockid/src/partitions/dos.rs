@@ -1,6 +1,7 @@
 use std::io::{Error as IoError, ErrorKind, Read, Seek};
 
 use bitflags::bitflags;
+use thiserror::Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::LittleEndian,
     byteorder::U32,
@@ -23,37 +24,24 @@ use crate::{
  * Info from https://en.wikipedia.org/wiki/Master_boot_record
  */
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum DosPTError {
-    IoError(IoError),
-    UnknownPartitionTable(&'static str),
-    DosPTHeaderError(&'static str),
-}
-
-impl std::fmt::Display for DosPTError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DosPTError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            DosPTError::UnknownPartitionTable(e) => write!(f, "Not an Dos table superblock: {e}"),
-            DosPTError::DosPTHeaderError(e) => write!(f, "Dos table header error: {e}"),
-        }
-    }
-}
-
-impl From<DosPTError> for PtError {
-    fn from(err: DosPTError) -> Self {
-        match err {
-            DosPTError::IoError(e) => PtError::IoError(e),
-            DosPTError::UnknownPartitionTable(pt) => PtError::UnknownPartition(pt),
-            DosPTError::DosPTHeaderError(pt) => PtError::InvalidHeader(pt),
-        }
-    }
-}
-
-impl From<IoError> for DosPTError {
-    fn from(err: IoError) -> Self {
-        DosPTError::IoError(err)
-    }
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("Partition table has AIX magic signature")]
+    ProbablyAix,
+    #[error("Partition table looks like GPT")]
+    ProbablyGPT,
+    #[error("Partition table looks like FAT")]
+    ProbablyFAT,
+    #[error("Partition table looks like NTFS")]
+    ProbablyNTFS,
+    #[error("Missing boot indicator in partition entry")]
+    MissingBootIndicator,
+    #[error("Bad offset in primary extended partition")]
+    BadPrimaryExtendedOffset,
+    #[error("Extended partition is missing a valid signature")]
+    InvalidExtendedSignature,
 }
 
 pub const DOS_PT_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -271,20 +259,20 @@ fn is_valid_dos(probe: &mut Probe, pt: DosTable) -> Result<(), DosPTError> {
         let boot_ind = entry.flags();
         if !boot_ind.contains(MbrAttributes::INACTIVE) && !boot_ind.contains(MbrAttributes::ACTIVE)
         {
-            return Err(DosPTError::DosPTHeaderError("missing boot indicator"));
+            return Err(DosPTError::MissingBootIndicator);
         }
 
         if entry.sys_ind == MbrPartitionType::MBR_GPT_PARTITION {
-            return Err(DosPTError::UnknownPartitionTable("probably GPT"));
+            return Err(DosPTError::ProbablyGPT);
         }
     }
 
     if probe_is_vfat(probe).is_ok() && probe_is_exfat(probe).is_ok() {
-        return Err(DosPTError::UnknownPartitionTable("probably FAT"));
+        return Err(DosPTError::ProbablyFAT);
     }
 
     if probe_is_ntfs(probe).is_ok() {
-        return Err(DosPTError::UnknownPartitionTable("probably NTFS"));
+        return Err(DosPTError::ProbablyNTFS);
     }
 
     // TODO - is_lvm(pr) && is_empty_mbr(data)
@@ -307,9 +295,7 @@ fn parse_dos_extended<R: Read + Seek>(
     let ex_start = u64::from(ex_entry.start_sect) * ssf;
 
     if ex_start == 0 {
-        return Err(DosPTError::DosPTHeaderError(
-            "Bad offset in primary extended partition -- ignore",
-        ));
+        return Err(DosPTError::BadPrimaryExtendedOffset);
     }
 
     let mut ex_partitions: Vec<PartitionResults> = Vec::new();
@@ -326,9 +312,7 @@ fn parse_dos_extended<R: Read + Seek>(
         })?;
 
         if !ex_pt.valid_signature() {
-            return Err(DosPTError::DosPTHeaderError(
-                "Extended partition doesnt have valid signature",
-            ));
+            return Err(DosPTError::InvalidExtendedSignature);
         };
 
         let data_entry = ex_pt.partition_entries[0];
@@ -371,9 +355,7 @@ pub fn probe_dos_pt(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), DosPTEr
     let dos_pt: DosTable = from_file(&mut probe.file(), probe.offset())?;
 
     if dos_pt.boot_code1[0..3] == AIX_MAGIC_STRING {
-        return Err(DosPTError::UnknownPartitionTable(
-            "Disk has AIX magic number",
-        ));
+        return Err(DosPTError::ProbablyAix);
     }
 
     is_valid_dos(probe, dos_pt)?;

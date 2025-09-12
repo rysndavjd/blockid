@@ -1,5 +1,6 @@
 use std::io::{Error as IoError, ErrorKind, Read, Seek};
 
+use thiserror::Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
     byteorder::{LittleEndian, U16, U32, U64},
@@ -17,46 +18,34 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum NtfsError {
-    IoError(IoError),
-    UnknownFilesystem(&'static str),
-    NtfsHeaderError(&'static str),
-    UtfError(UtfError),
-}
-
-impl std::fmt::Display for NtfsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NtfsError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            NtfsError::NtfsHeaderError(e) => write!(f, "NTFS Header Error: {e}"),
-            NtfsError::UnknownFilesystem(e) => write!(f, "Not an NTFS superblock: {e}"),
-            NtfsError::UtfError(e) => write!(f, "UTF Error: {e}"),
-        }
-    }
-}
-
-impl From<NtfsError> for FsError {
-    fn from(err: NtfsError) -> Self {
-        match err {
-            NtfsError::IoError(e) => FsError::IoError(e),
-            NtfsError::NtfsHeaderError(info) => FsError::InvalidHeader(info),
-            NtfsError::UnknownFilesystem(fs) => FsError::UnknownFilesystem(fs),
-            NtfsError::UtfError(e) => FsError::UtfError(e),
-        }
-    }
-}
-
-impl From<UtfError> for NtfsError {
-    fn from(err: UtfError) -> Self {
-        NtfsError::UtfError(err)
-    }
-}
-
-impl From<IoError> for NtfsError {
-    fn from(err: IoError) -> Self {
-        NtfsError::IoError(err)
-    }
+    #[error("I/O operation failed: {0}")]
+    IoError(#[from] IoError),
+    #[error("UTF operation failed: {0}")]
+    UtfError(#[from] UtfError),
+    #[error("Invalid sector size")]
+    InvalidSectorSize,
+    #[error("Invalid sector per cluster")]
+    InvalidSectorPerCluster,
+    #[error("Cluster size greater than max")]
+    ClusterSizeGreaterThanMax,
+    #[error("Unused fields not zero")]
+    UnusedFieldsNotZero, // clusters_per_mft_record
+    #[error("Invalid clusters per mft record")]
+    InvalidClustersPerMftRecord,
+    #[error("Invalid mft record size shift")]
+    InvalidMftRecordSizeShift,
+    #[error("Mft cluster location greater than nr_clusters")]
+    MftClusterLocationGreaterThanNrClusters,
+    #[error("Invalid mft record size")]
+    InvalidMftRecordSize,
+    #[error("buf_mft 1 missing signature FILE")]
+    InvalidBufMftOneSignature,
+    #[error("buf_mft 2 missing signature FILE")]
+    InvalidBufMftTwoSignature,
+    #[error("Invalid label offset")]
+    InvalidLabelOffset,
 }
 
 pub const NTFS_ID_INFO: BlockidIdinfo = BlockidIdinfo {
@@ -147,17 +136,17 @@ fn check_ntfs(ns: NtfsSuperBlock) -> Result<(u64, u64), NtfsError> // sector_siz
     let sector_size = u64::from(ns.sector_size);
 
     if !(256..=4096).contains(&sector_size) || !is_power_2(sector_size) {
-        return Err(NtfsError::NtfsHeaderError("Sector size is wrong"));
+        return Err(NtfsError::InvalidSectorSize);
     }
 
     let sectors_per_cluster = match ns.sectors_per_cluster {
         1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 => u64::from(ns.sectors_per_cluster),
         240..=249 => 1 << (256 - ns.sectors_per_cluster as u16) as u8,
-        _ => return Err(NtfsError::NtfsHeaderError("Sector Per Cluster wrong")),
+        _ => return Err(NtfsError::InvalidSectorPerCluster),
     };
 
     if (sector_size * sectors_per_cluster) > NTFS_MAX_CLUSTER_SIZE {
-        return Err(NtfsError::NtfsHeaderError("Too mant clusters"));
+        return Err(NtfsError::ClusterSizeGreaterThanMax);
     }
 
     if u16::from(ns.reserved_sectors) != 0
@@ -167,16 +156,14 @@ fn check_ntfs(ns: NtfsSuperBlock) -> Result<(u64, u64), NtfsError> // sector_siz
         || u32::from(ns.large_sectors) != 0
         || ns.fats != 0
     {
-        return Err(NtfsError::NtfsHeaderError("Unused fields must be zero"));
+        return Err(NtfsError::UnusedFieldsNotZero);
     }
 
     if (ns.clusters_per_mft_record as u8) < 0xe1
         || (ns.clusters_per_mft_record as u8) > 0xf7
             && matches!(ns.clusters_per_mft_record, 1 | 2 | 4 | 8 | 16 | 32 | 64)
     {
-        return Err(NtfsError::NtfsHeaderError(
-            "wrong value: clusters_per_mft_record",
-        ));
+        return Err(NtfsError::InvalidClustersPerMftRecord);
     }
 
     return Ok((sector_size, sectors_per_cluster));
@@ -193,7 +180,7 @@ fn find_label<R: Read + Seek>(
     } else {
         let mft_record_size_shift = 0 - ns.clusters_per_mft_record;
         if !(0..31).contains(&mft_record_size_shift) {
-            return Err(NtfsError::NtfsHeaderError("error 178"));
+            return Err(NtfsError::InvalidMftRecordSizeShift);
         }
         1 << mft_record_size_shift
     };
@@ -203,21 +190,19 @@ fn find_label<R: Read + Seek>(
     if u64::from(ns.mft_cluster_location) > nr_clusters
         || u64::from(ns.mft_mirror_cluster_location) > nr_clusters
     {
-        return Err(NtfsError::NtfsHeaderError("Too many clusters"));
+        return Err(NtfsError::MftClusterLocationGreaterThanNrClusters);
     }
 
     let mut off = u64::from(ns.mft_cluster_location) * sector_size * sectors_per_cluster;
 
     if mft_record_size < 4 {
-        return Err(NtfsError::NtfsHeaderError("mft_record_size < 4"));
+        return Err(NtfsError::InvalidMftRecordSize);
     }
 
     let mut buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
 
     if &buf_mft[0..4] != b"FILE" {
-        return Err(NtfsError::NtfsHeaderError(
-            "buf_mft 1 missing sig: \"FILE\"",
-        ));
+        return Err(NtfsError::InvalidBufMftOneSignature);
     }
 
     off += MFT_RECORD_VOLUME * mft_record_size;
@@ -225,9 +210,7 @@ fn find_label<R: Read + Seek>(
     buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
 
     if &buf_mft[0..4] != b"FILE" {
-        return Err(NtfsError::NtfsHeaderError(
-            "buf_mft 2 missing sig: \"FILE\"",
-        ));
+        return Err(NtfsError::InvalidBufMftTwoSignature);
     }
 
     let mft =
@@ -285,7 +268,7 @@ fn find_label<R: Read + Seek>(
         attr_off += attr_len;
     }
 
-    return Err(NtfsError::NtfsHeaderError("Unable to find offset of label"));
+    return Err(NtfsError::InvalidLabelOffset);
 }
 
 pub fn probe_is_ntfs(probe: &mut Probe) -> Result<(), NtfsError> {
