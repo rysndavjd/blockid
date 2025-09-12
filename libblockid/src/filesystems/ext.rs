@@ -17,7 +17,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, FilesystemResult,
         Probe, ProbeResult, UsageType,
     },
-    util::{decode_utf8_lossy_from, from_file},
+    util::decode_utf8_lossy_from,
 };
 
 /*
@@ -430,7 +430,7 @@ fn ext_get_info(
 }
 
 pub fn probe_jbd(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtError> {
-    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
+    let es: Ext2SuperBlock = probe.map_from_file(probe.offset() + 1024)?;
 
     let fi = es.feature_incompat();
 
@@ -463,7 +463,7 @@ pub fn probe_jbd(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtError
 }
 
 pub fn probe_ext2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtError> {
-    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
+    let es: Ext2SuperBlock = probe.map_from_file(probe.offset() + 1024)?;
 
     ext_checksum(es)?;
 
@@ -506,7 +506,7 @@ pub fn probe_ext2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtErro
 }
 
 pub fn probe_ext3(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtError> {
-    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
+    let es: Ext2SuperBlock = probe.map_from_file(probe.offset() + 1024)?;
 
     ext_checksum(es)?;
 
@@ -549,7 +549,7 @@ pub fn probe_ext3(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtErro
 }
 
 pub fn probe_ext4(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtError> {
-    let es: Ext2SuperBlock = from_file(&mut probe.file(), probe.offset() + 1024)?;
+    let es: Ext2SuperBlock = probe.map_from_file(probe.offset() + 1024)?;
 
     ext_checksum(es)?;
 

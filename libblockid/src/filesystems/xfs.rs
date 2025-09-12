@@ -15,7 +15,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, FilesystemResult, Probe, ProbeResult,
         UsageType,
     },
-    util::{decode_utf8_lossy_from, from_file, read_vec_at},
+    util::decode_utf8_lossy_from,
 };
 
 #[derive(Debug, Error)]
@@ -208,8 +208,8 @@ pub fn xfs_fssize(sb: XfsSuperBlock) -> u64 {
 }
 
 pub fn probe_xfs(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), XfsError> {
-    let sb: XfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
-    let crc_area = read_vec_at(&mut probe.file(), probe.offset(), usize::from(sb.sectsize))?;
+    let sb: XfsSuperBlock = probe.map_from_file(probe.offset())?;
+    let crc_area = probe.read_vec_at(probe.offset(), usize::from(sb.sectsize))?;
 
     xfs_verify(sb, crc_area)?;
 

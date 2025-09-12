@@ -14,9 +14,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, Endianness,
         FilesystemResult, Probe, ProbeResult, UsageType,
     },
-    util::{
-        UtfError, decode_utf16_lossy_from, from_file, probe_get_magic, read_exact_at, read_vec_at,
-    },
+    util::{UtfError, decode_utf16_lossy_from},
 };
 
 #[derive(Debug, Error)]
@@ -127,9 +125,9 @@ impl ExFatSuperBlock {
         return self.block_to_offset(self.cluster_to_block(cluster));
     }
 
-    fn next_cluster<R: Read + Seek>(&self, file: &mut R, cluster: u32) -> Result<u32, ExFatError> {
+    fn next_cluster(&self, probe: &mut Probe, cluster: u32) -> Result<u32, ExFatError> {
         let fat_offset = self.block_to_offset(u64::from(self.fat_offset)) + (cluster as u64 * 4);
-        let next: [u8; 4] = read_exact_at(file, fat_offset)?;
+        let next: [u8; 4] = probe.read_exact_at(fat_offset)?;
 
         return Ok(u32::from_le_bytes(next));
     }
@@ -172,7 +170,7 @@ pub fn get_exfatcsum(sectors: &[u8], sector_size: usize) -> u32 {
 
 fn verify_exfat_checksum(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError> {
     let sector_size = sb.block_size();
-    let data = read_vec_at(&mut probe.file(), probe.offset(), sector_size * 12)?;
+    let data = probe.read_vec_at(probe.offset(), sector_size * 12)?;
     let checksum = get_exfatcsum(&data, sector_size);
 
     for i in 0..(sector_size / 4) {
@@ -263,9 +261,9 @@ fn valid_exfat(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError>
 }
 
 pub fn probe_is_exfat(probe: &mut Probe) -> Result<(), ExFatError> {
-    let sb: ExFatSuperBlock = from_file(&mut probe.file(), probe.offset())?;
+    let sb: ExFatSuperBlock = probe.map_from_file(probe.offset())?;
 
-    if probe_get_magic(&mut probe.file(), &VFAT_ID_INFO).is_ok() {
+    if probe.get_magic(&VFAT_ID_INFO).is_ok() {
         return Err(ExFatError::ProbablyVfat);
     }
 
@@ -274,10 +272,7 @@ pub fn probe_is_exfat(probe: &mut Probe) -> Result<(), ExFatError> {
     return Ok(());
 }
 
-fn find_label<R: Read + Seek>(
-    file: &mut R,
-    sb: ExFatSuperBlock,
-) -> Result<Option<String>, ExFatError> {
+fn find_label(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<Option<String>, ExFatError> {
     let mut cluster = u32::from(sb.first_clustor_of_root);
     let mut offset = sb.cluster_to_offset(cluster);
 
@@ -285,7 +280,7 @@ fn find_label<R: Read + Seek>(
 
     while i < 8388608 {
         // EXFAT_MAX_DIR_SIZE / EXFAT_ENTRY_SIZE
-        let buf = match read_exact_at::<EXFAT_ENTRY_SIZE, R>(file, offset) {
+        let buf = match probe.read_exact_at::<EXFAT_ENTRY_SIZE>(offset) {
             Ok(t) => t,
             Err(_) => return Ok(None),
         };
@@ -303,7 +298,7 @@ fn find_label<R: Read + Seek>(
         offset += EXFAT_ENTRY_SIZE as u64;
 
         if sb.cluster_size() != 0 && offset.is_multiple_of(sb.cluster_size() as u64) {
-            cluster = sb.next_cluster(file, cluster)?;
+            cluster = sb.next_cluster(probe, cluster)?;
             if cluster < EXFAT_FIRST_DATA_CLUSTER {
                 return Ok(None);
             }
@@ -319,11 +314,11 @@ fn find_label<R: Read + Seek>(
 }
 
 pub fn probe_exfat(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), ExFatError> {
-    let sb: ExFatSuperBlock = from_file(&mut probe.file(), probe.offset())?;
+    let sb: ExFatSuperBlock = probe.map_from_file(probe.offset())?;
 
     valid_exfat(probe, sb)?;
 
-    let label = find_label(&mut probe.file(), sb)?;
+    let label = find_label(probe, sb)?;
 
     probe.push_result(ProbeResult::Filesystem(FilesystemResult {
         btype: Some(BlockType::Exfat),

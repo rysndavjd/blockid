@@ -1,5 +1,5 @@
 use std::{
-    io::{Error as IoError, ErrorKind, Read, Seek},
+    io::{Error as IoError, ErrorKind},
     str::FromStr,
 };
 
@@ -19,7 +19,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, ContainerResult,
         ProbeResult, UsageType,
     },
-    util::{UtfError, decode_utf8_from, from_file},
+    util::{UtfError, decode_utf8_from},
 };
 
 /*
@@ -145,13 +145,13 @@ pub struct Luks2Header {
 }
 
 impl Luks2Header {
-    fn luks_valid<R: Seek + Read>(self, file: &mut R) -> bool {
+    fn luks_valid(self, probe: &mut Probe) -> bool {
         if self.magic == LUKS1_MAGIC && u16::from(self.version) == 2 {
             return true;
         }
 
         for offset in SECONDARY_OFFSETS {
-            match from_file::<Luks2Header, R>(file, offset) {
+            match probe.map_from_file::<Luks2Header>(offset) {
                 Ok(secondary) => {
                     if u16::from(secondary.version) == 2
                         && u64::from(secondary.hdr_offset) == offset
@@ -168,7 +168,7 @@ impl Luks2Header {
 }
 
 pub fn probe_luks1(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksError> {
-    let header: Luks1Header = from_file(&mut probe.file(), probe.offset())?;
+    let header: Luks1Header = probe.map_from_file(probe.offset())?;
 
     if !header.luks_valid() {
         return Err(LuksError::InvalidLuksOne);
@@ -192,9 +192,9 @@ pub fn probe_luks1(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
 }
 
 pub fn probe_luks2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksError> {
-    let header: Luks2Header = from_file(&mut probe.file(), probe.offset())?;
+    let header: Luks2Header = probe.map_from_file(probe.offset())?;
 
-    if !header.luks_valid(&mut probe.file()) {
+    if !header.luks_valid(probe) {
         return Err(LuksError::InvalidLuksTwo);
     }
 
@@ -216,9 +216,9 @@ pub fn probe_luks2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
 }
 
 pub fn probe_luks_opal(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksError> {
-    let header: Luks2Header = from_file(&mut probe.file(), probe.offset())?;
+    let header: Luks2Header = probe.map_from_file(probe.offset())?;
 
-    if !header.luks_valid(&mut probe.file()) {
+    if !header.luks_valid(probe) {
         return Err(LuksError::InvalidLuksTwoOpal);
     }
 
