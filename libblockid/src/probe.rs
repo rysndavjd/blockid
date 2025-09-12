@@ -132,7 +132,6 @@ impl Probe {
             (
                 u64::from(logical_block_size(file.as_fd())?),
                 device_size_bytes(file.as_fd())?,
-                u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9),
             )
         } else {
             (512, stat.st_size as u64)

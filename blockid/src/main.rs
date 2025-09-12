@@ -2,14 +2,14 @@ use bitflags::bitflags;
 use clap::{
     Arg, ArgAction, Command, ValueEnum, builder::EnumValueParser, parser::ValuesRef, value_parser,
 };
-use libblockid::{BlockidError as LibblockidError, Probe, ProbeBuilder, devno_to_path};
-use rustix::fs::makedev;
+use libblockid::{devno_to_path, BlockidError as LibblockidError, Probe, ProbeBuilder};
+use rustix::{fs::makedev, ioctl::opcode::read};
 use simple_logger::init;
 use std::{
-    io::{Error as IoError, ErrorKind},
-    path::{Path, PathBuf},
+    fs::File, io::{Error as IoError, ErrorKind}, os::fd::AsFd, path::{Path, PathBuf}
 };
 use thiserror::Error;
+use libblockid::*;
 
 const CACHE_PATH: &str = env!("CACHE_PATH");
 

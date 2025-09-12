@@ -28,6 +28,7 @@ use crate::{containers::ContError, filesystems::FsError, partitions::PtError};
 pub use crate::{
     probe::{Probe, ProbeFilter, ProbeFlags},
     util::{block_from_uuid, devno_to_path, path_to_devno},
+    ioctl::*,
 };
 
 #[derive(Debug, Error)]
@@ -100,21 +101,21 @@ impl ProbeBuilder {
         self
     }
 
-    //pub fn build(self) -> Result<Probe, BlockidError> {
-    //    let id = self.disk_id.ok_or(BlockidError::ArgumentError(
-    //        "Path/devno not set in ProbeBuilder",
-    //    ))?;
-    //
-    //    let (file, path) = match id {
-    //        IdType::Path(path) => (File::open(&path)?, path),
-    //        IdType::Devno(devno) => {
-    //            let path = devno_to_path(devno).ok_or(IoError::new(
-    //                IoErrorKind::InvalidInput,
-    //                "Devno doesnt point to a path",
-    //            ))?;
-    //            (File::open(&path)?, path)
-    //        }
-    //    };
-    //    Probe::new(file, &path, self.offset, self.flags, self.filter)
-    //}
+    pub fn build(self) -> Result<Probe, BlockidError> {
+        let id = self.disk_id.ok_or(BlockidError::ArgumentError(
+            "Path/devno not set in ProbeBuilder",
+        ))?;
+    
+        let (file, path) = match id {
+            IdType::Path(path) => (File::open(&path)?, path),
+            IdType::Devno(devno) => {
+                let path = devno_to_path(devno).ok_or(IoError::new(
+                    IoErrorKind::InvalidInput,
+                    "Devno doesnt point to a path",
+                ))?;
+                (File::open(&path)?, path)
+            }
+        };
+        Probe::new(file, &path, self.offset, self.flags, self.filter)
+    }
 }
