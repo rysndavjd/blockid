@@ -1,9 +1,19 @@
+#[cfg(target_os = "linux")]
 use bitflags::bitflags;
 use rustix::{
     fd::AsFd,
     io,
     ioctl::{Getter, ioctl},
 };
+
+/*
+ * Note:
+ * The rustix::ioctl::opcode::read function calculates different values
+ * on different systems. For example:
+ *
+ *   read::<u32>(b'd', 24) == 2147771416 on Linux
+ *   read::<u32>(b'd', 24) == 1074029592 on macOS
+ */
 
 #[cfg(target_os = "linux")]
 pub const BLKGETZONESZ: u32 = 2147750532;
@@ -36,7 +46,7 @@ const DIOCGSECTORSIZE: u64 = 2147771520;
  */
 
 #[cfg(target_os = "macos")]
-const DKIOCGETBLOCKSIZE: u32 = 2147771416;
+const DKIOCGETBLOCKSIZE: u64 = 1074029592;
 
 /*
  * uint64_t = 8 bytes
@@ -44,7 +54,7 @@ const DKIOCGETBLOCKSIZE: u32 = 2147771416;
  */
 
 #[cfg(target_os = "macos")]
-const DKIOCGETBLOCKCOUNT: u32 = 2148033561;
+const DKIOCGETBLOCKCOUNT: u64 = 1074291737;
 
 #[cfg(target_os = "linux")]
 #[inline]
@@ -146,5 +156,5 @@ pub fn device_size_bytes<Fd: AsFd>(fd: Fd) -> io::Result<u64> {
     #[cfg(target_os = "freebsd")]
     return ioctl_diocgmediasize(fd);
     #[cfg(target_os = "macos")]
-    return Ok(ioctl_dkiocgetblocksize(fd)? * ioctl_dkiocgetblockcount(fd)?);
+    return Ok(u64::from(ioctl_dkiocgetblocksize(&fd)?) * ioctl_dkiocgetblockcount(&fd)?);
 }

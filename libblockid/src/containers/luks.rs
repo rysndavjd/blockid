@@ -72,7 +72,7 @@ pub const LUKS1_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 };
 
 pub const LUKS2_ID_INFO: BlockidIdinfo = BlockidIdinfo {
-    name: Some("luks1"),
+    name: Some("luks2"),
     btype: Some(BlockType::LUKS2),
     usage: Some(UsageType::Crypto),
     probe_fn: |probe, magic| {

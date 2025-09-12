@@ -4,7 +4,7 @@ use std::{
     io::{Error as IoError, ErrorKind, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     ptr,
-    str::Utf8Error,
+    str::{Utf8Error, FromStr},
 };
 
 use glob::glob;
@@ -81,21 +81,28 @@ pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, UtfError> {
 pub fn is_power_2(num: u64) -> bool {
     return num != 0 && ((num & (num - 1)) == 0);
 }
- 
-#[cfg(not(target_os = "linux"))]
-pub fn devno_to_path(dev: Dev) {
+
+/*
+ * I think later down the line to implement a feature flag to use C functions for
+ * things like this below or use the hand rolled verison to remove the need for libc
+ */
+
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
     unsafe extern "C" {
         unsafe fn devname(dev: dev_t, type_: mode_t) -> *const libc::c_char;
     }
 
-    unsafe {
-        let ptr = devname(dev, S_IFBLK);
-
-        if ptr.is_null() {
-            let name = CStr::from_ptr(ptr).to_string_lossy().to_string();
-            println!("{name}")
-        }
+    let ptr = unsafe {devname(dev, S_IFBLK)};
+    
+    if ptr.is_null() {
+        return None;
     }
+
+    let name = unsafe {CStr::from_ptr(ptr)}.to_string_lossy().to_string();
+    
+    return Some(PathBuf::from_str(&format!("/dev/{name}")).unwrap());
+    
 }
 
 #[cfg(target_os = "linux")]
