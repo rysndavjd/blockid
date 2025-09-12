@@ -1,10 +1,9 @@
 use std::{
     ffi::CStr,
     fs::read_link,
-    io::{Error as IoError, ErrorKind, Read, Seek, SeekFrom},
+    io::{Error as IoError, ErrorKind},
     path::{Path, PathBuf},
-    ptr,
-    str::{Utf8Error, FromStr},
+    str::{FromStr, Utf8Error},
 };
 
 use glob::glob;
@@ -12,11 +11,10 @@ use libc::{S_IFBLK, dev_t, mode_t};
 use rustix::fs::{Dev, FileType, major, minor, stat};
 use thiserror::Error;
 use widestring::{error::Utf16Error, utfstring::Utf16String};
-use zerocopy::FromBytes;
 
 use crate::{
     BlockidError, Probe, ProbeFilter, ProbeFlags,
-    probe::{BlockidIdinfo, BlockidMagic, BlockidUUID, Endianness, ProbeResult},
+    probe::{BlockidUUID, Endianness, ProbeResult},
 };
 
 #[derive(Debug, Error)]
@@ -93,16 +91,15 @@ pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
         unsafe fn devname(dev: dev_t, type_: mode_t) -> *const libc::c_char;
     }
 
-    let ptr = unsafe {devname(dev, S_IFBLK)};
-    
+    let ptr = unsafe { devname(dev, S_IFBLK) };
+
     if ptr.is_null() {
         return None;
     }
 
-    let name = unsafe {CStr::from_ptr(ptr)}.to_string_lossy().to_string();
-    
+    let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string();
+
     return Some(PathBuf::from_str(&format!("/dev/{name}")).unwrap());
-    
 }
 
 #[cfg(target_os = "linux")]
@@ -123,69 +120,6 @@ pub fn path_to_devno<P: AsRef<Path>>(path: P) -> Result<Dev, IoError> {
             "Path doesnt point to a block device",
         ));
     }
-}
-
-pub fn probe_get_magic<R: Read + Seek>(
-    file: &mut R,
-    id_info: &BlockidIdinfo,
-) -> Result<Option<BlockidMagic>, IoError> {
-    match id_info.magics {
-        Some(magics) => {
-            for magic in magics {
-                file.seek(SeekFrom::Start(magic.b_offset))?;
-
-                let mut buffer = vec![0; magic.len];
-
-                file.read_exact(&mut buffer)?;
-
-                if buffer == magic.magic {
-                    return Ok(Some(*magic));
-                }
-            }
-        }
-        None => {
-            return Ok(None);
-        }
-    }
-
-    return Err(ErrorKind::NotFound.into());
-}
-
-pub fn from_file<T: FromBytes, R: Read + Seek>(file: &mut R, offset: u64) -> Result<T, IoError> {
-    let mut buffer = vec![0u8; core::mem::size_of::<T>()];
-    file.seek(SeekFrom::Start(offset))?;
-    file.read_exact(&mut buffer)?;
-
-    let data = T::read_from_bytes(&buffer).map_err(|_| ErrorKind::UnexpectedEof)?;
-
-    return Ok(data);
-}
-
-pub fn read_exact_at<const S: usize, R: Read + Seek>(
-    file: &mut R,
-    offset: u64,
-) -> Result<[u8; S], IoError> {
-    let mut buffer = [0u8; S];
-    file.seek(SeekFrom::Start(offset))?;
-    file.read_exact(&mut buffer)?;
-
-    return Ok(buffer);
-}
-
-pub fn read_vec_at<R: Read + Seek>(
-    file: &mut R,
-    offset: u64,
-    buf_size: usize,
-) -> Result<Vec<u8>, IoError> {
-    let mut buffer = vec![0u8; buf_size];
-    file.seek(SeekFrom::Start(offset))?;
-    file.read_exact(&mut buffer)?;
-
-    return Ok(buffer);
-}
-
-pub fn read_sector_at<R: Read + Seek>(file: &mut R, sector: u64) -> Result<[u8; 512], IoError> {
-    return read_exact_at::<512, R>(file, sector << 9);
 }
 
 pub fn block_from_uuid(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {

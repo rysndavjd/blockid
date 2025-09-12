@@ -1,7 +1,7 @@
 use std::{
     fmt,
     fs::File,
-    io::{BufReader, Seek, SeekFrom},
+    io::{BufReader, Error as IoError, ErrorKind as IoErrorKind, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
 
@@ -11,19 +11,19 @@ use rustix::{
     fs::{Dev, FileType, Mode, fstat, major, minor},
 };
 use uuid::Uuid;
+use zerocopy::FromBytes;
 
 use crate::BlockidError;
 #[cfg(target_os = "linux")]
 use crate::ioctl::{OpalStatusFlags, ioctl_blkgetzonesz, ioctl_ioc_opal_get_status};
 use crate::ioctl::{device_size_bytes, logical_block_size};
-use crate::util::probe_get_magic;
 
 use crate::{
     containers::luks::{LUKS_OPAL_ID_INFO, LUKS1_ID_INFO, LUKS2_ID_INFO},
     filesystems::{
         exfat::EXFAT_ID_INFO,
         ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO, JBD_ID_INFO},
-        linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO},
+        linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO, SWSUSPEND_ID_INFO},
         ntfs::NTFS_ID_INFO,
         vfat::VFAT_ID_INFO,
         volume_id::{VolumeId32, VolumeId64},
@@ -67,6 +67,11 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
         ProbeFilter::SKIP_FS,
         ProbeFilter::SKIP_LINUX_SWAP_V1,
         LINUX_SWAP_V1_ID_INFO,
+    ),
+    (
+        ProbeFilter::SKIP_FS,
+        ProbeFilter::SKIP_SWSUSPEND,
+        SWSUSPEND_ID_INFO,
     ),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_NTFS, NTFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_VFAT, VFAT_ID_INFO),
@@ -137,8 +142,6 @@ impl Probe {
             (512, stat.st_size as u64)
         };
 
-        //let buffer = BufReader::with_capacity(stat.st_blksize as usize, file.try_clone()?);
-
         Ok(Self {
             file,
             path: path.to_path_buf(),
@@ -159,7 +162,6 @@ impl Probe {
         })
     }
 
-    // Need to figure out how to use buffering when available so this does nothing
     pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), BlockidError> {
         let clone = self.file.try_clone()?;
         self.buffer = Some(BufReader::with_capacity(capacity, clone));
@@ -171,10 +173,82 @@ impl Probe {
         return Ok(());
     }
 
+    pub(crate) fn seek(&mut self, pos: SeekFrom) -> Result<u64, IoError> {
+        if let Some(buffer) = &mut self.buffer {
+            return buffer.seek(pos);
+        } else {
+            return self.file.seek(pos);
+        }
+    }
+
+    pub(crate) fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), IoError> {
+        if let Some(buffer) = &mut self.buffer {
+            return buffer.read_exact(buf);
+        } else {
+            return self.file.read_exact(buf);
+        }
+    }
+
+    pub(crate) fn read_exact_at<const S: usize>(
+        &mut self,
+        offset: u64,
+    ) -> Result<[u8; S], IoError> {
+        let mut buffer = [0u8; S];
+        self.seek(SeekFrom::Start(offset))?;
+        self.read_exact(&mut buffer)?;
+
+        return Ok(buffer);
+    }
+
+    pub(crate) fn read_vec_at(&mut self, offset: u64, buf_size: usize) -> Result<Vec<u8>, IoError> {
+        let mut buffer = vec![0u8; buf_size];
+        self.seek(SeekFrom::Start(offset))?;
+        self.read_exact(&mut buffer)?;
+
+        return Ok(buffer);
+    }
+
+    pub(crate) fn map_from_file<T: FromBytes>(&mut self, offset: u64) -> Result<T, IoError> {
+        let mut buffer = vec![0u8; core::mem::size_of::<T>()];
+        self.seek(SeekFrom::Start(offset))?;
+        self.read_exact(&mut buffer)?;
+
+        let data = T::read_from_bytes(&buffer).map_err(|_| IoErrorKind::UnexpectedEof)?;
+
+        return Ok(data);
+    }
+
+    pub(crate) fn read_sector_at(&mut self, sector: u64) -> Result<[u8; 512], IoError> {
+        return self.read_exact_at::<512>(sector << 9);
+    }
+
+    pub(crate) fn get_magic(&mut self, id_info: &BlockidIdinfo) -> Result<Option<BlockidMagic>, IoError> {
+        match id_info.magics {
+            Some(magics) => {
+                for magic in magics {
+                    self.seek(SeekFrom::Start(magic.b_offset))?;
+
+                    let mut buffer = vec![0; magic.len];
+
+                    self.read_exact(&mut buffer)?;
+
+                    if buffer == magic.magic {
+                        return Ok(Some(*magic));
+                    }
+                }
+            }
+            None => {
+                return Ok(None);
+            }
+        }
+
+        return Err(IoErrorKind::NotFound.into());
+    }
+
     pub fn probe_values(&mut self) -> Result<(), BlockidError> {
         if self.filter.is_empty() {
             for info in PROBES {
-                let result = match probe_get_magic(&mut self.file, &info.2) {
+                let result = match self.get_magic(&info.2) {
                     Ok(magic) => {
                         self.file().seek(SeekFrom::Start(0))?;
                         match magic {
@@ -207,7 +281,7 @@ impl Probe {
             .collect();
 
         for info in filtered_probe {
-            let result = match probe_get_magic(&mut self.file, &info) {
+            let result = match self.get_magic(&info) {
                 Ok(magic) => match magic {
                     Some(t) => (info.probe_fn)(self, t),
                     None => (info.probe_fn)(self, BlockidMagic::EMPTY_MAGIC),
@@ -377,9 +451,10 @@ bitflags! {
         const SKIP_EXT4 = 1 << 12;
         const SKIP_LINUX_SWAP_V0 = 1 << 13;
         const SKIP_LINUX_SWAP_V1 = 1 << 14;
-        const SKIP_NTFS = 1 << 15;
-        const SKIP_VFAT = 1 << 16;
-        const SKIP_XFS = 1 << 17;
+        const SKIP_SWSUSPEND = 1 << 15;
+        const SKIP_NTFS = 1 << 16;
+        const SKIP_VFAT = 1 << 17;
+        const SKIP_XFS = 1 << 18;
     }
 }
 

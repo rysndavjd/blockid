@@ -1,4 +1,4 @@
-use std::io::{Error as IoError, ErrorKind, Read, Seek};
+use std::io::{Error as IoError, ErrorKind};
 
 use thiserror::Error;
 use zerocopy::{
@@ -13,9 +13,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, Endianness, FilesystemResult, Probe,
         ProbeResult, UsageType,
     },
-    util::{
-        UtfError, decode_utf16_lossy_from, from_file, is_power_2, probe_get_magic, read_vec_at,
-    },
+    util::{UtfError, decode_utf16_lossy_from, is_power_2},
 };
 
 #[derive(Debug, Error)]
@@ -169,8 +167,8 @@ fn check_ntfs(ns: NtfsSuperBlock) -> Result<(u64, u64), NtfsError> // sector_siz
     return Ok((sector_size, sectors_per_cluster));
 }
 
-fn find_label<R: Read + Seek>(
-    file: &mut R,
+fn find_label(
+    probe: &mut Probe,
     ns: NtfsSuperBlock,
     sector_size: u64,
     sectors_per_cluster: u64,
@@ -199,7 +197,7 @@ fn find_label<R: Read + Seek>(
         return Err(NtfsError::InvalidMftRecordSize);
     }
 
-    let mut buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
+    let mut buf_mft = probe.read_vec_at(off, mft_record_size as usize)?;
 
     if &buf_mft[0..4] != b"FILE" {
         return Err(NtfsError::InvalidBufMftOneSignature);
@@ -207,7 +205,7 @@ fn find_label<R: Read + Seek>(
 
     off += MFT_RECORD_VOLUME * mft_record_size;
 
-    buf_mft = read_vec_at(file, off, mft_record_size as usize)?;
+    buf_mft = probe.read_vec_at(off, mft_record_size as usize)?;
 
     if &buf_mft[0..4] != b"FILE" {
         return Err(NtfsError::InvalidBufMftTwoSignature);
@@ -272,20 +270,20 @@ fn find_label<R: Read + Seek>(
 }
 
 pub fn probe_is_ntfs(probe: &mut Probe) -> Result<(), NtfsError> {
-    let ns: NtfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
+    let ns: NtfsSuperBlock = probe.map_from_file(probe.offset())?;
 
-    probe_get_magic(&mut probe.file(), &NTFS_ID_INFO)?;
+    probe.get_magic(&NTFS_ID_INFO)?;
     check_ntfs(ns)?;
 
     return Ok(());
 }
 
 pub fn probe_ntfs(probe: &mut Probe, magic: BlockidMagic) -> Result<(), NtfsError> {
-    let ns: NtfsSuperBlock = from_file(&mut probe.file(), probe.offset())?;
+    let ns: NtfsSuperBlock = probe.map_from_file(probe.offset())?;
 
     let (sector_size, sectors_per_cluster) = check_ntfs(ns)?;
 
-    let label = find_label(&mut probe.file(), ns, sector_size, sectors_per_cluster)?;
+    let label = find_label(probe, ns, sector_size, sectors_per_cluster)?;
 
     probe.push_result(ProbeResult::Filesystem(FilesystemResult {
         btype: Some(BlockType::Ntfs),

@@ -2,14 +2,16 @@ use bitflags::bitflags;
 use clap::{
     Arg, ArgAction, Command, ValueEnum, builder::EnumValueParser, parser::ValuesRef, value_parser,
 };
-use libblockid::{devno_to_path, BlockidError as LibblockidError, Probe, ProbeBuilder};
+use libblockid::{BlockidError as LibblockidError, Probe, ProbeBuilder, devno_to_path};
 use rustix::{fs::makedev, ioctl::opcode::read};
 use simple_logger::init;
 use std::{
-    fs::File, io::{Error as IoError, ErrorKind}, os::fd::AsFd, path::{Path, PathBuf}
+    fs::File,
+    io::{Error as IoError, ErrorKind},
+    os::fd::AsFd,
+    path::{Path, PathBuf},
 };
 use thiserror::Error;
-use libblockid::*;
 
 const CACHE_PATH: &str = env!("CACHE_PATH");
 
@@ -45,6 +47,12 @@ enum OutputTags {
 
 fn main() -> Result<(), BlockidError> {
     init().unwrap();
+
+    let mut p = ProbeBuilder::new().path("/dev/sdb1").build().unwrap();
+    p.enable_buffering_with_capacity(16834).unwrap();
+    p.probe_values().unwrap();
+
+    println!("{p:?}");
 
     let matches = Command::new("blockid")
         .version(env!("CARGO_PKG_VERSION"))

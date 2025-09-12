@@ -8,7 +8,7 @@ use rustix::{
 
 /*
  * Note:
- * The rustix::ioctl::opcode::read function calculates different values
+ * The rustix::ioctl::opcode::read function seems to calculate different values
  * on different systems. For example:
  *
  *   read::<u32>(b'd', 24) == 2147771416 on Linux
@@ -30,7 +30,7 @@ const IOC_OPAL_GET_STATUS: u32 = 2148036844;
  */
 
 #[cfg(target_os = "freebsd")]
-const DIOCGMEDIASIZE: u64 = 2148033665;
+const DIOCGMEDIASIZE: u64 = 1074291841;
 
 /*
  * u_int = 4 bytes
@@ -38,7 +38,7 @@ const DIOCGMEDIASIZE: u64 = 2148033665;
  */
 
 #[cfg(target_os = "freebsd")]
-const DIOCGSECTORSIZE: u64 = 2147771520;
+const DIOCGSECTORSIZE: u64 = 1074029696;
 
 /*
  * uint32_t = 4 bytes

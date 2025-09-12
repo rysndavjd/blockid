@@ -11,7 +11,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, Endianness,
         FilesystemResult, Probe, ProbeResult, UsageType,
     },
-    util::{decode_utf8_lossy_from, from_file, read_exact_at},
+    util::decode_utf8_lossy_from,
 };
 
 #[derive(Debug, Error)]
@@ -263,14 +263,14 @@ fn swap_get_info(
 }
 
 pub fn probe_swap_v0(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapError> {
-    let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
+    let check: [u8; 8] = probe.read_exact_at(probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::ProbablyTuxOnIce);
     }
 
     if magic.magic == b"SWAP-SPACE" {
-        let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
+        let header: SwapHeaderV1 = probe.map_from_file(probe.offset() + 1024)?;
 
         let (endian, pagesize, fs_size, fs_last_block, name) =
             swap_get_info(magic, "Swap V0", header)?;
@@ -300,14 +300,14 @@ pub fn probe_swap_v0(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapE
 }
 
 pub fn probe_swap_v1(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapError> {
-    let check: [u8; 8] = read_exact_at(&mut probe.file(), probe.offset() + 1024)?;
+    let check: [u8; 8] = probe.read_exact_at(probe.offset() + 1024)?;
 
     if check == TOI_MAGIC_STRING {
         return Err(SwapError::ProbablyTuxOnIce);
     }
 
     if magic.magic == b"SWAPSPACE2" {
-        let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
+        let header: SwapHeaderV1 = probe.map_from_file(probe.offset() + 1024)?;
 
         let (endian, pagesize, fs_size, fs_last_block, name) =
             swap_get_info(magic, "Swap V1", header)?;
@@ -344,7 +344,7 @@ pub fn probe_swap_v1(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapE
 }
 
 pub fn probe_swsuspend(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SwapError> {
-    let header: SwapHeaderV1 = from_file(&mut probe.file(), probe.offset() + 1024)?;
+    let header: SwapHeaderV1 = probe.map_from_file(probe.offset() + 1024)?;
 
     let (endian, pagesize, fs_size, fs_last_block, name) = if magic.magic == b"S1SUSPEND" {
         swap_get_info(magic, "s1suspend", header)?

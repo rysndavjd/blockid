@@ -5,7 +5,6 @@ mod probe;
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod checksum;
 pub(crate) mod ioctl;
 mod util;
 
@@ -28,7 +27,6 @@ use crate::{containers::ContError, filesystems::FsError, partitions::PtError};
 pub use crate::{
     probe::{Probe, ProbeFilter, ProbeFlags},
     util::{block_from_uuid, devno_to_path, path_to_devno},
-    ioctl::*,
 };
 
 #[derive(Debug, Error)]
@@ -105,7 +103,7 @@ impl ProbeBuilder {
         let id = self.disk_id.ok_or(BlockidError::ArgumentError(
             "Path/devno not set in ProbeBuilder",
         ))?;
-    
+
         let (file, path) = match id {
             IdType::Path(path) => (File::open(&path)?, path),
             IdType::Devno(devno) => {

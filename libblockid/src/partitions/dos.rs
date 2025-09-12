@@ -1,4 +1,4 @@
-use std::io::{Error as IoError, ErrorKind, Read, Seek};
+use std::io::{Error as IoError, ErrorKind};
 
 use bitflags::bitflags;
 use thiserror::Error;
@@ -17,7 +17,6 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, PartEntryAttributes, PartEntryType,
         PartTableResult, PartitionResults, Probe, ProbeResult, UsageType,
     },
-    util::{from_file, read_sector_at},
 };
 
 /*
@@ -287,8 +286,8 @@ fn is_valid_dos(probe: &mut Probe, pt: DosTable) -> Result<(), DosPTError> {
  * Also that MBRs extended partitions are janky as hell with its edge cases.
  */
 
-fn parse_dos_extended<R: Read + Seek>(
-    file: &mut R,
+fn parse_dos_extended(
+    probe: &mut Probe,
     ex_entry: DosPartitionEntry,
     ssf: u64,
 ) -> Result<Vec<PartitionResults>, DosPTError> {
@@ -302,7 +301,7 @@ fn parse_dos_extended<R: Read + Seek>(
     let mut cur_start = ex_start;
 
     for i in 5..133 {
-        let sector = read_sector_at(file, cur_start)?;
+        let sector = probe.read_sector_at(cur_start)?;
 
         let ex_pt = DosTable::ref_from_bytes(&sector).map_err(|_| {
             IoError::new(
@@ -352,7 +351,7 @@ fn parse_dos_extended<R: Read + Seek>(
 pub fn probe_dos_pt(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), DosPTError> {
     let mut partitions: Vec<PartitionResults> = Vec::new();
 
-    let dos_pt: DosTable = from_file(&mut probe.file(), probe.offset())?;
+    let dos_pt: DosTable = probe.map_from_file(probe.offset())?;
 
     if dos_pt.boot_code1[0..3] == AIX_MAGIC_STRING {
         return Err(DosPTError::ProbablyAix);
@@ -389,7 +388,7 @@ pub fn probe_dos_pt(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), DosPTEr
     partitions.extend(primary_partitions);
 
     if let Some(ex_entry) = dos_pt.get_extended_partition() {
-        let ex = parse_dos_extended(&mut probe.file(), ex_entry, ssf)?;
+        let ex = parse_dos_extended(probe, ex_entry, ssf)?;
         partitions.extend(ex);
     };
 

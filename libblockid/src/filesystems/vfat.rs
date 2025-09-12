@@ -1,4 +1,4 @@
-use std::io::{Error as IoError, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{Error as IoError, ErrorKind, SeekFrom};
 
 use bitflags::bitflags;
 use thiserror::Error;
@@ -14,9 +14,7 @@ use crate::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, FilesystemResult, Probe, ProbeResult,
         SecType, UsageType,
     },
-    util::{
-        decode_utf8_lossy_from, from_file, is_power_2, probe_get_magic, read_exact_at, read_vec_at,
-    },
+    util::{decode_utf8_lossy_from, is_power_2},
 };
 
 #[derive(Debug, Error)]
@@ -230,15 +228,15 @@ const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
 
-fn read_vfat_dir_entry<R: Read + Seek>(
-    block: &mut R,
+fn read_vfat_dir_entry(
+    probe: &mut Probe,
     offset: u64,
 ) -> Result<VfatDirEntry, FatError> {
-    block.seek(SeekFrom::Start(0))?;
+    probe.seek(SeekFrom::Start(0))?;
 
     let mut buffer = [0u8; 32];
-    block.seek(SeekFrom::Start(offset))?;
-    block.read_exact(&mut buffer)?;
+    probe.seek(SeekFrom::Start(offset))?;
+    probe.read_exact(&mut buffer)?;
 
     let data: VfatDirEntry = transmute!(buffer);
 
@@ -347,7 +345,7 @@ pub fn valid_fat(
 }
 
 pub fn probe_is_vfat(probe: &mut Probe) -> Result<(), FatError> {
-    let buffer: [u8; 512] = read_exact_at(&mut probe.file(), probe.offset())?;
+    let buffer: [u8; 512] = probe.read_exact_at(probe.offset())?;
 
     let ms = MsDosSuperBlock::ref_from_bytes(&buffer).map_err(|_| {
         IoError::new(
@@ -362,7 +360,7 @@ pub fn probe_is_vfat(probe: &mut Probe) -> Result<(), FatError> {
         )
     })?;
 
-    let mag: BlockidMagic = match probe_get_magic(&mut probe.file(), &VFAT_ID_INFO)? {
+    let mag: BlockidMagic = match probe.get_magic(&VFAT_ID_INFO)? {
         Some(t) => t,
         None => return Err(FatError::InvalidFatSignature),
     };
@@ -372,15 +370,15 @@ pub fn probe_is_vfat(probe: &mut Probe) -> Result<(), FatError> {
     return Ok(());
 }
 
-pub fn search_fat_label<R: Read + Seek>(
-    file: &mut R,
+pub fn search_fat_label(
+    probe: &mut Probe,
     root_start: u64,
     root_dir_entries: u64,
 ) -> Result<Option<String>, FatError> {
     for i in 0..root_dir_entries {
         let offset = root_start + (i * 32);
 
-        let entry = read_vfat_dir_entry(file, offset)?;
+        let entry = read_vfat_dir_entry(probe, offset)?;
 
         let attr = entry.flags();
 
@@ -408,8 +406,8 @@ pub fn search_fat_label<R: Read + Seek>(
 }
 
 // This fn works for both fat12 and fat16
-fn probe_fat16<R: Read + Seek>(
-    file: &mut R,
+fn probe_fat16(
+    probe: &mut Probe,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
@@ -418,7 +416,7 @@ fn probe_fat16<R: Read + Seek>(
 
     let root_start: u32 = (reserved + fat_size) * u32::from(ms.ms_sector_size);
 
-    let vol_label = search_fat_label(file, root_start.into(), vs.vs_dir_entries.into())?;
+    let vol_label = search_fat_label(probe, root_start.into(), vs.vs_dir_entries.into())?;
 
     let vol_serno = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
         VolumeId32::new(ms.ms_serno)
@@ -429,8 +427,8 @@ fn probe_fat16<R: Read + Seek>(
     return Ok((vol_label, vol_serno));
 }
 
-fn probe_fat32<R: Read + Seek>(
-    file: &mut R,
+fn probe_fat32(
+    probe: &mut Probe,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
@@ -455,14 +453,14 @@ fn probe_fat32<R: Read + Seek>(
         let next_off: u64 = (start_data_sect as u64 + next_sect_off) * u64::from(ms.ms_sector_size);
         let count: u64 = buf_size / 32;
 
-        match search_fat_label(file, next_off, count)? {
+        match search_fat_label(probe, next_off, count)? {
             Some(label) => {
                 break Some(label);
             }
             None => {
                 let fat_entry_off =
                     (reserved as u64 * u64::from(ms.ms_sector_size)) + (next as u64 * 4);
-                let buf = read_vec_at(file, fat_entry_off, buf_size as usize)?;
+                let buf = probe.read_vec_at(fat_entry_off, buf_size as usize)?;
 
                 if buf.len() < 4 {
                     break None;
@@ -478,7 +476,7 @@ fn probe_fat32<R: Read + Seek>(
 
     let fsinfo_sect = u64::from(vs.vs_fsinfo_sector);
     if fsinfo_sect != 0 {
-        let fsinfo: Fat32FsInfo = from_file(file, fsinfo_sect * u64::from(ms.ms_sector_size))?;
+        let fsinfo: Fat32FsInfo = probe.map_from_file(fsinfo_sect * u64::from(ms.ms_sector_size))?;
 
         if &fsinfo.signature1 != b"\x52\x52\x61\x41"
             && &fsinfo.signature1 != b"\x52\x52\x64\x41"
@@ -496,7 +494,7 @@ fn probe_fat32<R: Read + Seek>(
 }
 
 pub fn probe_vfat(probe: &mut Probe, mag: BlockidMagic) -> Result<(), FatError> {
-    let buffer: [u8; 512] = read_exact_at(&mut probe.file(), probe.offset())?;
+    let buffer: [u8; 512] = probe.read_exact_at(probe.offset())?;
 
     let ms = MsDosSuperBlock::ref_from_bytes(&buffer).map_err(|_| {
         IoError::new(
@@ -516,9 +514,9 @@ pub fn probe_vfat(probe: &mut Probe, mag: BlockidMagic) -> Result<(), FatError> 
     let fat_size = get_fat_size(ms, vs);
 
     let (label, serno) = if ms.ms_fat_length != 0 {
-        probe_fat16(&mut probe.file(), ms, vs, fat_size)?
+        probe_fat16(probe, ms, vs, fat_size)?
     } else if vs.vs_fat32_length != 0 {
-        probe_fat32(&mut probe.file(), ms, vs, fat_size)?
+        probe_fat32(probe, ms, vs, fat_size)?
     } else {
         return Err(FatError::InvalidVFat);
     };
