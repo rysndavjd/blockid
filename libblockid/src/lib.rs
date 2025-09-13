@@ -1,4 +1,5 @@
 #![allow(clippy::needless_return)]
+#![warn(missing_docs)]
 
 mod probe;
 

@@ -49,7 +49,7 @@ fn main() -> Result<(), BlockidError> {
     init().unwrap();
 
     let mut p = ProbeBuilder::new().path("/dev/sdb1").build().unwrap();
-    p.enable_buffering_with_capacity(16834).unwrap();
+    p.enable_buffering_with_capacity(16384).unwrap();
     p.probe_values().unwrap();
 
     println!("{p:?}");
