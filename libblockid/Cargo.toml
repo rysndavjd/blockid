@@ -8,6 +8,7 @@ keywords = ["partition", "filesystem", "superblock"]
 categories = ["filesystem"]
 license = "MIT OR Apache-2.0"
 build = "build.rs"
+exclude = ["tests/*.bin", "tests/*.img", "headers"]
 
 [features]
 default = []
