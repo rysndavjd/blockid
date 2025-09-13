@@ -1,6 +1,6 @@
 [package]
 name = "libblockid"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Block device identification library"
 repository = "https://github.com/rysndavjd/blockid"
