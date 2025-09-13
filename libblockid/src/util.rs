@@ -86,31 +86,44 @@ pub fn is_power_2(num: u64) -> bool {
  * things like this below or use the hand rolled verison to remove the need for libc
  */
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+/// Convert a device number (`Dev`) to a device path.
+///
+/// # Platform-specific
+/// - Linux: uses sysfs `/sys/dev/block/<major>:<minor>`
+/// - macOS/FreeBSD: uses `devname` libc function
 pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
-    unsafe extern "C" {
-        unsafe fn devname(dev: dev_t, type_: mode_t) -> *const libc::c_char;
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    {
+        unsafe extern "C" {
+            unsafe fn devname(dev: dev_t, type_: mode_t) -> *const libc::c_char;
+        }
+
+        let ptr = unsafe { devname(dev, S_IFBLK) };
+
+        if ptr.is_null() {
+            return None;
+        }
+
+        let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string();
+
+        return Some(PathBuf::from_str(&format!("/dev/{name}")).unwrap());
     }
 
-    let ptr = unsafe { devname(dev, S_IFBLK) };
+    #[cfg(target_os = "linux")]
+    {
+        let path = read_link(format!("/sys/dev/block/{}:{}", major(dev), minor(dev))).ok()?;
+        let target = path.file_name()?.to_str()?;
 
-    if ptr.is_null() {
-        return None;
+        return Some(PathBuf::from("/dev/").join(target));
     }
-
-    let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string();
-
-    return Some(PathBuf::from_str(&format!("/dev/{name}")).unwrap());
 }
 
-#[cfg(target_os = "linux")]
-pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
-    let path = read_link(format!("/sys/dev/block/{}:{}", major(dev), minor(dev))).ok()?;
-    let target = path.file_name()?.to_str()?;
-
-    return Some(PathBuf::from("/dev/").join(target));
-}
-
+/// Convert a device path to its device number (`Dev`).
+///
+/// Returns [`IoError`] if:
+/// - the path does not exist,
+/// - or the path does not point to a block device.
+///
 pub fn path_to_devno<P: AsRef<Path>>(path: P) -> Result<Dev, IoError> {
     let stat = stat(path.as_ref())?;
     if FileType::from_raw_mode(stat.st_mode).is_block_device() {
@@ -123,6 +136,19 @@ pub fn path_to_devno<P: AsRef<Path>>(path: P) -> Result<Dev, IoError> {
     }
 }
 
+/// Find the block device path corresponding to a given [`BlockidUUID`].
+///
+/// Iterates over common block device paths and probes each device using
+/// [`Probe::from_filename`] and [`Probe::probe_values`].  
+/// Returns the first device path whose UUID matches the given `uuid`.
+///
+/// # Errors
+/// Returns [`BlockidError::NoResultPresent`] if a probe returns no result,  
+/// or [`BlockidError::BlockNotFound`] if no matching device is found.
+///
+/// # Panics
+/// Panics if glob patterns fail, which should never happen on supported systems.
+///
 pub fn block_from_uuid(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
     let patterns = [
         "/dev/sd*",

@@ -18,7 +18,7 @@ fn xfs_probe_test() {
 
     probe_xfs(&mut probe, XFS_ID_INFO.magics.unwrap()[0]).unwrap();
 
-    let r = probe.result().unwrap().as_filesystem().unwrap();
+    let r = probe.as_filesystem().unwrap();
 
     assert_eq!(r.block_type(), Some(BlockType::Xfs));
     assert_eq!(r.sec_type(), None);

@@ -1,4 +1,4 @@
-use std::io::{Error as IoError, Read, Seek};
+use std::io::Error as IoError;
 
 use rustix::fs::makedev;
 use thiserror::Error;
