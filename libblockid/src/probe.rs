@@ -35,27 +35,12 @@ use crate::{
     },
 };
 
-/// Static probe table.
-///
-/// Table defines the order of detection attempts. The first filter value
-/// is treated as a category filter; the second as an item filter. The probe
-/// functions checks `ProbeFilter` to skip categories or specific items.
-static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
-    (
-        ProbeFilter::SKIP_CONT,
-        ProbeFilter::SKIP_LUKS1,
-        LUKS1_ID_INFO,
-    ),
-    (
-        ProbeFilter::SKIP_CONT,
-        ProbeFilter::SKIP_LUKS2,
-        LUKS2_ID_INFO,
-    ),
-    (
-        ProbeFilter::SKIP_CONT,
-        ProbeFilter::SKIP_LUKS_OPAL,
-        LUKS_OPAL_ID_INFO,
-    ),
+/// Probe table defining the order of detection attempts.
+#[rustfmt::skip]
+pub const PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS1, LUKS1_ID_INFO),
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS2, LUKS2_ID_INFO),
+    (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS_OPAL, LUKS_OPAL_ID_INFO),
     (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_DOS, DOS_PT_ID_INFO),
     //(ProbeFilter::SKIP_PT, ProbeFilter::SKIP_GPT, GPT_PT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXFAT, EXFAT_ID_INFO),
@@ -63,26 +48,79 @@ static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT3, EXT3_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT4, EXT4_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_JBD, JBD_ID_INFO),
-    (
-        ProbeFilter::SKIP_FS,
-        ProbeFilter::SKIP_LINUX_SWAP_V0,
-        LINUX_SWAP_V0_ID_INFO,
-    ),
-    (
-        ProbeFilter::SKIP_FS,
-        ProbeFilter::SKIP_LINUX_SWAP_V1,
-        LINUX_SWAP_V1_ID_INFO,
-    ),
-    (
-        ProbeFilter::SKIP_FS,
-        ProbeFilter::SKIP_SWSUSPEND,
-        SWSUSPEND_ID_INFO,
-    ),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V0, LINUX_SWAP_V0_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_LINUX_SWAP_V1, LINUX_SWAP_V1_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_SWSUSPEND, SWSUSPEND_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_NTFS, NTFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_VFAT, VFAT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_XFS, XFS_ID_INFO),
 ];
 
+const SUPPORTED_TYPE: &[BlockType] = &[
+    BlockType::LUKS1,
+    BlockType::LUKS2,
+    BlockType::LUKSOpal,
+    BlockType::Dos,
+    BlockType::Exfat,
+    BlockType::Ext2,
+    BlockType::Ext3,
+    BlockType::Ext4,
+    BlockType::Jbd,
+    BlockType::LinuxSwapV0,
+    BlockType::LinuxSwapV1,
+    BlockType::Ntfs,
+    BlockType::Vfat,
+    BlockType::Xfs,
+];
+
+const SUPPORTED_STR: &[&str] = &[
+    "LUKS1",
+    "LUKS2",
+    "LUKS Opal",
+    "DOS",
+    "GPT",
+    "EXFAT",
+    "JBD",
+    "EXT2",
+    "EXT3",
+    "EXT4",
+    "NTFS",
+    "Linux Swap V0",
+    "Linux Swap V1",
+    "Swap Suspend",
+    "VFAT",
+    "XFS",
+];
+
+/// Represents a probe session on a file or block device.
+///
+/// A [`Probe`] provides access to the underlying file or device and stores
+/// the results of container, partition table, or filesystem detection.
+/// It encapsulates both the device metadata and the probe state.
+///
+/// The probe can optionally use buffered I/O to reduce system calls when
+/// reading multiple sectors.
+///
+/// # Fields
+/// - `file`: The open [`File`] or block device being probed.
+/// - `path`: Path to the file or device.
+/// - `buffer`: Optional buffered reader (`BufReader`) for optimized I/O.
+/// - `offset`: Starting offset in bytes for the probe.
+/// - `size`: Total size in bytes of the file or device.
+/// - `io_size`: Recommended I/O block size (`st_blksize` from [`fstat`](rustix::fs::fstat)).
+/// - `devno`: Device number of the file (`st_rdev`).
+/// - `disk_devno`: Device number of the disk containing the file (`st_dev`).
+/// - `sector_size`: Logical block size in bytes.
+/// - `mode`: File mode bits (`Mode`) used to determine file type.
+///
+/// # Platform-specific
+/// - `zone_size` (Linux only): Optional zone size of the block device, queried
+///   via the `BLKGETZONESZ` ioctl. `None` if the file is not a block device
+///   or on non-Linux platforms.
+///
+/// - `flags`: Current [`ProbeFlags`] set for this probe.
+/// - `filter`: Active [`ProbeFilter`] restricting which probes are run.
+/// - `value`: The detected [`ProbeResult`] after running `probe_values()`.
 #[derive(Debug)]
 pub struct Probe {
     file: File,
@@ -105,28 +143,28 @@ pub struct Probe {
 }
 
 impl Probe {
-    pub fn supported_string() -> Vec<&'static str> {
-        PROBES.iter().filter_map(|(_, _, info)| info.name).collect()
+    /// Returns all supported superblocks as strings in a array
+    pub fn supported_string() -> &'static [&'static str] {
+        SUPPORTED_STR
     }
 
-    pub fn supported_type() -> Vec<BlockType> {
-        PROBES
-            .iter()
-            .filter_map(|(_, _, info)| info.btype)
-            .collect()
+    /// Returns all supported superblocks in a array
+    pub fn supported_type() -> &'static [BlockType] {
+        SUPPORTED_TYPE
     }
 
-    /// Create a probe from an `File`.
+    /// Create a probe from a [`File`].
     ///
-    /// - Reads file metadata via `fstat`.
-    /// - If the file is a block device, queries device logical block size and size in bytes
-    ///   using kernel IOCTL calls.
-    /// - if the file is not a block device, probe defaults logical block size to 512
-    ///   and gets size in bytes from fstat.
-    ///   
-    /// On Linux only:
-    ///   Probe will perform a IOCTL call for zone size of the device adding it to probe
-    ///   struct if present.
+    /// - Reads file metadata via [`fstat`](rustix::fs::fstat).
+    /// - If the file is a block device:
+    ///   - queries the logical block size and total size in bytes using kernel ioctls.
+    /// - If the file is not a block device:
+    ///   - defaults logical block size to `512` bytes,
+    ///   - uses the file size from [`fstat`](rustix::fs::fstat).
+    ///
+    /// # Platform-specific
+    /// On **Linux**:
+    /// - An additional ioctl (`BLKGETZONESZ`) is used to query the device’s zone size.
     pub fn new(
         file: File,
         path: &Path,
@@ -178,14 +216,25 @@ impl Probe {
         })
     }
 
-    /// Enables buffered I/O with defined capacity.
+    /// Enable buffered I/O on the underlying [`File`].
+    ///
+    /// Creates a [`BufReader`] with defined capacity.
+    ///
+    /// # Errors
+    /// Returns [`BlockidError`] if cloning the file descriptor fails.
     pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), BlockidError> {
         let clone = self.file.try_clone()?;
         self.buffer = Some(BufReader::with_capacity(capacity, clone));
         return Ok(());
     }
 
-    /// Use buffered I/O with capacity defaulting to the IO size of the probed device.
+    /// Enable buffered I/O on the underlying [`File`].
+    ///
+    /// Creates a [`BufReader`] with capacity equal to the device’s reported
+    /// I/O block size.
+    ///
+    /// # Errors
+    /// Returns [`BlockidError`] if cloning the file descriptor fails.
     pub fn enable_buffering(&mut self) -> Result<(), BlockidError> {
         self.enable_buffering_with_capacity(self.io_size as usize)?;
         return Ok(());
@@ -266,6 +315,19 @@ impl Probe {
         return Err(IoErrorKind::NotFound.into());
     }
 
+    /// Run all detection probes and populate the [`Probe`] with the first
+    /// successful result.
+    ///
+    /// Probes are executed in the order defined by the static [`PROBES`](crate::probe::PROBES) table,
+    /// unless restricted by the probe’s [`ProbeFilter`].
+    ///
+    /// # Errors
+    /// Returns [`BlockidError::ProbesExhausted`] if no supported container,
+    /// partition table, or filesystem could be identified.
+    ///
+    /// # Panics
+    /// Will panic if more then 1 result is found. In normal cases this should never happen
+    /// if probing logic is correct and sane.
     pub fn probe_values(&mut self) -> Result<(), BlockidError> {
         if self.filter.is_empty() {
             for info in PROBES {
@@ -349,71 +411,124 @@ impl Probe {
         self.value.as_ref()
     }
 
-    pub fn result(&self) -> Option<ProbeResultView<'_>> {
-        self.value.as_ref().map(|r| ProbeResultView { inner: r })
+    /// Returns the result of the probe, if any.
+    ///
+    /// The returned value is a reference to [`ProbeResult`].  
+    /// You can inspect it manually by matching on variants:
+    /// - [`ProbeResult::Container`](ContainerResultView)
+    /// - [`ProbeResult::PartTable`](PartTableResultView)
+    /// - [`ProbeResult::Filesystem`](FilesystemResultView)
+    ///
+    /// # Convenience helpers
+    /// Instead of matching manually, you can use the provided helper methods:
+    /// - [`Probe::as_container()`] → returns [`ContainerResultView`] if the result is a container.
+    /// - [`Probe::as_part_table()`] → returns [`PartTableResultView`] if the result is a partition table.
+    /// - [`Probe::as_filesystem()`] → returns [`FilesystemResultView`] if the result is a filesystem.
+    pub fn result(&self) -> Option<&ProbeResult> {
+        self.value.as_ref()
     }
 
+    /// Returns a [`ContainerResultView`] if the probe detected a container.
+    pub fn as_container(&self) -> Option<ContainerResultView<'_>> {
+        match self.result() {
+            Some(ProbeResult::Container(c)) => Some(ContainerResultView { inner: c }),
+            _ => None,
+        }
+    }
+
+    /// Returns a [`PartTableResultView`] if the probe detected a partition table.
+    pub fn as_part_table(&self) -> Option<PartTableResultView<'_>> {
+        match self.result() {
+            Some(ProbeResult::PartTable(p)) => Some(PartTableResultView { inner: p }),
+            _ => None,
+        }
+    }
+
+    /// Returns a [`FilesystemResultView`] if the probe detected a filesystem.
+    pub fn as_filesystem(&self) -> Option<FilesystemResultView<'_>> {
+        match self.result() {
+            Some(ProbeResult::Filesystem(f)) => Some(FilesystemResultView { inner: f }),
+            _ => None,
+        }
+    }
+
+    /// Returns the path of the probed file or device as a [`Path`].
     #[inline]
     pub fn path(&self) -> &Path {
         return self.path.as_path();
     }
 
+    /// Returns the total size in bytes of the probed file or device.
     #[inline]
     pub fn size(&self) -> u64 {
         return self.size;
     }
 
+    /// Returns the starting offset in bytes used for this probe.
     #[inline]
     pub fn offset(&self) -> u64 {
         return self.offset;
     }
 
+    /// Returns the logical sector size in bytes of the device.
     #[inline]
     pub fn ssz(&self) -> u64 {
         return self.sector_size;
     }
 
     #[cfg(target_os = "linux")]
+    /// Returns the zone size in bytes of the block device (Linux only).
+    ///
+    /// `None` if the probe is not on a block device or the zone size could not be
+    /// determined.
     #[inline]
     pub fn zsz(&self) -> Option<u64> {
         return self.zone_size;
     }
 
+    /// Returns the device number of the probed file.
     #[inline]
     pub fn devno(&self) -> Dev {
         return self.devno;
     }
 
+    /// Returns the major number of the probed device.
     #[inline]
     pub fn devno_maj(&self) -> u32 {
         return major(self.devno);
     }
 
+    /// Returns the minor number of the probed device.
     #[inline]
     pub fn devno_min(&self) -> u32 {
         return minor(self.devno);
     }
 
+    /// Returns the device number of the disk containing the probed file.
     #[inline]
     pub fn disk_devno(&self) -> Dev {
         return self.disk_devno;
     }
 
+    /// Returns the major number of the disk containing the probed file.
     #[inline]
     pub fn disk_devno_maj(&self) -> u32 {
         return major(self.disk_devno);
     }
 
+    /// Returns the minor number of the disk containing the probed file.
     #[inline]
     pub fn disk_devno_min(&self) -> u32 {
         return minor(self.disk_devno);
     }
 
+    /// Returns if the probed file is a block device.
     #[inline]
     pub fn is_block_device(&self) -> bool {
         return FileType::from_raw_mode(self.mode.as_raw_mode()).is_block_device();
     }
 
+    /// Returns if the probed file is a regular file.
     #[inline]
     pub fn is_regular_file(&self) -> bool {
         return FileType::from_raw_mode(self.mode.as_raw_mode()).is_file();
@@ -440,56 +555,101 @@ impl Probe {
         return Ok(self.flags.contains(ProbeFlags::OPAL_LOCKED));
     }
 
+    /// Returns current Probe filters.
     pub fn filters(&self) -> ProbeFilter {
         self.filter
     }
 
+    /// Returns current Probe flags.
     pub fn flags(&self) -> ProbeFlags {
         self.flags
     }
 
+    /// Returns [`File`] being probed.
     pub fn file(&self) -> &File {
         &self.file
     }
 }
 
 bitflags! {
+    /// Flags controlling the behavior of a [`Probe`].
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ProbeFlags: u64 {
+        /// Indicates the device is small and may require special handling.
         const TINY_DEV = 1 << 0;
+        /// Marks that the OPAL status has been checked.
         const OPAL_CHECKED = 1 << 1;
+        /// Marks that the device is OPAL locked.
         const OPAL_LOCKED = 1 << 2;
+        /// Forces GPT detection even if a protective MBR is present.
         const FORCE_GPT_PMBR = 1 << 3;
     }
 
+    /// Filters used to skip specific probe categories or items.
+    ///
+    /// Can be combined to restrict probing to certain types of containers,
+    /// partition tables, or filesystems.
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ProbeFilter: u64 {
+        /// Skip container probes.
         const SKIP_CONT = 1 << 0;
+        /// Skip partition table probes.
         const SKIP_PT = 1 << 1;
+        /// Skip filesystem probes.
         const SKIP_FS = 1 << 2;
+        /// Skip LUKS1 container probes.
         const SKIP_LUKS1 = 1 << 3;
+        /// Skip LUKS2 container probes.
         const SKIP_LUKS2 = 1 << 4;
+        /// Skip LUKS OPAL container probes.
         const SKIP_LUKS_OPAL = 1 << 5;
+        /// Skip DOS partition table probes.
         const SKIP_DOS = 1 << 6;
+        /// Skip GPT partition table probes.
         const SKIP_GPT = 1 << 7;
+        /// Skip exFAT filesystem probes.
         const SKIP_EXFAT = 1 << 8;
+        /// Skip JBD filesystem probes.
         const SKIP_JBD = 1 << 9;
+        /// Skip EXT2 filesystem probes.
         const SKIP_EXT2 = 1 << 10;
+        /// Skip EXT3 filesystem probes.
         const SKIP_EXT3 = 1 << 11;
+        /// Skip EXT4 filesystem probes.
         const SKIP_EXT4 = 1 << 12;
+        /// Skip Linux Swap version 0 probes.
         const SKIP_LINUX_SWAP_V0 = 1 << 13;
+        /// Skip Linux Swap version 1 probes.
         const SKIP_LINUX_SWAP_V1 = 1 << 14;
+        /// Skip hibernation/swsuspend probes.
         const SKIP_SWSUSPEND = 1 << 15;
+        /// Skip NTFS filesystem probes.
         const SKIP_NTFS = 1 << 16;
+        /// Skip VFAT filesystem probes.
         const SKIP_VFAT = 1 << 17;
+        /// Skip XFS filesystem probes.
         const SKIP_XFS = 1 << 18;
     }
 }
 
+/// Represents the result of a [`Probe`].
+///
+/// A probe may detect one of the following types:
+/// - [`ContainerResult`]: a container or encrypted volume (e.g., LUKS).
+/// - [`PartTableResult`]: a partition table (e.g., DOS, GPT).
+/// - [`FilesystemResult`]: a filesystem (e.g., EXT4, NTFS, XFS).
+///
+/// Use the helper methods on [`Probe`] to access each variant:
+/// - [`Probe::as_container()`]
+/// - [`Probe::as_part_table()`]
+/// - [`Probe::as_filesystem()`]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ProbeResult {
+    /// Container results.
     Container(ContainerResult),
+    /// Partition table results.
     PartTable(PartTableResult),
+    /// Filesystem results.
     Filesystem(FilesystemResult),
 }
 
@@ -552,152 +712,166 @@ pub struct FilesystemResult {
     pub endianness: Option<Endianness>,
 }
 
-#[derive(Debug)]
-pub struct ProbeResultView<'a> {
-    inner: &'a ProbeResult,
-}
-
-impl<'a> ProbeResultView<'a> {
-    pub fn as_container(&self) -> Option<ContainerResultView<'a>> {
-        match self.inner {
-            ProbeResult::Container(c) => Some(ContainerResultView { inner: c }),
-            _ => None,
-        }
-    }
-
-    pub fn as_part_table(&self) -> Option<PartTableResultView<'a>> {
-        match self.inner {
-            ProbeResult::PartTable(p) => Some(PartTableResultView { inner: p }),
-            _ => None,
-        }
-    }
-
-    pub fn as_filesystem(&self) -> Option<FilesystemResultView<'a>> {
-        match self.inner {
-            ProbeResult::Filesystem(f) => Some(FilesystemResultView { inner: f }),
-            _ => None,
-        }
-    }
-}
-
+/// Container results returned by a [`Probe::as_container`].
+///
+/// Provides access to container metadata.
 #[derive(Debug)]
 pub struct ContainerResultView<'a> {
     inner: &'a ContainerResult,
 }
 
 impl<'a> ContainerResultView<'a> {
+    /// Returns the container type.
     pub fn block_type(&self) -> Option<BlockType> {
         self.inner.btype
     }
+    /// Returns the sector type.
     pub fn sec_type(&self) -> Option<SecType> {
         self.inner.sec_type
     }
+    /// Returns the UUID of the container.
     pub fn uuid(&self) -> Option<BlockidUUID> {
         self.inner.uuid
     }
+    /// Returns the label of the container.
     pub fn label(&self) -> Option<&str> {
         self.inner.label.as_deref()
     }
+    /// Returns the creator identifier.
     pub fn creator(&self) -> Option<&str> {
         self.inner.creator.as_deref()
     }
+    /// Returns the usage type of the container.
     pub fn usage(&self) -> Option<UsageType> {
         self.inner.usage
     }
+    /// Returns the version of the container, if known.
     pub fn version(&self) -> Option<BlockidVersion> {
         self.inner.version
     }
+    /// Returns the detected superblock magic bytes.
     pub fn sbmagic(&self) -> Option<&'static [u8]> {
         self.inner.sbmagic
     }
+    /// Returns the offset of the superblock magic.
     pub fn sbmagic_offset(&self) -> Option<u64> {
         self.inner.sbmagic_offset
     }
+    /// Returns the endianness of the container, if applicable.
     pub fn endianness(&self) -> Option<Endianness> {
         self.inner.endianness
     }
 }
 
+/// Partition Table results returned by a [`Probe::as_part_table`].
+///
+/// Provides access to partition table metadata and partition entries.
 #[derive(Debug)]
 pub struct PartTableResultView<'a> {
     inner: &'a PartTableResult,
 }
 
 impl<'a> PartTableResultView<'a> {
+    /// Returns the container type.
     pub fn block_type(&self) -> Option<BlockType> {
         self.inner.btype
     }
+    /// Returns the sector type.
     pub fn sec_type(&self) -> Option<SecType> {
         self.inner.sec_type
     }
+    /// Returns the UUID of the container.
     pub fn uuid(&self) -> Option<BlockidUUID> {
         self.inner.uuid
     }
+    /// Returns list of partitions.
     pub fn partitions(&self) -> impl Iterator<Item = &PartitionResults> {
         self.inner.partitions.as_deref().into_iter().flatten()
     }
+    /// Returns the detected superblock magic bytes.
     pub fn sbmagic(&self) -> Option<&'static [u8]> {
         self.inner.sbmagic
     }
+    /// Returns the offset of the superblock magic.
     pub fn sbmagic_offset(&self) -> Option<u64> {
         self.inner.sbmagic_offset
     }
+    /// Returns the endianness of the container, if applicable.
     pub fn endianness(&self) -> Option<Endianness> {
         self.inner.endianness
     }
 }
 
+/// Filesystem results returned by a [`Probe::as_filesystem`].
+///
+/// Provides access to filesystem metadata.
 #[derive(Debug)]
 pub struct FilesystemResultView<'a> {
     inner: &'a FilesystemResult,
 }
 
 impl<'a> FilesystemResultView<'a> {
+    /// Returns the container type.
     pub fn block_type(&self) -> Option<BlockType> {
         self.inner.btype
     }
+    /// Returns the sector type.
     pub fn sec_type(&self) -> Option<SecType> {
         self.inner.sec_type
     }
+    /// Returns the UUID of the filesystem.
     pub fn uuid(&self) -> Option<BlockidUUID> {
         self.inner.uuid
     }
+    /// Returns the log UUID of the filesystem.
     pub fn log_uuid(&self) -> Option<BlockidUUID> {
         self.inner.log_uuid
     }
+    /// Returns the external journal UUID of the filesystem.
     pub fn ext_journal(&self) -> Option<BlockidUUID> {
         self.inner.ext_journal
     }
+    /// Returns the label of the filesystem.
     pub fn label(&self) -> Option<&str> {
         self.inner.label.as_deref()
     }
+    /// Returns the creator identifier.
     pub fn creator(&self) -> Option<&str> {
         self.inner.creator.as_deref()
     }
+    /// Returns the usage type of the filesystem.
     pub fn usage(&self) -> Option<UsageType> {
         self.inner.usage
     }
+    /// Returns size in bytes of filesystem.
     pub fn size(&self) -> Option<u64> {
         self.inner.size
     }
+    /// Returns last block of filesystem.
     pub fn last_block(&self) -> Option<u64> {
         self.inner.fs_last_block
     }
+    /// Returns filesystem of block size.
     pub fn fs_block_size(&self) -> Option<u64> {
         self.inner.fs_block_size
     }
+    /// Returns block size in bytes of filesystem.
     pub fn block_size(&self) -> Option<u64> {
         self.inner.block_size
     }
+    /// Returns the version of the filesystem, if known.
     pub fn version(&self) -> Option<BlockidVersion> {
         self.inner.version
     }
+    /// Returns the detected superblock magic bytes.
     pub fn sbmagic(&self) -> Option<&'static [u8]> {
         self.inner.sbmagic
     }
+    /// Returns the offset of the superblock magic.
     pub fn sbmagic_offset(&self) -> Option<u64> {
         self.inner.sbmagic_offset
     }
+    /// Returns the endianness of the filesystem, if applicable.
     pub fn endianness(&self) -> Option<Endianness> {
         self.inner.endianness
     }
@@ -741,19 +915,19 @@ impl fmt::Display for BlockType {
             Self::LUKS1 => write!(f, "LUKS1"),
             Self::LUKS2 => write!(f, "LUKS2"),
             Self::LUKSOpal => write!(f, "LUKS Opal"),
-            Self::Dos => write!(f, "Dos"),
-            Self::Gpt => write!(f, "Gpt"),
-            Self::Exfat => write!(f, "Exfat"),
-            Self::Jbd => write!(f, "Jbd"),
-            Self::Ext2 => write!(f, "Ext2"),
-            Self::Ext3 => write!(f, "Ext3"),
-            Self::Ext4 => write!(f, "Ext4"),
-            Self::Ntfs => write!(f, "Ntfs"),
+            Self::Dos => write!(f, "DOS"),
+            Self::Gpt => write!(f, "GPT"),
+            Self::Exfat => write!(f, "EXFAT"),
+            Self::Jbd => write!(f, "JBD"),
+            Self::Ext2 => write!(f, "EXT2"),
+            Self::Ext3 => write!(f, "EXT3"),
+            Self::Ext4 => write!(f, "EXT4"),
+            Self::Ntfs => write!(f, "NTFS"),
             Self::LinuxSwapV0 => write!(f, "Linux Swap V0"),
             Self::LinuxSwapV1 => write!(f, "Linux Swap V1"),
             Self::SwapSuspend => write!(f, "Swap Suspend"),
-            Self::Vfat => write!(f, "Vfat"),
-            Self::Xfs => write!(f, "Xfs"),
+            Self::Vfat => write!(f, "VFAT"),
+            Self::Xfs => write!(f, "XFS"),
         }
     }
 }
