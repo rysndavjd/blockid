@@ -35,6 +35,11 @@ use crate::{
     },
 };
 
+/// Static probe table.
+///
+/// Table defines the order of detection attempts. The first filter value
+/// is treated as a category filter; the second as an item filter. The probe
+/// functions checks `ProbeFilter` to skip categories or specific items.
 static PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (
         ProbeFilter::SKIP_CONT,
@@ -92,7 +97,7 @@ pub struct Probe {
     sector_size: u64,
     mode: Mode,
     #[cfg(target_os = "linux")]
-    zone_size: u64,
+    zone_size: Option<u64>,
 
     flags: ProbeFlags,
     filter: ProbeFilter,
@@ -111,6 +116,17 @@ impl Probe {
             .collect()
     }
 
+    /// Create a probe from an `File`.
+    ///
+    /// - Reads file metadata via `fstat`.
+    /// - If the file is a block device, queries device logical block size and size in bytes
+    ///   using kernel IOCTL calls.
+    /// - if the file is not a block device, probe defaults logical block size to 512
+    ///   and gets size in bytes from fstat.
+    ///   
+    /// On Linux only:
+    ///   Probe will perform a IOCTL call for zone size of the device adding it to probe
+    ///   struct if present.
     pub fn new(
         file: File,
         path: &Path,
@@ -126,10 +142,10 @@ impl Probe {
                 (
                     u64::from(logical_block_size(file.as_fd())?),
                     device_size_bytes(file.as_fd())?,
-                    u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9),
+                    Some(u64::from(ioctl_blkgetzonesz(file.as_fd())? << 9)),
                 )
             } else {
-                (512, stat.st_size as u64, 0)
+                (512, stat.st_size as u64, None)
             };
 
         #[cfg(not(target_os = "linux"))]
@@ -162,12 +178,14 @@ impl Probe {
         })
     }
 
+    /// Enables buffered I/O with defined capacity.
     pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), BlockidError> {
         let clone = self.file.try_clone()?;
         self.buffer = Some(BufReader::with_capacity(capacity, clone));
         return Ok(());
     }
 
+    /// Use buffered I/O with capacity defaulting to the IO size of the probed device.
     pub fn enable_buffering(&mut self) -> Result<(), BlockidError> {
         self.enable_buffering_with_capacity(self.io_size as usize)?;
         return Ok(());
@@ -222,7 +240,10 @@ impl Probe {
         return self.read_exact_at::<512>(sector << 9);
     }
 
-    pub(crate) fn get_magic(&mut self, id_info: &BlockidIdinfo) -> Result<Option<BlockidMagic>, IoError> {
+    pub(crate) fn get_magic(
+        &mut self,
+        id_info: &BlockidIdinfo,
+    ) -> Result<Option<BlockidMagic>, IoError> {
         match id_info.magics {
             Some(magics) => {
                 for magic in magics {
@@ -309,6 +330,7 @@ impl Probe {
         self.value = Some(result)
     }
 
+    /// Create a probe from a file path.
     pub fn from_filename(
         filename: &Path,
         flags: ProbeFlags,
@@ -353,7 +375,7 @@ impl Probe {
 
     #[cfg(target_os = "linux")]
     #[inline]
-    pub fn zsz(&self) -> u64 {
+    pub fn zsz(&self) -> Option<u64> {
         return self.zone_size;
     }
 
@@ -397,6 +419,12 @@ impl Probe {
         return FileType::from_raw_mode(self.mode.as_raw_mode()).is_file();
     }
 
+    /// On Linux only:
+    /// - queries OPAL device status via ioctl (if not already checked).
+    /// - sets `ProbeFlags::OPAL_CHECKED` and conditionally `OPAL_LOCKED`.
+    /// - returns whether the device is currently OPAL locked.
+    ///
+    /// When building on non-Linux platforms opal locked check is skipped and a warning is logged
     #[cfg(target_os = "linux")]
     pub(crate) fn is_opal_locked(&mut self) -> Result<bool, rustix::io::Errno> {
         if !self.flags.contains(ProbeFlags::OPAL_CHECKED) {

@@ -7,6 +7,7 @@ use std::{
 };
 
 use glob::glob;
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use libc::{S_IFBLK, dev_t, mode_t};
 use rustix::fs::{Dev, FileType, major, minor, stat};
 use thiserror::Error;
