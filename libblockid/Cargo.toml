@@ -15,7 +15,6 @@ default = []
 
 [dependencies]
 bitflags = { version = "2.9.1", default-features = false, features = ["std"] }
-crc = "3.3.0"
 zerocopy = { version = "0.8.26", default-features = false, features = ["derive", "alloc", "std"] }
 uuid = { version = "1.16.0", default-features = false, features = ["zerocopy", "std"] }
 rustix = { version = "1.0.7", default-features = false, features = ["fs", "alloc", "stdio", "std"] }

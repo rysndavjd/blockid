@@ -332,15 +332,28 @@ impl Probe {
         if self.filter.is_empty() {
             for info in PROBES {
                 let result = match self.get_magic(&info.2) {
-                    Ok(magic) => {
-                        self.file().seek(SeekFrom::Start(0))?;
-                        match magic {
-                            Some(t) => (info.2.probe_fn)(self, t),
-                            None => (info.2.probe_fn)(self, BlockidMagic::EMPTY_MAGIC),
+                    Ok(magic) => match magic {
+                        Some(t) => {
+                            log::debug!(
+                                "probe_values - BLOCKIDMAGIC: Correct Magic\nInfo: \"{:?}\"\n",
+                                info.2
+                            );
+                            (info.2.probe_fn)(self, t)
                         }
-                    }
+                        None => {
+                            log::debug!(
+                                "probe_values - BLOCKIDMAGIC: Empty Magic\nInfo: \"{:?}\"\n",
+                                info.2
+                            );
+                            (info.2.probe_fn)(self, BlockidMagic::EMPTY_MAGIC)
+                        }
+                    },
                     Err(e) => {
-                        log::error!("Wrong Magic\nInfo: \"{:?}\",\nError: {:?}", info.2, e);
+                        log::error!(
+                            "probe_values - BLOCKIDMAGIC: Wrong Magic\nInfo: \"{:?}\",\nError: {:?}\n",
+                            info.2,
+                            e
+                        );
                         continue;
                     }
                 };
@@ -566,7 +579,7 @@ impl Probe {
     }
 
     /// Returns [`File`] being probed.
-    pub fn file(&self) -> &File {
+    pub fn file(&mut self) -> &File {
         &self.file
     }
 }
@@ -597,37 +610,37 @@ bitflags! {
         const SKIP_PT = 1 << 1;
         /// Skip filesystem probes.
         const SKIP_FS = 1 << 2;
-        /// Skip LUKS1 container probes.
+        /// Skip LUKS1 container probe.
         const SKIP_LUKS1 = 1 << 3;
-        /// Skip LUKS2 container probes.
+        /// Skip LUKS2 container probe.
         const SKIP_LUKS2 = 1 << 4;
-        /// Skip LUKS OPAL container probes.
+        /// Skip LUKS OPAL container probe.
         const SKIP_LUKS_OPAL = 1 << 5;
-        /// Skip DOS partition table probes.
+        /// Skip DOS partition table probe.
         const SKIP_DOS = 1 << 6;
-        /// Skip GPT partition table probes.
+        /// Skip GPT partition table probe.
         const SKIP_GPT = 1 << 7;
-        /// Skip exFAT filesystem probes.
+        /// Skip exFAT filesystem probe.
         const SKIP_EXFAT = 1 << 8;
-        /// Skip JBD filesystem probes.
+        /// Skip JBD filesystem probe.
         const SKIP_JBD = 1 << 9;
-        /// Skip EXT2 filesystem probes.
+        /// Skip EXT2 filesystem probe.
         const SKIP_EXT2 = 1 << 10;
-        /// Skip EXT3 filesystem probes.
+        /// Skip EXT3 filesystem probe.
         const SKIP_EXT3 = 1 << 11;
-        /// Skip EXT4 filesystem probes.
+        /// Skip EXT4 filesystem probe.
         const SKIP_EXT4 = 1 << 12;
-        /// Skip Linux Swap version 0 probes.
+        /// Skip Linux Swap version 0 probe.
         const SKIP_LINUX_SWAP_V0 = 1 << 13;
-        /// Skip Linux Swap version 1 probes.
+        /// Skip Linux Swap version 1 probe.
         const SKIP_LINUX_SWAP_V1 = 1 << 14;
-        /// Skip hibernation/swsuspend probes.
+        /// Skip hibernation/swsuspend probe.
         const SKIP_SWSUSPEND = 1 << 15;
-        /// Skip NTFS filesystem probes.
+        /// Skip NTFS filesystem probe.
         const SKIP_NTFS = 1 << 16;
-        /// Skip VFAT filesystem probes.
+        /// Skip VFAT filesystem probe.
         const SKIP_VFAT = 1 << 17;
-        /// Skip XFS filesystem probes.
+        /// Skip XFS filesystem probe.
         const SKIP_XFS = 1 << 18;
     }
 }
@@ -949,11 +962,38 @@ impl fmt::Display for SecType {
     }
 }
 
+/// Unique identifier for a block.
+///
+/// # Variants
+/// - `Uuid(Uuid)` - Uses a standard [`Uuid`] as the identifier.
+/// - `VolumeId32(VolumeId32)` - Uses a 32-bit volume ID as the identifier.
+/// - `VolumeId64(VolumeId64)` - Uses a 64-bit volume ID as the identifier.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockidUUID {
+    /// Standard [`Uuid`] identifier.
     Uuid(Uuid),
+    /// 32-bit volume identifier.
     VolumeId32(VolumeId32),
+    /// 64-bit volume identifier.
     VolumeId64(VolumeId64),
+}
+
+impl From<Uuid> for BlockidUUID {
+    fn from(value: Uuid) -> Self {
+        BlockidUUID::Uuid(value)
+    }
+}
+
+impl From<VolumeId32> for BlockidUUID {
+    fn from(value: VolumeId32) -> Self {
+        BlockidUUID::VolumeId32(value)
+    }
+}
+
+impl From<VolumeId64> for BlockidUUID {
+    fn from(value: VolumeId64) -> Self {
+        BlockidUUID::VolumeId64(value)
+    }
 }
 
 impl fmt::Display for BlockidUUID {
@@ -999,14 +1039,19 @@ pub enum Endianness {
 
 type ProbeFn = fn(&mut Probe, BlockidMagic) -> Result<(), BlockidError>;
 
+/// Represents a magic identifier for a block.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BlockidMagic {
+    /// The magic value as a byte slice.
     pub magic: &'static [u8],
+    /// The length of the block or data segment.
     pub len: usize,
+    /// Offset within the block for the magic value.
     pub b_offset: u64,
 }
 
 impl BlockidMagic {
+    /// An empty [`BlockidMagic`] with zero length, zero offset, and a zero byte magic.
     pub const EMPTY_MAGIC: BlockidMagic = BlockidMagic {
         magic: &[0],
         len: 0,

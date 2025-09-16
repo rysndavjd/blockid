@@ -149,7 +149,19 @@ pub fn path_to_devno<P: AsRef<Path>>(path: P) -> Result<Dev, IoError> {
 /// # Panics
 /// Panics if glob patterns fail, which should never happen on supported systems.
 ///
-pub fn block_from_uuid(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
+pub fn block_from_uuid<T: Into<BlockidUUID>>(blockid_uuid: T) -> Result<PathBuf, BlockidError> {
+    let uuid: BlockidUUID = blockid_uuid.into();
+    log::debug!("block_from_uuid - REQUESTED UUID: {uuid:?}");
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(buf) = read_link(format!("/dev/disk/by-uuid/{}", uuid))
+            && let Some(t) = buf.file_name()
+        {
+            return Ok(PathBuf::from("/dev/").join(t));
+        };
+    }
+
     let patterns = [
         "/dev/sd*",
         "/dev/hd*",
@@ -161,13 +173,25 @@ pub fn block_from_uuid(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
     ];
 
     for pattern in patterns {
+        log::debug!("block_from_uuid - PATTERN: {pattern:?}");
         for entry in glob(pattern).expect("GLOB patterns should never fail") {
-            let path = entry?;
+            let path = entry.unwrap();
             let stat = stat(&path)?;
+
+            log::debug!("block_from_uuid - PATH: {path:?}");
 
             let mut probe =
                 Probe::from_filename(&path, ProbeFlags::empty(), ProbeFilter::empty(), 0)?;
-            probe.probe_values()?;
+
+            match probe.enable_buffering_with_capacity(4096) {
+                Ok(_) => (),
+                Err(_) => continue,
+            };
+
+            match probe.probe_values() {
+                Ok(_) => (),
+                Err(_) => continue,
+            };
 
             let value = match probe.inner_result().ok_or(BlockidError::NoResultPresent)? {
                 ProbeResult::Container(r) => r.uuid,
@@ -175,8 +199,10 @@ pub fn block_from_uuid(uuid: &BlockidUUID) -> Result<PathBuf, BlockidError> {
                 ProbeResult::Filesystem(r) => r.uuid,
             };
 
+            log::debug!("block_from_uuid - FOUND UUID: {value:?}");
+
             if FileType::from_raw_mode(stat.st_mode).is_block_device()
-                && &value.ok_or(BlockidError::NoResultPresent)? == uuid
+                && value.ok_or(BlockidError::NoResultPresent)? == uuid
             {
                 return Ok(path);
             }

@@ -228,12 +228,7 @@ const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
 
-fn read_vfat_dir_entry(
-    probe: &mut Probe,
-    offset: u64,
-) -> Result<VfatDirEntry, FatError> {
-    probe.seek(SeekFrom::Start(0))?;
-
+fn read_vfat_dir_entry(probe: &mut Probe, offset: u64) -> Result<VfatDirEntry, FatError> {
     let mut buffer = [0u8; 32];
     probe.seek(SeekFrom::Start(offset))?;
     probe.read_exact(&mut buffer)?;
@@ -476,7 +471,8 @@ fn probe_fat32(
 
     let fsinfo_sect = u64::from(vs.vs_fsinfo_sector);
     if fsinfo_sect != 0 {
-        let fsinfo: Fat32FsInfo = probe.map_from_file(fsinfo_sect * u64::from(ms.ms_sector_size))?;
+        let fsinfo: Fat32FsInfo =
+            probe.map_from_file(fsinfo_sect * u64::from(ms.ms_sector_size))?;
 
         if &fsinfo.signature1 != b"\x52\x52\x61\x41"
             && &fsinfo.signature1 != b"\x52\x52\x64\x41"

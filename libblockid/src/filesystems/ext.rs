@@ -1,19 +1,22 @@
-use std::io::Error as IoError;
+use std::{io::Error as IoError, mem::offset_of};
 
+use crate::{
+    BlockidError,
+    filesystems::FsError,
+    probe::{
+        BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, FilesystemResult,
+        Probe, ProbeResult, UsageType,
+    },
+    util::decode_utf8_lossy_from,
+};
 use bitflags::bitflags;
-use crc_fast::{checksum_with_params, CrcParams};
+use crc_fast::{CrcParams, checksum_with_params};
 use rustix::fs::makedev;
 use thiserror::Error;
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64,
-};
-use crate::{
-    filesystems::FsError, probe::{
-        BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, FilesystemResult,
-        Probe, ProbeResult, UsageType,
-    }, util::decode_utf8_lossy_from, BlockidError
 };
 
 /*
@@ -349,7 +352,7 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
             0xe3069283,
         );
 
-        let calc_sum = checksum_with_params(crc32c, &es.as_bytes()[..1020]);
+        let calc_sum = checksum_with_params(crc32c, &es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
         let sum = u64::from(es.s_checksum);
 
         if sum != calc_sum {
@@ -406,7 +409,6 @@ fn ext_get_info(
     ));
 
     let log_block_size = u32::from(es.s_log_block_size);
-
 
     let block_size: u64 = if log_block_size < 32 {
         u64::from(1024u32 << log_block_size)
