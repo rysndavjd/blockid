@@ -82,6 +82,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "clap",
+ "crc-fast",
  "libblockid",
  "log",
  "rustix",
@@ -312,7 +313,6 @@ name = "libblockid"
 version = "0.3.1"
 dependencies = [
  "bitflags",
- "crc",
  "crc-fast",
  "glob",
  "libc",

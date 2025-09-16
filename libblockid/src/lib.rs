@@ -31,9 +31,10 @@ use thiserror::Error;
 use crate::{containers::ContError, filesystems::FsError, partitions::PtError};
 
 pub use crate::{
+    filesystems::volume_id::{VolumeId32, VolumeId64},
     probe::{
-        ContainerResultView, FilesystemResultView, PROBES, PartTableResultView, Probe, ProbeFilter,
-        ProbeFlags, ProbeResult, BlockidMagic
+        BlockidMagic, BlockidUUID, ContainerResultView, FilesystemResultView, PROBES,
+        PartTableResultView, Probe, ProbeFilter, ProbeFlags, ProbeResult,
     },
     util::{block_from_uuid, devno_to_path, path_to_devno},
 };

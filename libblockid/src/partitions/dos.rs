@@ -31,8 +31,10 @@ pub enum DosPTError {
     ProbablyAix,
     #[error("Partition table looks like GPT")]
     ProbablyGPT,
-    #[error("Partition table looks like FAT")]
-    ProbablyFAT,
+    #[error("Partition table looks like VFAT")]
+    ProbablyVFAT,
+    #[error("Partition table looks like EXFAT")]
+    ProbablyEXFAT,
     #[error("Partition table looks like NTFS")]
     ProbablyNTFS,
     #[error("Missing boot indicator in partition entry")]
@@ -266,8 +268,12 @@ fn is_valid_dos(probe: &mut Probe, pt: DosTable) -> Result<(), DosPTError> {
         }
     }
 
-    if probe_is_vfat(probe).is_ok() && probe_is_exfat(probe).is_ok() {
-        return Err(DosPTError::ProbablyFAT);
+    if probe_is_vfat(probe).is_ok() {
+        return Err(DosPTError::ProbablyVFAT);
+    }
+
+    if probe_is_exfat(probe).is_ok() {
+        return Err(DosPTError::ProbablyEXFAT);
     }
 
     if probe_is_ntfs(probe).is_ok() {

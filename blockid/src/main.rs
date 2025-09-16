@@ -2,16 +2,20 @@ use bitflags::bitflags;
 use clap::{
     Arg, ArgAction, Command, ValueEnum, builder::EnumValueParser, parser::ValuesRef, value_parser,
 };
-use libblockid::{devno_to_path, BlockidError as LibblockidError, BlockidMagic, Probe, ProbeBuilder};
+use libblockid::{
+    BlockidError as LibblockidError, BlockidMagic, BlockidUUID, Probe, ProbeBuilder, VolumeId32,
+    block_from_uuid, devno_to_path,
+};
 use rustix::{fs::makedev, ioctl::opcode::read};
 use simple_logger::init;
 use std::{
     fs::File,
-    io::{Error as IoError, ErrorKind},
+    io::{Error as IoError, ErrorKind, Read},
     os::fd::AsFd,
     path::{Path, PathBuf},
 };
 use thiserror::Error;
+use uuid::Uuid;
 
 const CACHE_PATH: &str = env!("CACHE_PATH");
 
@@ -46,10 +50,17 @@ enum OutputTags {
 }
 
 fn main() -> Result<(), BlockidError> {
-    init().unwrap();
+    //init().unwrap();
 
-    let mut p = ProbeBuilder::new().path("./test").build().unwrap();
-    
+    //let mut probe = ProbeBuilder::new().path("/dev/nvme0n1p1").build().unwrap();
+    let p = block_from_uuid(BlockidUUID::VolumeId32(VolumeId32::new([
+        0x5c, 0xc2, 0xf1, 0xbb,
+    ])))
+    .unwrap(); //  // bbf1c25c
+    //probe.probe_values().unwrap();
+
+    //let p = probe.as_filesystem().unwrap();
+
     println!("{p:?}");
 
     let matches = Command::new("blockid")

@@ -1,4 +1,4 @@
-use std::io::Error as IoError;
+use std::{io::Error as IoError, mem::offset_of};
 
 use crc_fast::{CrcAlgorithm::Crc32Iscsi, Digest};
 use thiserror::Error;
@@ -181,9 +181,9 @@ pub fn xfs_verify(sb: XfsSuperBlock, crc_area: Vec<u8>) -> Result<(), XfsError> 
 
         let mut digest = Digest::new(Crc32Iscsi);
 
-        digest.update(&crc_area[0..224]);
+        digest.update(&crc_area[0..offset_of!(XfsSuperBlock, crc)]);
         digest.update(&[0u8; 4]);
-        digest.update(&crc_area[228..]);
+        digest.update(&crc_area[offset_of!(XfsSuperBlock, spino_align)..]);
 
         let crc_bytes = digest.finalize().to_le_bytes();
 
