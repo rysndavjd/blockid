@@ -2,7 +2,7 @@ use bitflags::bitflags;
 use clap::{
     Arg, ArgAction, Command, ValueEnum, builder::EnumValueParser, parser::ValuesRef, value_parser,
 };
-use libblockid::{BlockidError as LibblockidError, Probe, ProbeBuilder, devno_to_path};
+use libblockid::{devno_to_path, BlockidError as LibblockidError, BlockidMagic, Probe, ProbeBuilder};
 use rustix::{fs::makedev, ioctl::opcode::read};
 use simple_logger::init;
 use std::{
@@ -48,10 +48,8 @@ enum OutputTags {
 fn main() -> Result<(), BlockidError> {
     init().unwrap();
 
-    let mut p = ProbeBuilder::new().path("/dev/sdb1").build().unwrap();
-    p.enable_buffering_with_capacity(16384).unwrap();
-    p.probe_values().unwrap();
-
+    let mut p = ProbeBuilder::new().path("./test").build().unwrap();
+    
     println!("{p:?}");
 
     let matches = Command::new("blockid")
