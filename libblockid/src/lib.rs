@@ -33,7 +33,7 @@ use crate::{containers::ContError, filesystems::FsError, partitions::PtError};
 pub use crate::{
     probe::{
         ContainerResultView, FilesystemResultView, PROBES, PartTableResultView, Probe, ProbeFilter,
-        ProbeFlags, ProbeResult,
+        ProbeFlags, ProbeResult, BlockidMagic
     },
     util::{block_from_uuid, devno_to_path, path_to_devno},
 };

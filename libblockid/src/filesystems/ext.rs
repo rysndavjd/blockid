@@ -1,7 +1,7 @@
 use std::io::Error as IoError;
 
 use bitflags::bitflags;
-use crc_fast::{CrcAlgorithm::Crc32Iscsi, checksum};
+use crc_fast::{checksum_with_params, CrcParams};
 use rustix::fs::makedev;
 use thiserror::Error;
 use uuid::Uuid;
@@ -9,15 +9,11 @@ use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64,
 };
-
 use crate::{
-    BlockidError,
-    filesystems::FsError,
-    probe::{
+    filesystems::FsError, probe::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, FilesystemResult,
         Probe, ProbeResult, UsageType,
-    },
-    util::decode_utf8_lossy_from,
+    }, util::decode_utf8_lossy_from, BlockidError
 };
 
 /*
@@ -342,10 +338,21 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
     let ro_compat = es.feature_rocompat();
 
     if ro_compat.contains(ExtFeatureRoCompat::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
-        let s_checksum = es.s_checksum;
+        // Seems EXT checksum does not XOR out the final value
+        let crc32c = CrcParams::new(
+            "CRC-32/ExtCrc32c",
+            32,
+            0x1EDC6F41,
+            0xffffffff,
+            true,
+            0,
+            0xe3069283,
+        );
 
-        let sum = checksum(Crc32Iscsi, &s_checksum.to_bytes());
-        if sum != u64::from(s_checksum) {
+        let calc_sum = checksum_with_params(crc32c, &es.as_bytes()[..1020]);
+        let sum = u64::from(es.s_checksum);
+
+        if sum != calc_sum {
             return Err(ExtError::HeaderChecksumInvalid);
         };
     } else if u32::from(es.s_log_block_size) >= 256 {
@@ -400,11 +407,12 @@ fn ext_get_info(
 
     let log_block_size = u32::from(es.s_log_block_size);
 
-    if log_block_size < 32 {
-        return Err(ExtError::LogBlockSizeInvalid);
-    }
 
-    let block_size: u64 = u64::from(1024u32 << log_block_size);
+    let block_size: u64 = if log_block_size < 32 {
+        u64::from(1024u32 << log_block_size)
+    } else {
+        0
+    };
 
     let fslastblock: u64 = u64::from(u32::from(es.s_blocks_count))
         | if fi.contains(ExtFeatureIncompat::EXT4_FEATURE_INCOMPAT_64BIT) {
