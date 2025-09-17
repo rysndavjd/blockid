@@ -19,8 +19,10 @@ use crate::ioctl::{device_size_bytes, logical_block_size};
 
 use crate::{
     BlockidError,
+    BlockidError,
     containers::luks::{LUKS_OPAL_ID_INFO, LUKS1_ID_INFO, LUKS2_ID_INFO},
     filesystems::{
+        apfs::APFS_ID_INFO,
         apfs::APFS_ID_INFO,
         exfat::EXFAT_ID_INFO,
         ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO, JBD_ID_INFO},
@@ -65,6 +67,7 @@ const SUPPORTED_TYPE: &[BlockType] = &[
     BlockType::Dos,
     BlockType::Exfat,
     BlockType::Apfs,
+    BlockType::Apfs,
     BlockType::Ext2,
     BlockType::Ext3,
     BlockType::Ext4,
@@ -84,6 +87,7 @@ const SUPPORTED_STR: &[&str] = &[
     "GPT",
     "EXFAT",
     "JBD",
+    "APFS",
     "APFS",
     "EXT2",
     "EXT3",
@@ -208,6 +212,8 @@ impl Probe {
             size,
             /* Some architectures uses different integer size in blksize in its stat field */
             #[allow(clippy::useless_conversion)]
+            /* Some architectures uses different integer size in blksize in its stat field */
+            #[allow(clippy::useless_conversion)]
             io_size: stat.st_blksize.into(),
             devno: stat.st_rdev,
             disk_devno: stat.st_dev,
@@ -228,6 +234,8 @@ impl Probe {
     /// # Errors
     /// Returns [`IoError`] if cloning the file descriptor fails.
     pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), IoError> {
+    /// Returns [`IoError`] if cloning the file descriptor fails.
+    pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), IoError> {
         let clone = self.file.try_clone()?;
         self.buffer = Some(BufReader::with_capacity(capacity, clone));
         return Ok(());
@@ -239,6 +247,8 @@ impl Probe {
     /// I/O block size.
     ///
     /// # Errors
+    /// Returns [`IoError`] if cloning the file descriptor fails.
+    pub fn enable_buffering(&mut self) -> Result<(), IoError> {
     /// Returns [`IoError`] if cloning the file descriptor fails.
     pub fn enable_buffering(&mut self) -> Result<(), IoError> {
         self.enable_buffering_with_capacity(self.io_size as usize)?;
@@ -306,10 +316,27 @@ impl Probe {
     ///
     /// # Panics
     /// - Each [`BlockidMagic`] must have [`BlockidMagic::len`] `<= 16`.
+    /// Look up and validate a block magic.
+    ///
+    /// Seeks to each offset in [`BlockidIdinfo::magics`], reads up to [`BlockidMagic::len`] bytes
+    /// of each magic and compares against the expected pattern.
+    ///
+    /// # Returns
+    /// - `Ok(Some(BlockidMagic))` if a match is found.
+    /// - `Ok(None)` if no magics are defined.
+    /// - `Err(IoError)` if I/O fails or no match is found.
+    ///
+    /// # Panics
+    /// - Each [`BlockidMagic`] must have [`BlockidMagic::len`] `<= 16`.
     pub(crate) fn get_magic(
         &mut self,
         id_info: &BlockidIdinfo,
     ) -> Result<Option<BlockidMagic>, IoError> {
+        /*
+         * This avoids allocating a buffer on the stack everytime and or
+         * doing a heap allocation for each magic.
+         */
+        let mut buffer = [0u8; 16];
         /*
          * This avoids allocating a buffer on the stack everytime and or
          * doing a heap allocation for each magic.
@@ -324,11 +351,15 @@ impl Probe {
 
                     self.read_exact(&mut buffer[..magic.len])?;
 
+                    self.read_exact(&mut buffer[..magic.len])?;
+
+                    if &buffer[..magic.len] == magic.magic {
                     if &buffer[..magic.len] == magic.magic {
                         return Ok(Some(*magic));
                     }
                 }
             }
+            None => return Ok(None),
             None => return Ok(None),
         }
 
@@ -664,6 +695,8 @@ bitflags! {
         const SKIP_XFS = 1 << 18;
         /// Skip APFS filesystem probe.
         const SKIP_APFS = 1 << 19;
+        /// Skip APFS filesystem probe.
+        const SKIP_APFS = 1 << 19;
     }
 }
 
@@ -934,6 +967,7 @@ pub enum BlockType {
     Exfat,
     Jbd,
     Apfs,
+    Apfs,
     Ext2,
     Ext3,
     Ext4,
@@ -955,6 +989,7 @@ impl fmt::Display for BlockType {
             Self::Gpt => write!(f, "GPT"),
             Self::Exfat => write!(f, "EXFAT"),
             Self::Jbd => write!(f, "JBD"),
+            Self::Apfs => write!(f, "APFS"),
             Self::Apfs => write!(f, "APFS"),
             Self::Ext2 => write!(f, "EXT2"),
             Self::Ext3 => write!(f, "EXT3"),
