@@ -13,14 +13,15 @@ use rustix::{
 use uuid::Uuid;
 use zerocopy::FromBytes;
 
-use crate::BlockidError;
 #[cfg(target_os = "linux")]
 use crate::ioctl::{OpalStatusFlags, ioctl_blkgetzonesz, ioctl_ioc_opal_get_status};
 use crate::ioctl::{device_size_bytes, logical_block_size};
 
 use crate::{
+    BlockidError,
     containers::luks::{LUKS_OPAL_ID_INFO, LUKS1_ID_INFO, LUKS2_ID_INFO},
     filesystems::{
+        apfs::APFS_ID_INFO,
         exfat::EXFAT_ID_INFO,
         ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO, JBD_ID_INFO},
         linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO, SWSUSPEND_ID_INFO},
@@ -43,6 +44,7 @@ pub const PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_CONT, ProbeFilter::SKIP_LUKS_OPAL, LUKS_OPAL_ID_INFO),
     (ProbeFilter::SKIP_PT, ProbeFilter::SKIP_DOS, DOS_PT_ID_INFO),
     //(ProbeFilter::SKIP_PT, ProbeFilter::SKIP_GPT, GPT_PT_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_APFS, APFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXFAT, EXFAT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT2, EXT2_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_EXT3, EXT3_ID_INFO),
@@ -62,6 +64,7 @@ const SUPPORTED_TYPE: &[BlockType] = &[
     BlockType::LUKSOpal,
     BlockType::Dos,
     BlockType::Exfat,
+    BlockType::Apfs,
     BlockType::Ext2,
     BlockType::Ext3,
     BlockType::Ext4,
@@ -81,6 +84,7 @@ const SUPPORTED_STR: &[&str] = &[
     "GPT",
     "EXFAT",
     "JBD",
+    "APFS",
     "EXT2",
     "EXT3",
     "EXT4",
@@ -202,7 +206,8 @@ impl Probe {
             buffer: None,
             offset,
             size,
-            #[allow(clippy::useless_conversion)] /* Some architectures uses different integer size in blksize in its fstat field */
+            /* Some architectures uses different integer size in blksize in its stat field */
+            #[allow(clippy::useless_conversion)]
             io_size: stat.st_blksize.into(),
             devno: stat.st_rdev,
             disk_devno: stat.st_dev,
@@ -221,8 +226,8 @@ impl Probe {
     /// Creates a [`BufReader`] with defined capacity.
     ///
     /// # Errors
-    /// Returns [`BlockidError`] if cloning the file descriptor fails.
-    pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), BlockidError> {
+    /// Returns [`IoError`] if cloning the file descriptor fails.
+    pub fn enable_buffering_with_capacity(&mut self, capacity: usize) -> Result<(), IoError> {
         let clone = self.file.try_clone()?;
         self.buffer = Some(BufReader::with_capacity(capacity, clone));
         return Ok(());
@@ -234,8 +239,8 @@ impl Probe {
     /// I/O block size.
     ///
     /// # Errors
-    /// Returns [`BlockidError`] if cloning the file descriptor fails.
-    pub fn enable_buffering(&mut self) -> Result<(), BlockidError> {
+    /// Returns [`IoError`] if cloning the file descriptor fails.
+    pub fn enable_buffering(&mut self) -> Result<(), IoError> {
         self.enable_buffering_with_capacity(self.io_size as usize)?;
         return Ok(());
     }
@@ -289,30 +294,42 @@ impl Probe {
         return self.read_exact_at::<512>(sector << 9);
     }
 
+    /// Look up and validate a block magic.
+    ///
+    /// Seeks to each offset in [`BlockidIdinfo::magics`], reads up to [`BlockidMagic::len`] bytes
+    /// of each magic and compares against the expected pattern.
+    ///
+    /// # Returns
+    /// - `Ok(Some(BlockidMagic))` if a match is found.
+    /// - `Ok(None)` if no magics are defined.
+    /// - `Err(IoError)` if I/O fails or no match is found.
+    ///
+    /// # Panics
+    /// - Each [`BlockidMagic`] must have [`BlockidMagic::len`] `<= 16`.
     pub(crate) fn get_magic(
         &mut self,
         id_info: &BlockidIdinfo,
     ) -> Result<Option<BlockidMagic>, IoError> {
+        /*
+         * This avoids allocating a buffer on the stack everytime and or
+         * doing a heap allocation for each magic.
+         */
+        let mut buffer = [0u8; 16];
         match id_info.magics {
             Some(magics) => {
                 for magic in magics {
                     self.seek(SeekFrom::Start(magic.b_offset))?;
 
                     assert!(magic.len <= 16);
-                    
-                    //let mut buffer = vec![0; magic.len];
-                    let mut buffer = [0u8; 16]; // avoid allocating to a vec everytime.
 
-                    self.read_exact(&mut buffer)?;
+                    self.read_exact(&mut buffer[..magic.len])?;
 
-                    if buffer == magic.magic {
+                    if &buffer[..magic.len] == magic.magic {
                         return Ok(Some(*magic));
                     }
                 }
             }
-            None => {
-                return Ok(None);
-            }
+            None => return Ok(None),
         }
 
         return Err(IoErrorKind::NotFound.into());
@@ -645,6 +662,8 @@ bitflags! {
         const SKIP_VFAT = 1 << 17;
         /// Skip XFS filesystem probe.
         const SKIP_XFS = 1 << 18;
+        /// Skip APFS filesystem probe.
+        const SKIP_APFS = 1 << 19;
     }
 }
 
@@ -914,6 +933,7 @@ pub enum BlockType {
     Gpt,
     Exfat,
     Jbd,
+    Apfs,
     Ext2,
     Ext3,
     Ext4,
@@ -935,6 +955,7 @@ impl fmt::Display for BlockType {
             Self::Gpt => write!(f, "GPT"),
             Self::Exfat => write!(f, "EXFAT"),
             Self::Jbd => write!(f, "JBD"),
+            Self::Apfs => write!(f, "APFS"),
             Self::Ext2 => write!(f, "EXT2"),
             Self::Ext3 => write!(f, "EXT3"),
             Self::Ext4 => write!(f, "EXT4"),

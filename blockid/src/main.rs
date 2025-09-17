@@ -50,13 +50,13 @@ enum OutputTags {
 }
 
 fn main() -> Result<(), BlockidError> {
-    //init().unwrap();
+    init().unwrap();
 
     //let mut probe = ProbeBuilder::new().path("/dev/nvme0n1p1").build().unwrap();
     let p = block_from_uuid(BlockidUUID::VolumeId32(VolumeId32::new([
         0x5c, 0xc2, 0xf1, 0xbb,
     ])))
-    .unwrap(); //  // bbf1c25c
+    .unwrap(); 
     //probe.probe_values().unwrap();
 
     //let p = probe.as_filesystem().unwrap();
