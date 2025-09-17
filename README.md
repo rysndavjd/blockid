@@ -45,7 +45,7 @@ This project is a Rust implementation of `libblkid` and the `blkid` utility from
 
 # Supported OS 
 
-`libblockid` and `blockid` are planned to support Linux, FreeBSD, and macOS. While compiling `libblockid` from Git should work on all three platforms, some functionality may be broken on FreeBSD and macOS, as development primarily occurs on Linux. 
+`libblockid` and `blockid` are planned to fully support Linux, FreeBSD, and macOS. While compiling `libblockid` from Git should work on all three platforms, some functionality may be broken on FreeBSD and macOS, as development primarily occurs on Linux. 
 # Architecture
 `libblockid` and `blockid` mainly supports [x86_64](https://en.wikipedia.org/wiki/X86-64) with planned support for [AArch64](https://en.wikipedia.org/wiki/AArch64). Things like hardware acceleration may break in crates like [sha2](https://docs.rs/sha2/latest/sha2/), [crc-fast](https://docs.rs/crc-fast/latest/crc_fast/) and may need to be disabled when compiling to other architectures. 
 
