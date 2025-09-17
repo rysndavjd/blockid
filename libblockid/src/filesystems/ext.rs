@@ -27,8 +27,6 @@ https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 pub enum ExtError {
     #[error("I/O operation failed: {0}")]
     IoError(#[from] IoError),
-    #[error("log_block_size greater than 32")]
-    LogBlockSizeInvalid,
     #[error("Filesystem detected as legacy EXT")]
     ProbablyLegacyExt,
     #[error("Filesystem detected as EXT4dev")]
@@ -46,11 +44,11 @@ pub enum ExtError {
     #[error("Invalid EXT3 features")]
     InvalidExtThreeFeatures,
     #[error("EXT4 detected as JBD")]
-    Ext4DetectedAsJbd,
+    ExtFourDetectedAsJbd,
     #[error("Invalid EXT4 features")]
     InvalidExtFourFeatures,
 }
-// Ext missing \"EXT3_FEATURE_INCOMPAT_JOURNAL_DEV\" to be JBD fs
+
 const EXT_MAGIC: [u8; 2] = [0x53, 0xEF];
 const EXT_OFFSET: u64 = 0x438;
 
@@ -352,7 +350,10 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
             0xe3069283,
         );
 
-        let calc_sum = checksum_with_params(crc32c, &es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
+        let calc_sum = checksum_with_params(
+            crc32c,
+            &es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)],
+        );
         let sum = u64::from(es.s_checksum);
 
         if sum != calc_sum {
@@ -568,7 +569,7 @@ pub fn probe_ext4(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), ExtErro
     let flags = es.ext_flags();
 
     if fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
-        return Err(ExtError::Ext4DetectedAsJbd);
+        return Err(ExtError::ExtFourDetectedAsJbd);
     }
 
     if !frc.intersects(EXT3_FEATURE_RO_COMPAT_UNSUPPORTED)

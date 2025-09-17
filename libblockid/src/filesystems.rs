@@ -1,3 +1,4 @@
+pub mod apfs;
 pub mod exfat;
 pub mod ext;
 pub mod linux_swap;
@@ -9,8 +10,8 @@ pub mod xfs;
 use thiserror::Error;
 
 use crate::filesystems::{
-    exfat::ExFatError, ext::ExtError, linux_swap::SwapError, ntfs::NtfsError, vfat::FatError,
-    xfs::XfsError,
+    apfs::ApfsError, exfat::ExFatError, ext::ExtError, linux_swap::SwapError, ntfs::NtfsError,
+    vfat::FatError, xfs::XfsError,
 };
 
 #[derive(Debug, Error)]
@@ -27,4 +28,6 @@ pub enum FsError {
     Vfat(#[from] FatError),
     #[error("XFS filesystem error: {0}")]
     Xfs(#[from] XfsError),
+    #[error("APFS filesystem error: {0}")]
+    ApfsError(#[from] ApfsError),
 }
