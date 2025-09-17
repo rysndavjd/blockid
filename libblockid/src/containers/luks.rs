@@ -1,5 +1,5 @@
 use std::{
-    io::{Error as IoError, ErrorKind},
+    io::Error as IoError,
     str::FromStr,
 };
 
