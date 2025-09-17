@@ -56,7 +56,7 @@ pub const APFS_ID_INFO: BlockidIdinfo = BlockidIdinfo {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
-struct ApfsSuperBlock {
+pub struct ApfsSuperBlock {
     pub checksum: U64<LittleEndian>,
     pub oid: U64<LittleEndian>,
     pub xid: U64<LittleEndian>,
@@ -75,28 +75,29 @@ struct ApfsSuperBlock {
     pub padding: [u8; 4008],
 }
 
-fn fletcher64(buf: &[u8]) -> u64 {
-    let mut lo32: u32 = 0;
-    let mut hi32: u32 = 0;
+pub fn fletcher64(buf: &[u8]) -> u64 {
+    let mut lo32: u64 = 0;
+    let mut hi32: u64 = 0;
 
     for i in 0..(buf.len() / 4) {
-        lo32 += u32::from_le_bytes([buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]);
-        hi32 += lo32;
+        let offset = i * 4;
+        let word = u32::from_le_bytes([
+            buf[offset],
+            buf[offset + 1],
+            buf[offset + 2],
+            buf[offset + 3],
+        ]) as u64;
+        lo32 = lo32.wrapping_add(word);
+        hi32 = hi32.wrapping_add(lo32);
     }
 
-    let csum_lo = !((lo32.wrapping_add(hi32)) % u32::MAX);
-    let csum_hi = !((lo32.wrapping_add(csum_lo)) % u32::MAX);
+    let csum_lo = !((lo32.wrapping_add(hi32)) % 0xFFFFFFFF) as u32;
+    let csum_hi = !((lo32.wrapping_add(csum_lo as u64)) % 0xFFFFFFFF) as u32;
 
     return ((csum_hi as u64) << 32) | (csum_lo as u64);
 }
 
-fn apfs_checksum(sb: ApfsSuperBlock) -> Result<(), ApfsError> {
-    //let bytes = sb.as_bytes();
-
-    return Ok(());
-}
-
-fn probe_apfs(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), ApfsError> {
+pub fn probe_apfs(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), ApfsError> {
     let sb: ApfsSuperBlock = probe.map_from_file(probe.offset())?;
 
     let csum = fletcher64(&sb.as_bytes()[8..]);
