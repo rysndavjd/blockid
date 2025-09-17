@@ -298,7 +298,10 @@ impl Probe {
                 for magic in magics {
                     self.seek(SeekFrom::Start(magic.b_offset))?;
 
-                    let mut buffer = vec![0; magic.len];
+                    assert!(magic.len <= 16);
+                    
+                    //let mut buffer = vec![0; magic.len];
+                    let mut buffer = [0u8; 16]; // avoid allocating to a vec everytime.
 
                     self.read_exact(&mut buffer)?;
 
