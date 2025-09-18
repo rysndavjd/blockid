@@ -26,6 +26,7 @@ use crate::{
         ext::{EXT2_ID_INFO, EXT3_ID_INFO, EXT4_ID_INFO, JBD_ID_INFO},
         linux_swap::{LINUX_SWAP_V0_ID_INFO, LINUX_SWAP_V1_ID_INFO, SWSUSPEND_ID_INFO},
         ntfs::NTFS_ID_INFO,
+        squashfs::{SQUASHFS_ID_INFO, SQUASHFS3_ID_INFO},
         vfat::VFAT_ID_INFO,
         volume_id::{VolumeId32, VolumeId64},
         xfs::XFS_ID_INFO,
@@ -56,6 +57,8 @@ pub const PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_NTFS, NTFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_VFAT, VFAT_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_XFS, XFS_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_SQUASHFS3, SQUASHFS3_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_SQUASHFS, SQUASHFS_ID_INFO),
 ];
 
 const SUPPORTED_TYPE: &[BlockType] = &[
@@ -74,6 +77,8 @@ const SUPPORTED_TYPE: &[BlockType] = &[
     BlockType::Ntfs,
     BlockType::Vfat,
     BlockType::Xfs,
+    BlockType::Squashfs3,
+    BlockType::Squashfs,
 ];
 
 const SUPPORTED_STR: &[&str] = &[
@@ -94,6 +99,8 @@ const SUPPORTED_STR: &[&str] = &[
     "Swap Suspend",
     "VFAT",
     "XFS",
+    "SquashFS",
+    "SquashFS3",
 ];
 
 /// Represents a probe session on a file or block device.
@@ -664,6 +671,10 @@ bitflags! {
         const SKIP_XFS = 1 << 18;
         /// Skip APFS filesystem probe.
         const SKIP_APFS = 1 << 19;
+        /// Skip SQUASHFS3 filesystem probe.
+        const SKIP_SQUASHFS3 = 1 << 20;
+        /// Skip SQUASHFS filesystem probe.
+        const SKIP_SQUASHFS = 1 << 21;
     }
 }
 
@@ -943,6 +954,8 @@ pub enum BlockType {
     Ntfs,
     Vfat,
     Xfs,
+    Squashfs,
+    Squashfs3,
 }
 
 impl fmt::Display for BlockType {
@@ -965,6 +978,8 @@ impl fmt::Display for BlockType {
             Self::SwapSuspend => write!(f, "Swap Suspend"),
             Self::Vfat => write!(f, "VFAT"),
             Self::Xfs => write!(f, "XFS"),
+            Self::Squashfs => write!(f, "SquashFS"),
+            Self::Squashfs3 => write!(f, "SquashFS3"),
         }
     }
 }
