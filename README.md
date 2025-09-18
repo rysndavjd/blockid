@@ -33,6 +33,7 @@ This project is a Rust implementation of `libblkid` and the `blkid` utility from
 | XFS        | Works   | Filesystem      |
 | ZFS        | Todo    | Filesystem      |
 | Swap       | Works   | Filesystem      |
+| SquashFS   | Works   | Filesystem      |
 
 ### Status Definitions
 

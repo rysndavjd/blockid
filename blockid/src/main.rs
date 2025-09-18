@@ -52,11 +52,13 @@ enum OutputTags {
 fn main() -> Result<(), BlockidError> {
     init().unwrap();
 
-    let mut probe = ProbeBuilder::new().path("./apfs-test.bin").build().unwrap();
+    let mut probe = ProbeBuilder::new().path("./squashfs.bin").build().unwrap();
 
-    //let p = probe.as_filesystem().unwrap();
+    probe.probe_values().unwrap();
 
-    //println!("{p:?}");
+    let p = probe.as_filesystem().unwrap();
+
+    println!("{p:?}");
 
     let matches = Command::new("blockid")
         .version(env!("CARGO_PKG_VERSION"))
