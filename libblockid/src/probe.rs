@@ -30,6 +30,7 @@ use crate::{
         vfat::VFAT_ID_INFO,
         volume_id::{VolumeId32, VolumeId64},
         xfs::XFS_ID_INFO,
+        zonefs::ZONEFS_ID_INFO,
     },
     partitions::{
         dos::DOS_PT_ID_INFO,
@@ -59,6 +60,7 @@ pub const PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_XFS, XFS_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_SQUASHFS3, SQUASHFS3_ID_INFO),
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_SQUASHFS, SQUASHFS_ID_INFO),
+    (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_SQUASHFS, ZONEFS_ID_INFO),
 ];
 
 const SUPPORTED_TYPE: &[BlockType] = &[
@@ -79,6 +81,7 @@ const SUPPORTED_TYPE: &[BlockType] = &[
     BlockType::Xfs,
     BlockType::Squashfs3,
     BlockType::Squashfs,
+    BlockType::ZoneFs,
 ];
 
 const SUPPORTED_STR: &[&str] = &[
@@ -101,6 +104,7 @@ const SUPPORTED_STR: &[&str] = &[
     "XFS",
     "SquashFS",
     "SquashFS3",
+    "Zonefs",
 ];
 
 /// Represents a probe session on a file or block device.
@@ -956,6 +960,7 @@ pub enum BlockType {
     Xfs,
     Squashfs,
     Squashfs3,
+    ZoneFs,
 }
 
 impl fmt::Display for BlockType {
@@ -980,6 +985,7 @@ impl fmt::Display for BlockType {
             Self::Xfs => write!(f, "XFS"),
             Self::Squashfs => write!(f, "SquashFS"),
             Self::Squashfs3 => write!(f, "SquashFS3"),
+            Self::ZoneFs => write!(f, "ZoneFs"),
         }
     }
 }

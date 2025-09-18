@@ -3,7 +3,7 @@
 **Blockid** is a tool for identifying various types of superblocks, including filesystems and partition tables.  
 > **Note:** `blockid` is currently a test method for `libblockid` and is **not usable as a replacement for `blkid`** currently.
 
-This project is a Rust implementation of `libblkid` and the `blkid` utility from [util-linux](https://github.com/util-linux/util-linux/). It is **highly experimental** and incomplete.
+This project is a Rust implementation of `libblkid` and the `blkid` utility from [util-linux](https://github.com/util-linux/util-linux/). It is **highly experimental** and incomplete. Also that releases on crate.io are made when I feel like with them most of time being out of date or broken, so please rather use the git repo for latest releases.
 
 ---
 
@@ -19,21 +19,24 @@ This project is a Rust implementation of `libblkid` and the `blkid` utility from
 
 | Block Type | Status  | Category         |
 |------------|---------|-----------------|
-| APFS       | Works   | Filesystem      |
-| Btrfs      | Todo    | Filesystem      |
-| BSD        | Todo    | Partition Table |
-| DOS        | Works   | Partition Table |
-| GPT        | Broke   | Partition Table |
+| [APFS](https://en.wikipedia.org/wiki/Apple_File_System)       | Works   | Filesystem      |
+| [Btrfs](https://en.wikipedia.org/wiki/Btrfs)      | Todo    | Filesystem      |
+| [BSD](https://en.wikipedia.org/wiki/BSD_disklabel)        | Todo    | Partition Table |
+| [DOS](https://en.wikipedia.org/wiki/Master_boot_record)        | Works   | Partition Table |
+| [GPT](https://en.wikipedia.org/wiki/GUID_Partition_Table)        | Broke   | Partition Table |
 | Mac        | Todo    | Partition Table |
-| ExFAT      | Works   | Filesystem      |
-| Ext2/3/4   | Works   | Filesystem      |
-| LUKS       | Works   | Container       |
-| NTFS       | Works   | Filesystem      |
-| VFat       | Works   | Filesystem      |
-| XFS        | Works   | Filesystem      |
-| ZFS        | Todo    | Filesystem      |
-| Swap       | Works   | Filesystem      |
-| SquashFS   | Works   | Filesystem      |
+| [exFAT](https://en.wikipedia.org/wiki/ExFAT)      | Works   | Filesystem      |
+| [EXT2](https://en.wikipedia.org/wiki/Ext2)   | Works   | Filesystem      |
+| [EXT3](https://en.wikipedia.org/wiki/Ext3)   | Works   | Filesystem      |
+| [EXT4](https://en.wikipedia.org/wiki/Ext4)   | Works   | Filesystem      |
+| [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup)       | Works   | Container       |
+| [NTFS](https://en.wikipedia.org/wiki/NTFS)       | Works   | Filesystem      |
+| [VFat](https://en.wikipedia.org/wiki/File_Allocation_Table)       | Works   | Filesystem      |
+| [XFS](https://en.wikipedia.org/wiki/XFS)        | Works   | Filesystem      |
+| [ZFS](https://en.wikipedia.org/wiki/ZFS)        | Todo    | Filesystem      |
+| [Linux Swap](https://wiki.archlinux.org/title/Swap)       | Works   | Filesystem      |
+| [SquashFS](https://en.wikipedia.org/wiki/SquashFS)   | Works   | Filesystem      |
+| [ZoneFS](https://www.kernel.org/doc/html/latest/filesystems/zonefs.html)     | Works   | Filesystem      |
 
 ### Status Definitions
 
