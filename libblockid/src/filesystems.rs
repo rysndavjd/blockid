@@ -7,12 +7,13 @@ pub mod squashfs;
 pub mod vfat;
 pub mod volume_id;
 pub mod xfs;
+pub mod zonefs;
 
 use thiserror::Error;
 
 use crate::filesystems::{
     apfs::ApfsError, exfat::ExFatError, ext::ExtError, linux_swap::SwapError, ntfs::NtfsError,
-    squashfs::SquashError, vfat::FatError, xfs::XfsError,
+    squashfs::SquashError, vfat::FatError, xfs::XfsError, zonefs::ZoneFsError,
 };
 
 #[derive(Debug, Error)]
@@ -33,4 +34,6 @@ pub enum FsError {
     ApfsError(#[from] ApfsError),
     #[error("Squash filesystem error: {0}")]
     SquashError(#[from] SquashError),
+    #[error("Zone filesystem error: {0}")]
+    ZoneFsError(#[from] ZoneFsError),
 }

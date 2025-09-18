@@ -106,7 +106,7 @@ pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
 
         let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string();
 
-        return Some(PathBuf::from_str(&format!("/dev/{name}")).unwrap());
+        return Some(PathBuf::from_str(&format!("/dev/{name}")).ok()?);
     }
 
     #[cfg(target_os = "linux")]
@@ -162,6 +162,7 @@ pub fn block_from_uuid<T: Into<BlockidUUID>>(blockid_uuid: T) -> Result<PathBuf,
         };
     }
 
+    #[cfg(target_os = "linux")]
     let patterns = [
         "/dev/sd*",
         "/dev/hd*",
@@ -171,6 +172,19 @@ pub fn block_from_uuid<T: Into<BlockidUUID>>(blockid_uuid: T) -> Result<PathBuf,
         "/dev/md*",
         "/dev/mapper/*",
     ];
+
+    #[cfg(target_os = "freebsd")]
+    let patterns = [
+        "/dev/ada*",
+        "/dev/da*",
+        "/dev/nvd*",
+        "/dev/cd*",
+        "/dev/acd*",
+        "/dev/md*",
+    ];
+
+    #[cfg(target_os = "macos")]
+    let patterns = ["/dev/disk*"];
 
     for pattern in patterns {
         log::debug!("block_from_uuid - PATTERN: {pattern:?}");
