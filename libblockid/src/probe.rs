@@ -291,12 +291,12 @@ impl Probe {
         return Ok(buffer);
     }
 
-    pub(crate) fn map_from_file<T: FromBytes>(&mut self, offset: u64) -> Result<T, IoError> {
-        let mut buffer = vec![0u8; core::mem::size_of::<T>()];
-        self.seek(SeekFrom::Start(offset))?;
-        self.read_exact(&mut buffer)?;
-
-        let data = T::read_from_bytes(&buffer).map_err(|_| IoErrorKind::UnexpectedEof)?;
+    pub(crate) fn map_from_file<const S: usize, T: FromBytes>(
+        &mut self,
+        offset: u64,
+    ) -> Result<T, IoError> {
+        let buf: [u8; S] = self.read_exact_at(offset)?;
+        let data = T::read_from_bytes(&buf).map_err(|_| IoErrorKind::UnexpectedEof)?;
 
         return Ok(data);
     }

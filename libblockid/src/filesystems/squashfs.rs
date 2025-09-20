@@ -86,7 +86,8 @@ pub struct SquashBlock {
 }
 
 pub fn probe_squashfs(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SquashError> {
-    let sb: SquashBlock = probe.map_from_file(probe.offset())?;
+    let sb: SquashBlock =
+        probe.map_from_file::<{ size_of::<SquashBlock>() }, SquashBlock>(probe.offset())?;
 
     let vermaj = u16::from_le_bytes(sb.version_major);
     let vermin = u16::from_le_bytes(sb.version_minor);
@@ -121,7 +122,8 @@ pub fn probe_squashfs(probe: &mut Probe, magic: BlockidMagic) -> Result<(), Squa
 }
 
 pub fn probe_squashfs3(probe: &mut Probe, magic: BlockidMagic) -> Result<(), SquashError> {
-    let sb: SquashBlock = probe.map_from_file(probe.offset())?;
+    let sb: SquashBlock =
+        probe.map_from_file::<{ size_of::<SquashBlock>() }, SquashBlock>(probe.offset())?;
 
     let endianness = if b"sqsh" == &sb.magic {
         Endianness::Big

@@ -52,10 +52,13 @@ enum OutputTags {
 fn main() -> Result<(), BlockidError> {
     init().unwrap();
 
-    let mut probe = ProbeBuilder::new().path("./squashfs.bin").build().unwrap();
+    let mut probe = ProbeBuilder::new().path("/dev/sdb1").build().unwrap();
 
-    probe.probe_values().unwrap();
+    let t = probe.probe_values();
 
+    println!("{t:?}");
+
+    println!("{probe:?}");
     let p = probe.as_filesystem().unwrap();
 
     println!("{p:?}");

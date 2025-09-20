@@ -454,7 +454,7 @@ fn probe_fat32(
             }
             None => {
                 let fat_entry_off =
-                    (reserved as u64 * u64::from(ms.ms_sector_size)) + (next as u64 * 4);
+                    (u64::from(reserved) * u64::from(ms.ms_sector_size)) + (u64::from(next) * 4);
                 let buf = probe.read_vec_at(fat_entry_off, buf_size as usize)?;
 
                 if buf.len() < 4 {
@@ -472,7 +472,7 @@ fn probe_fat32(
     let fsinfo_sect = u64::from(vs.vs_fsinfo_sector);
     if fsinfo_sect != 0 {
         let fsinfo: Fat32FsInfo =
-            probe.map_from_file(fsinfo_sect * u64::from(ms.ms_sector_size))?;
+            probe.map_from_file::<{ size_of::<Fat32FsInfo>() }, Fat32FsInfo>(fsinfo_sect * u64::from(ms.ms_sector_size))?;
 
         if &fsinfo.signature1 != b"\x52\x52\x61\x41"
             && &fsinfo.signature1 != b"\x52\x52\x64\x41"

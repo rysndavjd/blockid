@@ -208,7 +208,8 @@ pub fn xfs_fssize(sb: XfsSuperBlock) -> u64 {
 }
 
 pub fn probe_xfs(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), XfsError> {
-    let sb: XfsSuperBlock = probe.map_from_file(probe.offset())?;
+    let sb =
+        probe.map_from_file::<{ size_of::<XfsSuperBlock>() }, XfsSuperBlock>(probe.offset())?;
     let crc_area = probe.read_vec_at(probe.offset(), usize::from(sb.sectsize))?;
 
     xfs_verify(sb, crc_area)?;

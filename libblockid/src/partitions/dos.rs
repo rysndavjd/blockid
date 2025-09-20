@@ -268,15 +268,15 @@ fn is_valid_dos(probe: &mut Probe, pt: DosTable) -> Result<(), DosPTError> {
         }
     }
 
-    if probe_is_vfat(probe).is_ok() {
+    if probe_is_vfat(probe).is_err() {
         return Err(DosPTError::ProbablyVFAT);
     }
 
-    if probe_is_exfat(probe).is_ok() {
+    if probe_is_exfat(probe).is_err() {
         return Err(DosPTError::ProbablyEXFAT);
     }
 
-    if probe_is_ntfs(probe).is_ok() {
+    if probe_is_ntfs(probe).is_err() {
         return Err(DosPTError::ProbablyNTFS);
     }
 
@@ -357,7 +357,8 @@ fn parse_dos_extended(
 pub fn probe_dos_pt(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), DosPTError> {
     let mut partitions: Vec<PartitionResults> = Vec::new();
 
-    let dos_pt: DosTable = probe.map_from_file(probe.offset())?;
+    let dos_pt: DosTable =
+        probe.map_from_file::<{ size_of::<DosTable>() }, DosTable>(probe.offset())?;
 
     if dos_pt.boot_code1[0..3] == AIX_MAGIC_STRING {
         return Err(DosPTError::ProbablyAix);
