@@ -1,15 +1,12 @@
 use std::{
-    ffi::CStr,
     fs::read_link,
     io::{Error as IoError, ErrorKind},
     path::{Path, PathBuf},
-    str::{FromStr, Utf8Error},
+    str::Utf8Error,
 };
 
 use glob::glob;
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-use libc::{S_IFBLK, dev_t, mode_t};
-use rustix::fs::{Dev, FileType, major, minor, stat};
+use rustix::fs::{Dev, FileType, stat};
 use thiserror::Error;
 use widestring::{error::Utf16Error, utfstring::Utf16String};
 
@@ -94,8 +91,11 @@ pub fn is_power_2(num: u64) -> bool {
 pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
     #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     {
+        use libc::{S_IFBLK, c_char, dev_t, mode_t};
+        use std::str::FromStr;
+
         unsafe extern "C" {
-            unsafe fn devname(dev: dev_t, type_: mode_t) -> *const libc::c_char;
+            unsafe fn devname(dev: dev_t, type_: mode_t) -> *const c_char;
         }
 
         let ptr = unsafe { devname(dev, S_IFBLK) };
@@ -104,13 +104,17 @@ pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
             return None;
         }
 
-        let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string();
+        let name = unsafe { std::ffi::CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .to_string();
 
         return Some(PathBuf::from_str(&format!("/dev/{name}")).ok()?);
     }
 
     #[cfg(target_os = "linux")]
     {
+        use rustix::fs::{major, minor};
+
         let path = read_link(format!("/sys/dev/block/{}:{}", major(dev), minor(dev))).ok()?;
         let target = path.file_name()?.to_str()?;
 
@@ -189,7 +193,7 @@ pub fn block_from_uuid<T: Into<BlockidUUID>>(blockid_uuid: T) -> Result<PathBuf,
     for pattern in patterns {
         log::debug!("block_from_uuid - PATTERN: {pattern:?}");
         for entry in glob(pattern).expect("GLOB patterns should never fail") {
-            let path = entry.unwrap();
+            let path = entry?;
             let stat = stat(&path)?;
 
             log::debug!("block_from_uuid - PATH: {path:?}");

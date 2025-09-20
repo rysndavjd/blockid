@@ -9,7 +9,7 @@ use zerocopy::{
 
 use crate::{
     BlockidError,
-    filesystems::{FsError, vfat::VFAT_ID_INFO, volume_id::VolumeId32},
+    filesystems::{FsError, volume_id::VolumeId32},
     probe::{
         BlockType, BlockidIdinfo, BlockidMagic, BlockidUUID, BlockidVersion, Endianness,
         FilesystemResult, Probe, ProbeResult, UsageType,
@@ -27,8 +27,8 @@ pub enum ExFatError {
     HeaderChecksumInvalid,
     #[error("Filesystem looks like DOS/MBR")]
     ProbablyDOS,
-    #[error("Filesystem looks like VFAT")]
-    ProbablyVfat,
+    #[error("Filesystem does not look like EXFAT")]
+    ProbablyNotEXFAT,
     #[error("Invalid cluster size")]
     InvalidClusterSize,
     #[error("Invalid boot jump")]
@@ -261,10 +261,11 @@ fn valid_exfat(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<(), ExFatError>
 }
 
 pub fn probe_is_exfat(probe: &mut Probe) -> Result<(), ExFatError> {
-    let sb: ExFatSuperBlock = probe.map_from_file(probe.offset())?;
+    let sb: ExFatSuperBlock =
+        probe.map_from_file::<{ size_of::<ExFatSuperBlock>() }, ExFatSuperBlock>(probe.offset())?;
 
-    if probe.get_magic(&VFAT_ID_INFO).is_ok() {
-        return Err(ExFatError::ProbablyVfat);
+    if probe.get_magic(&EXFAT_ID_INFO).is_ok() {
+        return Err(ExFatError::ProbablyNotEXFAT);
     }
 
     valid_exfat(probe, sb)?;
@@ -291,6 +292,9 @@ fn find_label(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<Option<String>, 
             return Ok(None);
         }
         if entry.label_type == EXFAT_ENTRY_LABEL {
+            if entry.name == [0u8; 22] {
+                return Ok(None);
+            }
             let label = decode_utf16_lossy_from(&entry.name, Endianness::Little);
             return Ok(Some(label.to_string()));
         }
@@ -314,7 +318,8 @@ fn find_label(probe: &mut Probe, sb: ExFatSuperBlock) -> Result<Option<String>, 
 }
 
 pub fn probe_exfat(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), ExFatError> {
-    let sb: ExFatSuperBlock = probe.map_from_file(probe.offset())?;
+    let sb: ExFatSuperBlock =
+        probe.map_from_file::<{ size_of::<ExFatSuperBlock>() }, ExFatSuperBlock>(probe.offset())?;
 
     valid_exfat(probe, sb)?;
 

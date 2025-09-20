@@ -95,7 +95,7 @@ pub struct NtfsSuperBlock {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 struct MasterFileTableRecord {
     pub magic: U32<LittleEndian>,
     pub usa_ofs: U16<LittleEndian>,
@@ -211,21 +211,20 @@ fn find_label(
         return Err(NtfsError::InvalidBufMftTwoSignature);
     }
 
-    let mft =
-        MasterFileTableRecord::read_from_bytes(&buf_mft[..size_of::<MasterFileTableRecord>()])
-            .map_err(|_| {
-                IoError::new(
-                    ErrorKind::InvalidData,
-                    "Unable to map bytes to Master File Table Record",
-                )
-            })?;
+    let mft = MasterFileTableRecord::ref_from_bytes(&buf_mft[..size_of::<MasterFileTableRecord>()])
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::InvalidData,
+                "Unable to map bytes to Master File Table Record",
+            )
+        })?;
 
     let mut attr_off = usize::from(mft.attrs_offset);
 
     while (attr_off + size_of::<FileAttribute>()) as u64 <= mft_record_size
         && attr_off as u64 <= u64::from(mft.bytes_allocated)
     {
-        let attr = FileAttribute::read_from_bytes(
+        let attr = FileAttribute::ref_from_bytes(
             &buf_mft[attr_off..attr_off + size_of::<FileAttribute>()],
         )
         .map_err(|_| {
@@ -270,7 +269,8 @@ fn find_label(
 }
 
 pub fn probe_is_ntfs(probe: &mut Probe) -> Result<(), NtfsError> {
-    let ns: NtfsSuperBlock = probe.map_from_file(probe.offset())?;
+    let ns: NtfsSuperBlock =
+        probe.map_from_file::<{ size_of::<NtfsSuperBlock>() }, NtfsSuperBlock>(probe.offset())?;
 
     probe.get_magic(&NTFS_ID_INFO)?;
     check_ntfs(ns)?;
@@ -279,7 +279,8 @@ pub fn probe_is_ntfs(probe: &mut Probe) -> Result<(), NtfsError> {
 }
 
 pub fn probe_ntfs(probe: &mut Probe, magic: BlockidMagic) -> Result<(), NtfsError> {
-    let ns: NtfsSuperBlock = probe.map_from_file(probe.offset())?;
+    let ns: NtfsSuperBlock =
+        probe.map_from_file::<{ size_of::<NtfsSuperBlock>() }, NtfsSuperBlock>(probe.offset())?;
 
     let (sector_size, sectors_per_cluster) = check_ntfs(ns)?;
 

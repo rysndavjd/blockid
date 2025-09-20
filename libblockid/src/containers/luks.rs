@@ -151,7 +151,7 @@ impl Luks2Header {
         }
 
         for offset in SECONDARY_OFFSETS {
-            match probe.map_from_file::<Luks2Header>(offset) {
+            match probe.map_from_file::<{ size_of::<Luks2Header>() }, Luks2Header>(offset) {
                 Ok(secondary) => {
                     if u16::from(secondary.version) == 2
                         && u64::from(secondary.hdr_offset) == offset
@@ -168,7 +168,8 @@ impl Luks2Header {
 }
 
 pub fn probe_luks1(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksError> {
-    let header: Luks1Header = probe.map_from_file(probe.offset())?;
+    let header: Luks1Header =
+        probe.map_from_file::<{ size_of::<Luks1Header>() }, Luks1Header>(probe.offset())?;
 
     if !header.luks_valid() {
         return Err(LuksError::InvalidLuksOne);
@@ -192,7 +193,8 @@ pub fn probe_luks1(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
 }
 
 pub fn probe_luks2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksError> {
-    let header: Luks2Header = probe.map_from_file(probe.offset())?;
+    let header: Luks2Header =
+        probe.map_from_file::<{ size_of::<Luks2Header>() }, Luks2Header>(probe.offset())?;
 
     if !header.luks_valid(probe) {
         return Err(LuksError::InvalidLuksTwo);
@@ -216,7 +218,8 @@ pub fn probe_luks2(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksEr
 }
 
 pub fn probe_luks_opal(probe: &mut Probe, _magic: BlockidMagic) -> Result<(), LuksError> {
-    let header: Luks2Header = probe.map_from_file(probe.offset())?;
+    let header: Luks2Header =
+        probe.map_from_file::<{ size_of::<Luks2Header>() }, Luks2Header>(probe.offset())?;
 
     if !header.luks_valid(probe) {
         return Err(LuksError::InvalidLuksTwoOpal);

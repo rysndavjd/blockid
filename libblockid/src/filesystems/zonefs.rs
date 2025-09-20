@@ -1,4 +1,3 @@
-//0x04C11DB7
 use std::{io::Error as IoError, mem::offset_of};
 
 use crate::{
@@ -54,7 +53,7 @@ pub struct ZoneFsBlock {
 }
 
 pub fn probe_zonefs(probe: &mut Probe, magic: BlockidMagic) -> Result<(), ZoneFsError> {
-    let sb: ZoneFsBlock = probe.map_from_file(probe.offset())?;
+    let sb = probe.map_from_file::<{ size_of::<ZoneFsBlock>() }, ZoneFsBlock>(probe.offset())?;
     let bytes = sb.as_bytes();
 
     let mut digest = Digest::new(Crc32IsoHdlc);

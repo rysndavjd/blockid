@@ -98,7 +98,8 @@ pub fn fletcher64(buf: &[u8]) -> u64 {
 }
 
 pub fn probe_apfs(probe: &mut Probe, _mag: BlockidMagic) -> Result<(), ApfsError> {
-    let sb: ApfsSuperBlock = probe.map_from_file(probe.offset())?;
+    let sb: ApfsSuperBlock =
+        probe.map_from_file::<{ size_of::<ApfsSuperBlock>() }, ApfsSuperBlock>(probe.offset())?;
 
     let csum = fletcher64(&sb.as_bytes()[8..]);
 
