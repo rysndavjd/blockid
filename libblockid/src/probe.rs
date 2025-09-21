@@ -961,6 +961,11 @@ pub enum BlockType {
     Squashfs,
     Squashfs3,
     ZoneFs,
+    Lvm2Member,
+    Lvm1Member,
+    LvmSnapcow,
+    LvmVerityHash,
+    LvmIntegrity,
 }
 
 impl fmt::Display for BlockType {
@@ -986,6 +991,11 @@ impl fmt::Display for BlockType {
             Self::Squashfs => write!(f, "SquashFS"),
             Self::Squashfs3 => write!(f, "SquashFS3"),
             Self::ZoneFs => write!(f, "ZoneFs"),
+            Self::Lvm2Member => write!(f, "LVM2 Member"),
+            Self::Lvm1Member => write!(f, "LVM1 Member"),
+            Self::LvmSnapcow => write!(f, "LVM Snapcow"),
+            Self::LvmVerityHash => write!(f, "LVM Verity Hash"),
+            Self::LvmIntegrity => write!(f, "LVM Integrity"),
         }
     }
 }
