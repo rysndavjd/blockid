@@ -1,5 +1,4 @@
 use std::{
-    fs::read_link,
     io::{Error as IoError, ErrorKind},
     path::{Path, PathBuf},
     str::Utf8Error,
@@ -108,7 +107,7 @@ pub fn devno_to_path(dev: Dev) -> Option<PathBuf> {
             .to_string_lossy()
             .to_string();
 
-        return Some(PathBuf::from_str(&format!("/dev/{name}")).ok()?);
+        return PathBuf::from_str(&format!("/dev/{name}")).ok();
     }
 
     #[cfg(target_os = "linux")]
@@ -159,6 +158,8 @@ pub fn block_from_uuid<T: Into<BlockidUUID>>(blockid_uuid: T) -> Result<PathBuf,
 
     #[cfg(target_os = "linux")]
     {
+        use std::fs::read_link;
+        
         if let Ok(buf) = read_link(format!("/dev/disk/by-uuid/{}", uuid))
             && let Some(t) = buf.file_name()
         {

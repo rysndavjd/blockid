@@ -128,12 +128,12 @@ fn main() -> Result<(), BlockidError> {
         PathBuf::from(CACHE_PATH)
     };
 
-    if matches.get_flag("list-supported") {
-        for item in Probe::supported_string() {
-            println!("{item}");
-        }
-        return Ok(());
-    }
+    // if matches.get_flag("list-supported") {
+    //     for item in Probe::supported_string() {
+    //         println!("{item}");
+    //     }
+    //     return Ok(());
+    // }
 
     let tags: Vec<OutputTags> = match matches.get_many::<OutputTags>("match-tag") {
         Some(r) => r.into_iter().copied().collect(),

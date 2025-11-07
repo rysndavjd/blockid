@@ -63,50 +63,6 @@ pub const PROBES: &[(ProbeFilter, ProbeFilter, BlockidIdinfo)] = &[
     (ProbeFilter::SKIP_FS, ProbeFilter::SKIP_SQUASHFS, ZONEFS_ID_INFO),
 ];
 
-const SUPPORTED_TYPE: &[BlockType] = &[
-    BlockType::LUKS1,
-    BlockType::LUKS2,
-    BlockType::LUKSOpal,
-    BlockType::Dos,
-    BlockType::Exfat,
-    BlockType::Apfs,
-    BlockType::Ext2,
-    BlockType::Ext3,
-    BlockType::Ext4,
-    BlockType::Jbd,
-    BlockType::LinuxSwapV0,
-    BlockType::LinuxSwapV1,
-    BlockType::Ntfs,
-    BlockType::Vfat,
-    BlockType::Xfs,
-    BlockType::Squashfs3,
-    BlockType::Squashfs,
-    BlockType::ZoneFs,
-];
-
-const SUPPORTED_STR: &[&str] = &[
-    "LUKS1",
-    "LUKS2",
-    "LUKS Opal",
-    "DOS",
-    "GPT",
-    "EXFAT",
-    "JBD",
-    "APFS",
-    "EXT2",
-    "EXT3",
-    "EXT4",
-    "NTFS",
-    "Linux Swap V0",
-    "Linux Swap V1",
-    "Swap Suspend",
-    "VFAT",
-    "XFS",
-    "SquashFS",
-    "SquashFS3",
-    "Zonefs",
-];
-
 /// Represents a probe session on a file or block device.
 ///
 /// A [`Probe`] provides access to the underlying file or device and stores
@@ -158,16 +114,6 @@ pub struct Probe {
 }
 
 impl Probe {
-    /// Returns all supported superblocks as strings in a array
-    pub fn supported_string() -> &'static [&'static str] {
-        SUPPORTED_STR
-    }
-
-    /// Returns all supported superblocks in a array
-    pub fn supported_type() -> &'static [BlockType] {
-        SUPPORTED_TYPE
-    }
-
     /// Create a probe from a [`File`].
     ///
     /// - Reads file metadata via [`fstat`](rustix::fs::fstat).
@@ -473,25 +419,25 @@ impl Probe {
     }
 
     /// Returns a [`ContainerResultView`] if the probe detected a container.
-    pub fn as_container(&self) -> Option<ContainerResultView<'_>> {
+    pub fn as_container(&self) -> Option<&ContainerResult> {
         match self.result() {
-            Some(ProbeResult::Container(c)) => Some(ContainerResultView { inner: c }),
+            Some(ProbeResult::Container(c)) => Some(c),
             _ => None,
         }
     }
 
     /// Returns a [`PartTableResultView`] if the probe detected a partition table.
-    pub fn as_part_table(&self) -> Option<PartTableResultView<'_>> {
+    pub fn as_part_table(&self) -> Option<&PartTableResult> {
         match self.result() {
-            Some(ProbeResult::PartTable(p)) => Some(PartTableResultView { inner: p }),
+            Some(ProbeResult::PartTable(p)) => Some(p),
             _ => None,
         }
     }
 
     /// Returns a [`FilesystemResultView`] if the probe detected a filesystem.
-    pub fn as_filesystem(&self) -> Option<FilesystemResultView<'_>> {
+    pub fn as_filesystem(&self) -> Option<&FilesystemResult> {
         match self.result() {
-            Some(ProbeResult::Filesystem(f)) => Some(FilesystemResultView { inner: f }),
+            Some(ProbeResult::Filesystem(f)) => Some(f),
             _ => None,
         }
     }
@@ -717,6 +663,48 @@ pub struct ContainerResult {
     pub endianness: Option<Endianness>,
 }
 
+impl ContainerResult {
+    pub fn block_type(&self) -> Option<BlockType> {
+        self.btype
+    }
+    /// Returns the sector type.
+    pub fn sec_type(&self) -> Option<SecType> {
+        self.sec_type
+    }
+    /// Returns the UUID of the container.
+    pub fn uuid(&self) -> Option<BlockidUUID> {
+        self.uuid
+    }
+    /// Returns the label of the container.
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+    /// Returns the creator identifier.
+    pub fn creator(&self) -> Option<&str> {
+        self.creator.as_deref()
+    }
+    /// Returns the usage type of the container.
+    pub fn usage(&self) -> Option<UsageType> {
+        self.usage
+    }
+    /// Returns the version of the container, if known.
+    pub fn version(&self) -> Option<BlockidVersion> {
+        self.version
+    }
+    /// Returns the detected superblock magic bytes.
+    pub fn sbmagic(&self) -> Option<&'static [u8]> {
+        self.sbmagic
+    }
+    /// Returns the offset of the superblock magic.
+    pub fn sbmagic_offset(&self) -> Option<u64> {
+        self.sbmagic_offset
+    }
+    /// Returns the endianness of the container, if applicable.
+    pub fn endianness(&self) -> Option<Endianness> {
+        self.endianness
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PartTableResult {
     pub btype: Option<BlockType>,
@@ -729,6 +717,38 @@ pub struct PartTableResult {
     pub sbmagic: Option<&'static [u8]>,
     pub sbmagic_offset: Option<u64>,
     pub endianness: Option<Endianness>,
+}
+
+impl PartTableResult {
+    /// Returns the container type.
+    pub fn block_type(&self) -> Option<BlockType> {
+        self.btype
+    }
+    /// Returns the sector type.
+    pub fn sec_type(&self) -> Option<SecType> {
+        self.sec_type
+    }
+    /// Returns the UUID of the container.
+    pub fn uuid(&self) -> Option<BlockidUUID> {
+        self.uuid
+    }
+    /// Returns list of partitions.
+    pub fn partitions(&self) -> impl Iterator<Item = &PartitionResults> {
+        self.partitions.as_deref().into_iter().flatten()
+    }
+    /// Returns the detected superblock magic bytes.
+    pub fn sbmagic(&self) -> Option<&'static [u8]> {
+        self.sbmagic
+    }
+    /// Returns the offset of the superblock magic.
+    pub fn sbmagic_offset(&self) -> Option<u64> {
+        self.sbmagic_offset
+    }
+    /// Returns the endianness of the container, if applicable.
+    pub fn endianness(&self) -> Option<Endianness> {
+        self.endianness
+    }
+
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -762,170 +782,73 @@ pub struct FilesystemResult {
     pub endianness: Option<Endianness>,
 }
 
-/// Container results returned by a [`Probe::as_container`].
-///
-/// Provides access to container metadata.
-#[derive(Debug)]
-pub struct ContainerResultView<'a> {
-    inner: &'a ContainerResult,
-}
-
-impl<'a> ContainerResultView<'a> {
+impl FilesystemResult {
     /// Returns the container type.
     pub fn block_type(&self) -> Option<BlockType> {
-        self.inner.btype
+        self.btype
     }
     /// Returns the sector type.
     pub fn sec_type(&self) -> Option<SecType> {
-        self.inner.sec_type
-    }
-    /// Returns the UUID of the container.
-    pub fn uuid(&self) -> Option<BlockidUUID> {
-        self.inner.uuid
-    }
-    /// Returns the label of the container.
-    pub fn label(&self) -> Option<&str> {
-        self.inner.label.as_deref()
-    }
-    /// Returns the creator identifier.
-    pub fn creator(&self) -> Option<&str> {
-        self.inner.creator.as_deref()
-    }
-    /// Returns the usage type of the container.
-    pub fn usage(&self) -> Option<UsageType> {
-        self.inner.usage
-    }
-    /// Returns the version of the container, if known.
-    pub fn version(&self) -> Option<BlockidVersion> {
-        self.inner.version
-    }
-    /// Returns the detected superblock magic bytes.
-    pub fn sbmagic(&self) -> Option<&'static [u8]> {
-        self.inner.sbmagic
-    }
-    /// Returns the offset of the superblock magic.
-    pub fn sbmagic_offset(&self) -> Option<u64> {
-        self.inner.sbmagic_offset
-    }
-    /// Returns the endianness of the container, if applicable.
-    pub fn endianness(&self) -> Option<Endianness> {
-        self.inner.endianness
-    }
-}
-
-/// Partition Table results returned by a [`Probe::as_part_table`].
-///
-/// Provides access to partition table metadata and partition entries.
-#[derive(Debug)]
-pub struct PartTableResultView<'a> {
-    inner: &'a PartTableResult,
-}
-
-impl<'a> PartTableResultView<'a> {
-    /// Returns the container type.
-    pub fn block_type(&self) -> Option<BlockType> {
-        self.inner.btype
-    }
-    /// Returns the sector type.
-    pub fn sec_type(&self) -> Option<SecType> {
-        self.inner.sec_type
-    }
-    /// Returns the UUID of the container.
-    pub fn uuid(&self) -> Option<BlockidUUID> {
-        self.inner.uuid
-    }
-    /// Returns list of partitions.
-    pub fn partitions(&self) -> impl Iterator<Item = &PartitionResults> {
-        self.inner.partitions.as_deref().into_iter().flatten()
-    }
-    /// Returns the detected superblock magic bytes.
-    pub fn sbmagic(&self) -> Option<&'static [u8]> {
-        self.inner.sbmagic
-    }
-    /// Returns the offset of the superblock magic.
-    pub fn sbmagic_offset(&self) -> Option<u64> {
-        self.inner.sbmagic_offset
-    }
-    /// Returns the endianness of the container, if applicable.
-    pub fn endianness(&self) -> Option<Endianness> {
-        self.inner.endianness
-    }
-}
-
-/// Filesystem results returned by a [`Probe::as_filesystem`].
-///
-/// Provides access to filesystem metadata.
-#[derive(Debug)]
-pub struct FilesystemResultView<'a> {
-    inner: &'a FilesystemResult,
-}
-
-impl<'a> FilesystemResultView<'a> {
-    /// Returns the container type.
-    pub fn block_type(&self) -> Option<BlockType> {
-        self.inner.btype
-    }
-    /// Returns the sector type.
-    pub fn sec_type(&self) -> Option<SecType> {
-        self.inner.sec_type
+        self.sec_type
     }
     /// Returns the UUID of the filesystem.
     pub fn uuid(&self) -> Option<BlockidUUID> {
-        self.inner.uuid
+        self.uuid
     }
     /// Returns the log UUID of the filesystem.
     pub fn log_uuid(&self) -> Option<BlockidUUID> {
-        self.inner.log_uuid
+        self.log_uuid
     }
     /// Returns the external journal UUID of the filesystem.
     pub fn ext_journal(&self) -> Option<BlockidUUID> {
-        self.inner.ext_journal
+        self.ext_journal
     }
     /// Returns the label of the filesystem.
     pub fn label(&self) -> Option<&str> {
-        self.inner.label.as_deref()
+        self.label.as_deref()
     }
     /// Returns the creator identifier.
     pub fn creator(&self) -> Option<&str> {
-        self.inner.creator.as_deref()
+        self.creator.as_deref()
     }
     /// Returns the usage type of the filesystem.
     pub fn usage(&self) -> Option<UsageType> {
-        self.inner.usage
+        self.usage
     }
     /// Returns size in bytes of filesystem.
     pub fn size(&self) -> Option<u64> {
-        self.inner.size
+        self.size
     }
     /// Returns last block of filesystem.
     pub fn last_block(&self) -> Option<u64> {
-        self.inner.fs_last_block
+        self.fs_last_block
     }
     /// Returns filesystem of block size.
     pub fn fs_block_size(&self) -> Option<u64> {
-        self.inner.fs_block_size
+        self.fs_block_size
     }
     /// Returns block size in bytes of filesystem.
     pub fn block_size(&self) -> Option<u64> {
-        self.inner.block_size
+        self.block_size
     }
     /// Returns the version of the filesystem, if known.
     pub fn version(&self) -> Option<BlockidVersion> {
-        self.inner.version
+        self.version
     }
     /// Returns the detected superblock magic bytes.
     pub fn sbmagic(&self) -> Option<&'static [u8]> {
-        self.inner.sbmagic
+        self.sbmagic
     }
     /// Returns the offset of the superblock magic.
     pub fn sbmagic_offset(&self) -> Option<u64> {
-        self.inner.sbmagic_offset
+        self.sbmagic_offset
     }
     /// Returns the endianness of the filesystem, if applicable.
     pub fn endianness(&self) -> Option<Endianness> {
-        self.inner.endianness
+        self.endianness
     }
 }
+
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartEntryType {
