@@ -1,3 +1,0 @@
-[toolchain]
-channel = "stable"
-components = ["rustc", "rust-std", "cargo", "rust-src", "rustc-dev", "llvm-tools"]

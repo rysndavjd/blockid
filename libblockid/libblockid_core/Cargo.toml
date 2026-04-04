@@ -1,0 +1,47 @@
+[package]
+name = "libblockid"
+version = "0.3.1"
+edition = "2024"
+description = "Block device identification library"
+repository = "https://github.com/rysndavjd/blockid"
+keywords = ["partition", "filesystem", "superblock"]
+categories = ["filesystem"]
+license = "MIT OR Apache-2.0"
+build = "build.rs"
+exclude = ["tests/*.bin", "tests/*.img", "headers"]
+
+[dependencies]
+bitflags = { version = "2.11.0", default-features = false }
+zerocopy = { version = "0.8.48", default-features = false, features = [
+    "derive",
+    "alloc",
+] }
+uuid = { version = "1.16.0", default-features = false, features = ["zerocopy"] }
+rustix = { version = "1.1.4", default-features = false, features = [
+    "fs",
+    "stdio",
+    "alloc",
+] }
+widestring = { version = "1.2.1", default-features = false, features = [
+    "alloc",
+] }
+fat_volume_id = { version = "0.1.0", default-features = false, features = [
+    "id32",
+    "id64",
+    "alloc",
+    "zerocopy",
+] }
+embedded-io = { version = "0.7.1", default-features = false, features = [
+    "alloc",
+] }
+
+[features]
+default = []
+std = [
+    "zerocopy/std",
+    "bitflags/std",
+    "rustix/std",
+    "widestring/std",
+    "fat_volume_id/std",
+    "uuid/std",
+]

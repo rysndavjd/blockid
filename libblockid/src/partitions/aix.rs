@@ -1,1 +1,0 @@
-pub const AIX_MAGIC_STRING: [u8; 4] = [0xC9, 0xC2, 0xD4, 0xC1];
