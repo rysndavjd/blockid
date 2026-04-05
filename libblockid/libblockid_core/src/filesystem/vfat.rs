@@ -6,16 +6,14 @@ use zerocopy::{
 };
 
 use crate::{
-    Read, Seek, SeekFrom,
     error::{Error, ErrorKind},
-    probe::{
-        BlockInfo, BlockType, Id, LowProbe, Magic, Reader, SecType, SuperblockInfo, Tag, Usage,
-    },
+    io::{ReadSeek, Reader, SeekFrom},
+    probe::{BlockInfo, BlockType, Id, LowProbe, Magic, SecType, SuperblockInfo, Tag, Usage},
     std::fmt,
     util::decode_utf8_lossy_from,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VFatError {
     InvalidVFat,
     InvalidFatSignature,
@@ -222,7 +220,7 @@ const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
 
-fn read_vfat_dir_entry<R: Read + Seek>(
+fn read_vfat_dir_entry<R: ReadSeek>(
     reader: &mut Reader<R>,
     offset: u64,
 ) -> Result<VfatDirEntry, VFatError> {
@@ -336,7 +334,7 @@ pub fn valid_fat(
     }
 }
 
-pub fn probe_is_vfat<R: Read + Seek>(reader: &mut Reader<R>, offset: u64) -> Result<(), VFatError> {
+pub fn probe_is_vfat<R: ReadSeek>(reader: &mut Reader<R>, offset: u64) -> Result<(), VFatError> {
     let buffer: [u8; 512] = reader.read_exact_at(offset)?;
 
     let ms = MsDosSuperBlock::ref_from_bytes(&buffer).map_err(|_| {
@@ -362,7 +360,7 @@ pub fn probe_is_vfat<R: Read + Seek>(reader: &mut Reader<R>, offset: u64) -> Res
     return Ok(());
 }
 
-pub fn search_fat_label<R: Read + Seek>(
+pub fn search_fat_label<R: ReadSeek>(
     reader: &mut Reader<R>,
     root_start: u64,
     root_dir_entries: u64,
@@ -398,7 +396,7 @@ pub fn search_fat_label<R: Read + Seek>(
 }
 
 // This fn works for both fat12 and fat16
-fn probe_fat16<R: Read + Seek>(
+fn probe_fat16<R: ReadSeek>(
     reader: &mut Reader<R>,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
@@ -419,7 +417,7 @@ fn probe_fat16<R: Read + Seek>(
     return Ok((vol_label, vol_serno));
 }
 
-fn probe_fat32<R: Read + Seek>(
+fn probe_fat32<R: ReadSeek>(
     reader: &mut Reader<R>,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
@@ -489,7 +487,7 @@ fn probe_fat32<R: Read + Seek>(
     Ok((vol_label, vol_serno))
 }
 
-pub fn probe_vfat<R: Read + Seek>(
+pub fn probe_vfat<R: ReadSeek>(
     reader: &mut Reader<R>,
     offset: u64,
     magic: Magic,

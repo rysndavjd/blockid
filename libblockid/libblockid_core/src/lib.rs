@@ -6,15 +6,21 @@ extern crate std;
 #[cfg(all(not(feature = "std"), not(test)))]
 extern crate core as std;
 
+extern crate alloc;
+
 mod error;
 mod filesystem;
+mod io;
 mod probe;
 mod util;
 
-#[cfg(feature = "std")]
-use std::io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom};
+pub use crate::{
+    error::Error,
+    probe::{Filter, LowProbe},
+};
 
-#[cfg(not(feature = "std"))]
-use embedded_io::{ErrorKind as IoErrorKind, Read, Seek, SeekFrom};
+#[cfg(all(feature = "std", feature = "no_std"))]
+compile_error!("features `std` and `no_std` are mutually exclusive");
 
-pub use crate::error::Error;
+#[cfg(not(any(feature = "std", feature = "no_std")))]
+compile_error!("must enable either `std` or `no_std` feature");

@@ -3,64 +3,25 @@ use fat_volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 
 use crate::{
-    Read, Seek, SeekFrom,
     error::{Error, ErrorKind},
-    filesystem::vfat::{VFAT_MAGICS, probe_vfat},
+    // filesystem::vfat::{VFAT_MAGICS, probe_vfat},
+    filesystem::ext::{EXT_MAGICS, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
+    io::{BlockIo, Reader, SeekFrom},
 };
 
-#[derive(Debug)]
-pub struct Reader<R: Read + Seek>(R);
-
-impl<R: Read + Seek> Reader<R> {
-    pub fn seek(&mut self, pos: SeekFrom) -> Result<u64, Error> {
-        self.0.seek(pos).map_err(|_| ErrorKind::Todo.into())
-    }
-
-    pub fn rewind(&mut self) -> Result<(), Error> {
-        self.0.rewind().map_err(|_| ErrorKind::Todo.into())
-    }
-
-    pub fn stream_position(&mut self) -> Result<u64, Error> {
-        self.0.stream_position().map_err(|_| ErrorKind::Todo.into())
-    }
-
-    pub fn seek_relative(&mut self, offset: i64) -> Result<(), Error> {
-        self.0
-            .seek_relative(offset)
-            .map_err(|_| ErrorKind::Todo.into())
-    }
-
-    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-        self.0.read(buf).map_err(|_| ErrorKind::Todo.into())
-    }
-
-    pub fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
-        self.0.read_exact(buf).map_err(|_| ErrorKind::Todo.into())
-    }
-
-    pub fn read_exact_at<const S: usize>(&mut self, offset: u64) -> Result<[u8; S], Error> {
-        let mut buffer = [0u8; S];
-        self.seek(SeekFrom::Start(offset))?;
-        self.read_exact(&mut buffer)?;
-
-        return Ok(buffer);
-    }
-
-    pub fn read_vec_at(&mut self, offset: u64, buf_size: usize) -> Result<Vec<u8>, Error> {
-        let mut buffer = vec![0u8; buf_size];
-        self.seek(SeekFrom::Start(offset))?;
-        self.read_exact(&mut buffer)?;
-
-        return Ok(buffer);
-    }
-}
+const BLOCK_DETECT_ORDER: &[BlockType] = &[
+    BlockType::Jbd,
+    BlockType::Ext2,
+    BlockType::Ext3,
+    BlockType::Ext4,
+];
 
 #[derive(Debug, Copy, Clone, Hash)]
-pub struct SuperblockInfo<R: Read + Seek> {
-    pub usage: Usage,
+pub struct SuperblockInfo<IO: BlockIo> {
     pub minsz: Option<u64>,
     pub magics: Option<&'static [Magic]>,
-    pub probe: fn(&mut Reader<R>, u64, Magic) -> Result<BlockInfo, Error>,
+    #[allow(clippy::type_complexity)]
+    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<BlockInfo, Error<IO>>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -93,13 +54,32 @@ pub enum BlockType {
 }
 
 impl BlockType {
-    fn block_info<R: Read + Seek>(&self) -> SuperblockInfo<R> {
+    fn block_info<IO: BlockIo>(&self) -> SuperblockInfo<IO> {
         match self {
-            BlockType::Vfat => SuperblockInfo {
-                usage: Usage::Filesystem,
+            // BlockType::Vfat => SuperblockInfo {
+            //     minsz: None,
+            //     magics: VFAT_MAGICS,
+            //     probe: probe_vfat,
+            // },
+            BlockType::Ext2 => SuperblockInfo {
                 minsz: None,
-                magics: VFAT_MAGICS,
-                probe: probe_vfat,
+                magics: EXT_MAGICS,
+                probe: probe_ext2,
+            },
+            BlockType::Ext3 => SuperblockInfo {
+                minsz: None,
+                magics: EXT_MAGICS,
+                probe: probe_ext3,
+            },
+            BlockType::Ext4 => SuperblockInfo {
+                minsz: None,
+                magics: EXT_MAGICS,
+                probe: probe_ext4,
+            },
+            BlockType::Jbd => SuperblockInfo {
+                minsz: None,
+                magics: EXT_MAGICS,
+                probe: probe_jbd,
             },
             _ => todo!(),
         }
@@ -209,6 +189,7 @@ pub enum Tag {
     Endianness(Endianness),
 }
 
+#[derive(Debug)]
 pub struct BlockInfo {
     tags: Vec<Tag>,
 }
@@ -238,25 +219,55 @@ impl BlockInfo {
 }
 
 #[derive(Debug)]
-pub struct LowProbe<R: Read + Seek> {
-    reader: Reader<R>,
+pub struct LowProbe<IO: BlockIo> {
+    reader: Reader<IO>,
     offset: u64,
-    size: u64,
     filter: Filter,
 }
 
-impl<R: Read + Seek> LowProbe<R> {
-    fn new(reader: R, offset: u64, size: u64, filter: Filter) -> LowProbe<R> {
+impl<IO: BlockIo> LowProbe<IO> {
+    pub fn new(reader: IO, offset: u64, filter: Filter) -> LowProbe<IO> {
         LowProbe {
-            reader: Reader(reader),
+            reader: Reader::new(reader),
             offset,
-            size,
             filter,
         }
     }
 
-    fn probe(&self) -> Result<BlockInfo, Error> {
-        todo!()
+    fn get_magic(&mut self, magics: Option<&'static [Magic]>) -> Result<Magic, Error<IO>> {
+        if let Some(magics) = magics {
+            let mut buf = [0u8; 16];
+
+            for magic in magics {
+                self.reader
+                    .seek(SeekFrom::Start(magic.b_offset))?;
+
+                self.reader
+                    .read_exact(&mut buf[..magic.len])
+                    .map_err(|e| ErrorKind::IoError::<IO>(e))?;
+
+                if &buf[..magic.len] == magic.magic {
+                    return Ok(*magic);
+                }
+            }
+        }
+        Ok(Magic::EMPTY_MAGIC)
+    }
+
+    pub fn probe(&mut self) -> Result<BlockInfo, Error<IO>> {
+        for block in BLOCK_DETECT_ORDER {
+            let info = block.block_info::<IO>();
+            let magic = match self.get_magic(info.magics) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+
+            match (info.probe)(&mut self.reader, self.offset, magic) {
+                Ok(t) => return Ok(t),
+                Err(_) => continue,
+            };
+        }
+        return Err(ErrorKind::ProbesExhausted.into());
     }
 }
 

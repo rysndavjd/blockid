@@ -115,8 +115,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "libblockid"
-version = "0.3.1"
+name = "libblockid_core"
+version = "0.1.0"
 dependencies = [
  "bitflags",
  "embedded-io",
@@ -130,6 +130,9 @@ dependencies = [
 [[package]]
 name = "libblockid_sys"
 version = "0.1.0"
+dependencies = [
+ "libblockid_core",
+]
 
 [[package]]
 name = "libc"
