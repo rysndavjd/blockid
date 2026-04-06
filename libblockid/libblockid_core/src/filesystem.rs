@@ -1,2 +1,3 @@
-pub mod vfat;
+pub mod exfat;
 pub mod ext;
+pub mod vfat;

@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::{
     error::{Error, ErrorKind},
     filesystem::{
+        exfat::{EXFAT_MAGICS, probe_exfat},
         ext::{EXT_MAGICS, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
         vfat::{VFAT_MAGICS, probe_vfat},
     },
@@ -12,6 +13,7 @@ use crate::{
 };
 
 const BLOCK_DETECT_ORDER: &[(Filter, Filter, BlockType)] = &[
+    (Filter::SKIP_FS, Filter::SKIP_EXFAT, BlockType::Exfat),
     (Filter::SKIP_FS, Filter::SKIP_JBD, BlockType::Jbd),
     (Filter::SKIP_FS, Filter::SKIP_EXT2, BlockType::Ext2),
     (Filter::SKIP_FS, Filter::SKIP_EXT3, BlockType::Ext3),
@@ -59,10 +61,15 @@ pub enum BlockType {
 impl BlockType {
     fn block_info<IO: BlockIo>(&self) -> SuperblockInfo<IO> {
         match self {
-            BlockType::Vfat => SuperblockInfo {
+            BlockType::Exfat => SuperblockInfo {
                 minsz: None,
-                magics: VFAT_MAGICS,
-                probe: probe_vfat,
+                magics: EXFAT_MAGICS,
+                probe: probe_exfat,
+            },
+            BlockType::Jbd => SuperblockInfo {
+                minsz: None,
+                magics: EXT_MAGICS,
+                probe: probe_jbd,
             },
             BlockType::Ext2 => SuperblockInfo {
                 minsz: None,
@@ -79,10 +86,10 @@ impl BlockType {
                 magics: EXT_MAGICS,
                 probe: probe_ext4,
             },
-            BlockType::Jbd => SuperblockInfo {
+            BlockType::Vfat => SuperblockInfo {
                 minsz: None,
-                magics: EXT_MAGICS,
-                probe: probe_jbd,
+                magics: VFAT_MAGICS,
+                probe: probe_vfat,
             },
             _ => todo!(),
         }

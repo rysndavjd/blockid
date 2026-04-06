@@ -1,12 +1,11 @@
 #[cfg(not(feature = "std"))]
 pub use embedded_io::{Error, ErrorKind, SeekFrom};
 
-use crate::std::fmt;
 #[cfg(feature = "std")]
 pub use crate::std::io::SeekFrom;
 
-pub trait BlockIo: fmt::Debug {
-    type Error: fmt::Debug;
+pub trait BlockIo: crate::std::fmt::Debug {
+    type Error: crate::std::fmt::Debug;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
 
@@ -16,7 +15,7 @@ pub trait BlockIo: fmt::Debug {
 }
 
 #[cfg(feature = "std")]
-impl<R: std::io::Read + std::io::Seek + fmt::Debug> BlockIo for R {
+impl<R: std::io::Read + std::io::Seek + std::fmt::Debug> BlockIo for R {
     type Error = std::io::Error;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
@@ -33,8 +32,9 @@ impl<R: std::io::Read + std::io::Seek + fmt::Debug> BlockIo for R {
 }
 
 #[cfg(not(feature = "std"))]
-impl<R: embedded_io::Read + embedded_io::Seek<Error = embedded_io::ErrorKind> + fmt::Debug> BlockIo
-    for R
+impl<
+    R: embedded_io::Read + embedded_io::Seek<Error = embedded_io::ErrorKind> + crate::std::fmt::Debug,
+> BlockIo for R
 {
     type Error = R::Error;
 
