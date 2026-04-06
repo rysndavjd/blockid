@@ -15,11 +15,6 @@ zerocopy = { version = "0.8.48", default-features = false, features = [
     "alloc",
 ] }
 uuid = { version = "1.16.0", default-features = false, features = ["zerocopy"] }
-rustix = { version = "1.1.4", default-features = false, features = [
-    "fs",
-    "stdio",
-    "alloc",
-] }
 widestring = { version = "1.2.1", default-features = false, features = [
     "alloc",
 ] }
@@ -35,11 +30,10 @@ embedded-io = { version = "0.7.1", default-features = false, features = [
 crc-fast = {version = "=1.9.0", default-features = false, features = []}
 
 [features]
-default = ["no_std"]
+default = ["std"]
 std = [
     "zerocopy/std",
     "bitflags/std",
-    "rustix/std",
     "widestring/std",
     "fat_volume_id/std",
     "uuid/std",

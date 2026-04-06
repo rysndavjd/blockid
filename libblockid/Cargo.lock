@@ -178,7 +178,6 @@ dependencies = [
  "crc-fast",
  "embedded-io",
  "fat_volume_id",
- "rustix",
  "uuid",
  "widestring",
  "zerocopy",
@@ -188,7 +187,10 @@ dependencies = [
 name = "libblockid_sys"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "libblockid_core",
+ "rustix",
+ "windows-sys",
 ]
 
 [[package]]

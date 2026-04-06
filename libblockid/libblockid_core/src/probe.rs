@@ -119,6 +119,29 @@ pub enum Id {
     VolumeId64(VolumeId64),
 }
 
+impl Id {
+    pub fn as_uuid(&self) -> Option<Uuid> {
+        match self {
+            Id::Uuid(t) => Some(*t),
+            _ => None,
+        }
+    }
+
+    pub fn as_volumeid32(&self) -> Option<VolumeId32> {
+        match self {
+            Id::VolumeId32(t) => Some(*t),
+            _ => None,
+        }
+    }
+
+    pub fn as_volumeid64(&self) -> Option<VolumeId64> {
+        match self {
+            Id::VolumeId64(t) => Some(*t),
+            _ => None,
+        }
+    }
+}
+
 impl From<Uuid> for Id {
     fn from(value: Uuid) -> Self {
         Id::Uuid(value)
@@ -209,8 +232,16 @@ pub struct BlockInfo {
 }
 
 impl BlockInfo {
-    pub fn new() -> BlockInfo {
+    pub(crate) fn new() -> BlockInfo {
         BlockInfo { tags: Vec::new() }
+    }
+
+    pub fn inner(&self) -> &Vec<Tag> {
+        &self.tags
+    }
+
+    pub fn into_inner(self) -> Vec<Tag> {
+        self.tags
     }
 
     pub fn set(&mut self, tag: Tag) {
@@ -227,6 +258,20 @@ impl BlockInfo {
     pub fn sec_type(&self) -> Option<&SecType> {
         self.tags.iter().find_map(|t| match t {
             Tag::SecType(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn label(&self) -> Option<&String> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::Label(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn id(&self) -> Option<&Id> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::Id(t) => Some(t),
             _ => None,
         })
     }

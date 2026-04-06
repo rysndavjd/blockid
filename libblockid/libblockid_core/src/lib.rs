@@ -16,7 +16,7 @@ mod util;
 
 pub use crate::{
     error::Error,
-    probe::{Filter, LowProbe},
+    probe::{BlockInfo, Filter, LowProbe, Id},
 };
 
 #[cfg(all(feature = "std", feature = "no_std"))]

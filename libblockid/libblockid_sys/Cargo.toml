@@ -2,8 +2,24 @@
 name = "libblockid_sys"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
+bitflags = { version = "2.11.0", default-features = false }
 libblockid_core = { path = "../libblockid_core", default-features = false, features = [
-    "std"
 ] }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))'.dependencies.rustix]
+version = "1.1.4"
+default-features = false
+features = ["stdio", "fs", "alloc"]
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.61.2"
+default-features = false
+features = ["Win32_Foundation", "Win32_System_Ioctl", "Win32_System_IO"]
+
+[features]
+default = ["std"]
+std = ["bitflags/std", "libblockid_core/std", "rustix/std"]
+no_std = []
