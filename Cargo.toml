@@ -2,5 +2,6 @@
 members = [
     "libblockid_core",
     "libblockid_sys",
+    "blockid"
 ]
 resolver = "2"
