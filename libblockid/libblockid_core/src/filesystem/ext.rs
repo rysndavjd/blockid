@@ -1,6 +1,5 @@
 use bitflags::bitflags;
-// use crc_fast::{CrcParams, checksum_with_params};
-use rustix::fs::makedev;
+use crc_fast::{CrcParams, checksum_with_params};
 use uuid::Uuid;
 use zerocopy::transmute;
 use zerocopy::{
@@ -271,25 +270,25 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
 
     if ro_compat.contains(ExtFeatureRoCompat::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
         // Seems EXT checksum does not XOR out the final value
-        // let crc32c = CrcParams::new(
-        //     "CRC-32/ExtCrc32c",
-        //     32,
-        //     0x1EDC6F41,
-        //     0xffffffff,
-        //     true,
-        //     0,
-        //     0xe3069283,
-        // );
+        let crc32c = CrcParams::new(
+            "CRC-32/ExtCrc32c",
+            32,
+            0x1EDC6F41,
+            0xffffffff,
+            true,
+            0,
+            0xe3069283,
+        );
 
-        // let calc_sum = checksum_with_params(
-        //     crc32c,
-        //     &es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)],
-        // );
-        // let sum = u64::from(es.s_checksum);
+        let calc_sum = checksum_with_params(
+            crc32c,
+            &es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)],
+        );
+        let sum = u64::from(es.s_checksum);
 
-        // if sum != calc_sum {
-        //     return Err(ExtError::HeaderChecksumInvalid);
-        // };
+        if sum != calc_sum {
+            return Err(ExtError::HeaderChecksumInvalid);
+        };
     } else if u32::from(es.s_log_block_size) >= 256 {
         return Err(ExtError::ProbablyLegacyExt);
     }
@@ -335,12 +334,8 @@ fn ext_get_info(
         None
     };
 
-    // let version = String::from(makedev(
-    //     u32::from(es.s_rev_level),
-    //     u32::from(es.s_minor_rev_level),
-    // ));
-
-    let version = String::new();
+    let version =
+        u32::from(es.s_rev_level).to_string() + "." + &u32::from(es.s_minor_rev_level).to_string();
 
     let log_block_size = u32::from(es.s_log_block_size);
 
@@ -378,9 +373,13 @@ pub fn probe_jbd<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
+    if magic.is_empty() {
+        return Err(ErrorKind::MagicCannotBeEmpty.into());
+    }
+
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
-        .map_err(|e| ErrorKind::IoError(e))?;
+        .map_err(Error::<IO>::io)?;
 
     let es: Ext2SuperBlock = transmute!(buf);
 
@@ -420,9 +419,13 @@ pub fn probe_ext2<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
+    if magic.is_empty() {
+        return Err(ErrorKind::MagicCannotBeEmpty.into());
+    }
+
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
-        .map_err(|e| ErrorKind::IoError(e))?;
+        .map_err(Error::<IO>::io)?;
 
     let es: Ext2SuperBlock = transmute!(buf);
 
@@ -472,9 +475,13 @@ pub fn probe_ext3<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
+    if magic.is_empty() {
+        return Err(ErrorKind::MagicCannotBeEmpty.into());
+    }
+
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
-        .map_err(|e| ErrorKind::IoError(e))?;
+        .map_err(Error::io)?;
 
     let es: Ext2SuperBlock = transmute!(buf);
 
@@ -524,9 +531,13 @@ pub fn probe_ext4<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
+    if magic.is_empty() {
+        return Err(ErrorKind::MagicCannotBeEmpty.into());
+    }
+
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
-        .map_err(|e| ErrorKind::IoError(e))?;
+        .map_err(Error::io)?;
 
     let es: Ext2SuperBlock = transmute!(buf);
 

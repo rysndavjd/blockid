@@ -32,6 +32,7 @@ fat_volume_id = { version = "0.1.0", default-features = false, features = [
 embedded-io = { version = "0.7.1", default-features = false, features = [
     "alloc",
 ], optional = true }
+crc-fast = {version = "=1.9.0", default-features = false, features = []}
 
 [features]
 default = ["no_std"]
@@ -42,5 +43,6 @@ std = [
     "widestring/std",
     "fat_volume_id/std",
     "uuid/std",
+    "crc-fast/std",
 ]
 no_std = ["dep:embedded-io"]

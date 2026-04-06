@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 libblockid_core = { path = "../libblockid_core", default-features = false, features = [
+    "std"
 ] }

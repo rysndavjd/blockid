@@ -4,16 +4,19 @@ use uuid::Uuid;
 
 use crate::{
     error::{Error, ErrorKind},
-    // filesystem::vfat::{VFAT_MAGICS, probe_vfat},
-    filesystem::ext::{EXT_MAGICS, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
+    filesystem::{
+        ext::{EXT_MAGICS, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
+        vfat::{VFAT_MAGICS, probe_vfat},
+    },
     io::{BlockIo, Reader, SeekFrom},
 };
 
-const BLOCK_DETECT_ORDER: &[BlockType] = &[
-    BlockType::Jbd,
-    BlockType::Ext2,
-    BlockType::Ext3,
-    BlockType::Ext4,
+const BLOCK_DETECT_ORDER: &[(Filter, Filter, BlockType)] = &[
+    (Filter::SKIP_FS, Filter::SKIP_JBD, BlockType::Jbd),
+    (Filter::SKIP_FS, Filter::SKIP_EXT2, BlockType::Ext2),
+    (Filter::SKIP_FS, Filter::SKIP_EXT3, BlockType::Ext3),
+    (Filter::SKIP_FS, Filter::SKIP_EXT4, BlockType::Ext4),
+    (Filter::SKIP_FS, Filter::SKIP_VFAT, BlockType::Vfat),
 ];
 
 #[derive(Debug, Copy, Clone, Hash)]
@@ -56,11 +59,11 @@ pub enum BlockType {
 impl BlockType {
     fn block_info<IO: BlockIo>(&self) -> SuperblockInfo<IO> {
         match self {
-            // BlockType::Vfat => SuperblockInfo {
-            //     minsz: None,
-            //     magics: VFAT_MAGICS,
-            //     probe: probe_vfat,
-            // },
+            BlockType::Vfat => SuperblockInfo {
+                minsz: None,
+                magics: VFAT_MAGICS,
+                probe: probe_vfat,
+            },
             BlockType::Ext2 => SuperblockInfo {
                 minsz: None,
                 magics: EXT_MAGICS,
@@ -146,6 +149,10 @@ impl Magic {
         len: 0,
         b_offset: 0,
     };
+
+    pub fn is_empty(&self) -> bool {
+        self == &Magic::EMPTY_MAGIC
+    }
 }
 
 #[non_exhaustive]
@@ -234,37 +241,51 @@ impl<IO: BlockIo> LowProbe<IO> {
         }
     }
 
-    fn get_magic(&mut self, magics: Option<&'static [Magic]>) -> Result<Magic, Error<IO>> {
-        if let Some(magics) = magics {
-            let mut buf = [0u8; 16];
+    fn get_magic(&mut self, magics: Option<&'static [Magic]>) -> Result<Option<Magic>, Error<IO>> {
+        match magics {
+            Some(mags) => {
+                let mut buf = [0u8; 16];
 
-            for magic in magics {
-                self.reader
-                    .seek(SeekFrom::Start(magic.b_offset))?;
+                for magic in mags {
+                    self.reader
+                        .seek(SeekFrom::Start(magic.b_offset))
+                        .map_err(Error::<IO>::io)?;
 
-                self.reader
-                    .read_exact(&mut buf[..magic.len])
-                    .map_err(|e| ErrorKind::IoError::<IO>(e))?;
+                    self.reader
+                        .read_exact(&mut buf[..magic.len])
+                        .map_err(Error::<IO>::io)?;
 
-                if &buf[..magic.len] == magic.magic {
-                    return Ok(*magic);
+                    if &buf[..magic.len] == magic.magic {
+                        return Ok(Some(*magic));
+                    }
                 }
             }
+            None => {
+                return Ok(None);
+            }
         }
-        Ok(Magic::EMPTY_MAGIC)
+        return Ok(None);
     }
 
     pub fn probe(&mut self) -> Result<BlockInfo, Error<IO>> {
         for block in BLOCK_DETECT_ORDER {
-            let info = block.block_info::<IO>();
-            let magic = match self.get_magic(info.magics) {
-                Ok(t) => t,
-                Err(_) => continue,
+            if self.filter.contains(block.0) || self.filter.contains(block.1) {
+                continue;
+            }
+
+            let info = block.2.block_info::<IO>();
+
+            let magic = match self.get_magic(info.magics)? {
+                Some(m) => m,
+                None => Magic::EMPTY_MAGIC,
             };
 
             match (info.probe)(&mut self.reader, self.offset, magic) {
                 Ok(t) => return Ok(t),
-                Err(_) => continue,
+                Err(e) => match e.0 {
+                    ErrorKind::IoError(_) => return Err(e),
+                    _ => continue,
+                },
             };
         }
         return Err(ErrorKind::ProbesExhausted.into());

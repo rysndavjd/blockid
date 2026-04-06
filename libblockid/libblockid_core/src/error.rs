@@ -1,29 +1,33 @@
-use crate::{filesystem::ext::ExtError, io::BlockIo};
+use crate::{
+    filesystem::{ext::ExtError, vfat::VFatError},
+    io::BlockIo,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BuilderError {}
 
 #[derive(Debug)]
-pub struct Error<IO: BlockIo + Sized>(pub(crate) ErrorKind<IO>);
+pub struct Error<IO: BlockIo>(pub(crate) ErrorKind<IO>);
 
-impl<IO: BlockIo> From<ErrorKind<IO>> for Error<IO> {
-    fn from(v: ErrorKind<IO>) -> Self {
-        Self(v)
+impl<IO: BlockIo> Error<IO> {
+    pub fn io(e: IO::Error) -> Self {
+        Error(ErrorKind::IoError(e))
     }
 }
 
-impl<IO: BlockIo> From<ErrorKind<IO>> for IO::IoError {
-    fn from(value: ErrorKind<IO>) -> Self {
-        Self()
+impl<IO: BlockIo> From<ErrorKind<IO>> for Error<IO> {
+    fn from(e: ErrorKind<IO>) -> Self {
+        Self(e)
     }
 }
 
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum ErrorKind<IO: BlockIo> {
-    IoError(IO::IoError),
+    IoError(IO::Error),
     ExtError(ExtError),
-    // VFatError(VFatError),
+    VFatError(VFatError),
+    MagicCannotBeEmpty,
     ProbesExhausted,
 }
 

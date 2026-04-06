@@ -7,8 +7,8 @@ use zerocopy::{
 
 use crate::{
     error::{Error, ErrorKind},
-    io::{ReadSeek, Reader, SeekFrom},
-    probe::{BlockInfo, BlockType, Id, LowProbe, Magic, SecType, SuperblockInfo, Tag, Usage},
+    io::{BlockIo, Reader, SeekFrom},
+    probe::{BlockInfo, BlockType, Id, Magic, SecType, Tag, Usage},
     std::fmt,
     util::decode_utf8_lossy_from,
 };
@@ -49,6 +49,12 @@ impl fmt::Display for VFatError {
             VFatError::InvalidFsInfoSignatureOne => write!(f, "Invalid fsinfo.signature1"),
             VFatError::InvalidFsInfoSignatureTwo => write!(f, "Invalid fsinfo.signature2"),
         }
+    }
+}
+
+impl<IO: BlockIo> From<VFatError> for Error<IO> {
+    fn from(e: VFatError) -> Self {
+        Self(ErrorKind::VFatError(e))
     }
 }
 
@@ -220,13 +226,15 @@ const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
 
-fn read_vfat_dir_entry<R: ReadSeek>(
-    reader: &mut Reader<R>,
+fn read_vfat_dir_entry<IO: BlockIo>(
+    reader: &mut Reader<IO>,
     offset: u64,
-) -> Result<VfatDirEntry, VFatError> {
+) -> Result<VfatDirEntry, Error<IO>> {
     let mut buffer = [0u8; 32];
-    reader.seek(SeekFrom::Start(offset))?;
-    reader.read_exact(&mut buffer)?;
+    reader
+        .seek(SeekFrom::Start(offset))
+        .map_err(Error::<IO>::io)?;
+    reader.read_exact(&mut buffer).map_err(Error::<IO>::io)?;
 
     let data: VfatDirEntry = transmute!(buffer);
 
@@ -334,37 +342,27 @@ pub fn valid_fat(
     }
 }
 
-pub fn probe_is_vfat<R: ReadSeek>(reader: &mut Reader<R>, offset: u64) -> Result<(), VFatError> {
-    let buffer: [u8; 512] = reader.read_exact_at(offset)?;
+// pub fn probe_is_vfat<IO: BlockIo>(reader: &mut Reader<IO>, offset: u64) -> Result<(), VFatError> {
+//     let buf: [u8; 512] = reader.read_exact_at(offset)?;
 
-    let ms = MsDosSuperBlock::ref_from_bytes(&buffer).map_err(|_| {
-        IoError::new(
-            ErrorKind::InvalidData,
-            "Unable to map bytes to MSDOS superblock",
-        )
-    })?;
-    let vs = VFatSuperBlock::ref_from_bytes(&buffer).map_err(|_| {
-        IoError::new(
-            ErrorKind::InvalidData,
-            "Unable to map bytes to VFAT superblock",
-        )
-    })?;
+//     let ms = transmute!(buf);
+//     let vs = transmute!(buf);
 
-    let mag: Magic = match reader.get_magic(&VFAT_ID_INFO)? {
-        Some(t) => t,
-        None => return Err(FatError::InvalidFatSignature),
-    };
+//     let mag: Magic = match reader.get_magic(&VFAT_ID_INFO)? {
+//         Some(t) => t,
+//         None => return Err(VFatError::InvalidFatSignature),
+//     };
 
-    valid_fat(ms, vs, &mag)?;
+//     valid_fat(ms, vs, &mag)?;
 
-    return Ok(());
-}
+//     return Ok(());
+// }
 
-pub fn search_fat_label<R: ReadSeek>(
-    reader: &mut Reader<R>,
+pub fn search_fat_label<IO: BlockIo>(
+    reader: &mut Reader<IO>,
     root_start: u64,
     root_dir_entries: u64,
-) -> Result<Option<String>, VFatError> {
+) -> Result<Option<String>, Error<IO>> {
     for i in 0..root_dir_entries {
         let offset = root_start + (i * 32);
 
@@ -396,12 +394,12 @@ pub fn search_fat_label<R: ReadSeek>(
 }
 
 // This fn works for both fat12 and fat16
-fn probe_fat16<R: ReadSeek>(
-    reader: &mut Reader<R>,
+fn probe_fat16<IO: BlockIo>(
+    reader: &mut Reader<IO>,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
-) -> Result<(Option<String>, VolumeId32), VFatError> {
+) -> Result<(Option<String>, VolumeId32), Error<IO>> {
     let reserved: u32 = ms.ms_reserved.into();
 
     let root_start: u32 = (reserved + fat_size) * u32::from(ms.ms_sector_size);
@@ -411,18 +409,18 @@ fn probe_fat16<R: ReadSeek>(
     let vol_serno = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
         VolumeId32::from_bytes(ms.ms_serno)
     } else {
-        return Err(VFatError::InvalidExtBootSign);
+        return Err(VFatError::InvalidExtBootSign.into());
     };
 
     return Ok((vol_label, vol_serno));
 }
 
-fn probe_fat32<R: ReadSeek>(
-    reader: &mut Reader<R>,
+fn probe_fat32<IO: BlockIo>(
+    reader: &mut Reader<IO>,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
-) -> Result<(Option<String>, VolumeId32), VFatError> {
+) -> Result<(Option<String>, VolumeId32), Error<IO>> {
     let reserved: u32 = ms.ms_reserved.into();
 
     let buf_size: u64 = vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size);
@@ -450,7 +448,9 @@ fn probe_fat32<R: ReadSeek>(
             None => {
                 let fat_entry_off =
                     (u64::from(reserved) * u64::from(ms.ms_sector_size)) + (u64::from(next) * 4);
-                let buf = reader.read_vec_at(fat_entry_off, buf_size as usize)?;
+                let buf = reader
+                    .read_vec_at(fat_entry_off, buf_size as usize)
+                    .map_err(Error::io)?;
 
                 if buf.len() < 4 {
                     break None;
@@ -466,9 +466,9 @@ fn probe_fat32<R: ReadSeek>(
 
     let fsinfo_sect = u64::from(vs.vs_fsinfo_sector);
     if fsinfo_sect != 0 {
-        let bytes = reader
+        let bytes: [u8; size_of::<Fat32FsInfo>()] = reader
             .read_exact_at(fsinfo_sect * u64::from(ms.ms_sector_size))
-            .unwrap();
+            .map_err(Error::io)?;
 
         let fsinfo: Fat32FsInfo = transmute!(bytes);
 
@@ -476,37 +476,41 @@ fn probe_fat32<R: ReadSeek>(
             && &fsinfo.signature1 != b"\x52\x52\x64\x41"
             && &fsinfo.signature1 != b"\x00\x00\x00\x00"
         {
-            return Err(VFatError::InvalidFsInfoSignatureOne);
+            return Err(VFatError::InvalidFsInfoSignatureOne.into());
         }
 
         if &fsinfo.signature2 != b"\x72\x72\x41\x61" && &fsinfo.signature2 != b"\x00\x00\x00\x00" {
-            return Err(VFatError::InvalidFsInfoSignatureTwo);
+            return Err(VFatError::InvalidFsInfoSignatureTwo.into());
         }
     }
 
     Ok((vol_label, vol_serno))
 }
 
-pub fn probe_vfat<R: ReadSeek>(
-    reader: &mut Reader<R>,
+pub fn probe_vfat<IO: BlockIo>(
+    reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error> {
-    let buf: [u8; 512] = reader.read_exact_at(offset)?;
+) -> Result<BlockInfo, Error<IO>> {
+    if magic.is_empty() {
+        return Err(ErrorKind::MagicCannotBeEmpty.into());
+    }
 
-    let ms = MsDosSuperBlock::ref_from_bytes(&buf).map_err(|_| Error(ErrorKind::Todo))?;
-    let vs = VFatSuperBlock::ref_from_bytes(&buf).map_err(|_| Error(ErrorKind::Todo))?;
+    let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::io)?;
 
-    let sec_type = valid_fat(ms, vs, &magic).unwrap();
+    let ms: MsDosSuperBlock = transmute!(buf);
+    let vs: VFatSuperBlock = transmute!(buf);
 
-    let fat_size = get_fat_size(ms, vs);
+    let sec_type = valid_fat(&ms, &vs, &magic)?;
+
+    let fat_size = get_fat_size(&ms, &vs);
 
     let (label, serno) = if ms.ms_fat_length != 0 {
-        probe_fat16(reader, ms, vs, fat_size).unwrap()
+        probe_fat16(reader, &ms, &vs, fat_size)?
     } else if vs.vs_fat32_length != 0 {
-        probe_fat32(reader, ms, vs, fat_size).unwrap()
+        probe_fat32(reader, &ms, &vs, fat_size)?
     } else {
-        todo!()
+        return Err(VFatError::InvalidVFat.into());
     };
 
     let mut info = BlockInfo::new();
@@ -521,10 +525,10 @@ pub fn probe_vfat<R: ReadSeek>(
     info.set(Tag::Magic(magic.magic.to_vec()));
     info.set(Tag::MagicOffset(magic.b_offset));
     info.set(Tag::FsSize(
-        u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms)),
+        u64::from(ms.ms_sector_size) * u64::from(get_sect_count(&ms)),
     ));
     info.set(Tag::FsLastBlock(
-        u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms)),
+        u64::from(ms.ms_sector_size) * u64::from(get_sect_count(&ms)),
     ));
     info.set(Tag::FsBlockSize(
         u64::from(vs.vs_cluster_size) * u64::from(ms.ms_sector_size),

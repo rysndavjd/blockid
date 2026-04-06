@@ -1,7 +1,9 @@
 use widestring::{error::Utf16Error, utfstring::Utf16String};
 
-use crate::probe::Endianness;
-use crate::std::{fmt, str::Utf8Error};
+use crate::{
+    probe::{Endianness, Magic},
+    std::{fmt, str::Utf8Error},
+};
 
 #[derive(Debug)]
 pub enum UtfError {
@@ -82,3 +84,4 @@ pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, UtfError> {
         .trim_end_matches('\0')
         .to_string());
 }
+

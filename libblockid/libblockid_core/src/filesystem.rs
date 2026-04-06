@@ -1,2 +1,2 @@
-//pub mod vfat;
+pub mod vfat;
 pub mod ext;
