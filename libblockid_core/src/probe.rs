@@ -7,12 +7,18 @@ use crate::{
     filesystem::{
         exfat::{EXFAT_MAGICS, probe_exfat},
         ext::{EXT_MAGICS, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
+        luks::{
+            LUKS1_MAGICS, LUKS2_MAGICS, LUKSOPAL_MAGICS, probe_luks_opal, probe_luks1, probe_luks2,
+        },
         vfat::{VFAT_MAGICS, probe_vfat},
     },
     io::{BlockIo, Reader, SeekFrom},
 };
 
 const BLOCK_DETECT_ORDER: &[(Filter, Filter, BlockType)] = &[
+    (Filter::SKIP_FS, Filter::SKIP_LUKS1, BlockType::LUKS1),
+    (Filter::SKIP_FS, Filter::SKIP_LUKS2, BlockType::LUKS2),
+    (Filter::SKIP_FS, Filter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
     (Filter::SKIP_FS, Filter::SKIP_EXFAT, BlockType::Exfat),
     (Filter::SKIP_FS, Filter::SKIP_JBD, BlockType::Jbd),
     (Filter::SKIP_FS, Filter::SKIP_EXT2, BlockType::Ext2),
@@ -61,6 +67,23 @@ pub enum BlockType {
 impl BlockType {
     fn block_info<IO: BlockIo>(&self) -> SuperblockInfo<IO> {
         match self {
+            BlockType::LUKS1 => SuperblockInfo {
+                minsz: None,
+                magics: LUKS1_MAGICS,
+                probe: probe_luks1,
+            },
+
+            BlockType::LUKS2 => SuperblockInfo {
+                minsz: None,
+                magics: LUKS2_MAGICS,
+                probe: probe_luks2,
+            },
+
+            BlockType::LUKSOpal => SuperblockInfo {
+                minsz: None,
+                magics: LUKSOPAL_MAGICS,
+                probe: probe_luks_opal,
+            },
             BlockType::Exfat => SuperblockInfo {
                 minsz: None,
                 magics: EXFAT_MAGICS,
@@ -275,6 +298,90 @@ impl BlockInfo {
             _ => None,
         })
     }
+
+    pub fn sub_member_id(&self) -> Option<&Id> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::SubMemberId(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn ext_log_id(&self) -> Option<&Id> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::ExtLogId(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn ext_journal_id(&self) -> Option<&Id> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::ExtJournalId(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn usage(&self) -> Option<&Usage> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::Usage(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn version(&self) -> Option<&String> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::Version(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn magic(&self) -> Option<&Vec<u8>> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::Magic(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn magic_offset(&self) -> Option<&u64> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::MagicOffset(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn fs_size(&self) -> Option<&u64> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::FsSize(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn fs_last_block(&self) -> Option<&u64> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::FsLastBlock(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn fs_block_size(&self) -> Option<&u64> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::FsBlockSize(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn block_size(&self) -> Option<&u64> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::BlockSize(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn endianness(&self) -> Option<&Endianness> {
+        self.tags.iter().find_map(|t| match t {
+            Tag::Endianness(t) => Some(t),
+            _ => None,
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -347,7 +454,6 @@ impl<IO: BlockIo> LowProbe<IO> {
 bitflags! {
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct Filter: u64 {
-        const SKIP_CONT = 1 << 0;
         const SKIP_PT = 1 << 1;
         const SKIP_FS = 1 << 2;
         const SKIP_LUKS1 = 1 << 3;

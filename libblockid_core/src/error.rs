@@ -1,5 +1,5 @@
 use crate::{
-    filesystem::{exfat::ExFatError, ext::ExtError, vfat::VFatError},
+    filesystem::{exfat::ExFatError, ext::ExtError, luks::LuksError, vfat::VFatError},
     io::BlockIo,
 };
 
@@ -25,6 +25,7 @@ impl<IO: BlockIo> From<ErrorKind<IO>> for Error<IO> {
 #[derive(Debug)]
 pub enum ErrorKind<IO: BlockIo> {
     IoError(IO::Error),
+    LuksError(LuksError),
     ExFatError(ExFatError),
     ExtError(ExtError),
     VFatError(VFatError),

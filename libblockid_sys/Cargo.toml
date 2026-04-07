@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 bitflags = { version = "2.11.0", default-features = false }
 libblockid_core = { path = "../libblockid_core", default-features = false, features = [
 ] }
+embedded-io = { version = "0.7.1", default-features = false, features = ["alloc"], optional = true}
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))'.dependencies.rustix]
 version = "1.1.4"
@@ -19,7 +20,12 @@ version = "0.61.2"
 default-features = false
 features = ["Win32_Foundation", "Win32_System_Ioctl", "Win32_System_IO"]
 
+[target.'cfg(windows)'.dependencies.widestring]
+version = "1.2.1"
+default-features = false
+features = ["alloc"]
+
 [features]
 default = ["std"]
-std = ["bitflags/std", "libblockid_core/std", "rustix/std"]
-no_std = []
+std = ["bitflags/std", "libblockid_core/std", "rustix/std", "embedded-io/std", "widestring/std"]
+no_std = ["dep:embedded-io"]

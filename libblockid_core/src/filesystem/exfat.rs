@@ -9,12 +9,11 @@ use crate::{
     io::{BlockIo, Reader},
     probe::{BlockInfo, BlockType, Endianness, Id, Magic, Tag, Usage},
     std::fmt,
-    util::{UtfError, decode_utf16_lossy_from},
+    util::{decode_utf16_lossy_from},
 };
 
 #[derive(Debug)]
 pub enum ExFatError {
-    UtfError(UtfError),
     HeaderChecksumInvalid,
     ProbablyDOS,
     ProbablyNotEXFAT,
@@ -33,7 +32,6 @@ pub enum ExFatError {
 impl fmt::Display for ExFatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExFatError::UtfError(e) => write!(f, "UTF operation failed: {e}"),
             ExFatError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
             ExFatError::ProbablyDOS => write!(f, "Filesystem looks like DOS/MBR"),
             ExFatError::ProbablyNotEXFAT => write!(f, "Filesystem does not look like EXFAT"),
@@ -56,12 +54,6 @@ impl fmt::Display for ExFatError {
                 write!(f, "Invalid range of first clustor of root")
             }
         }
-    }
-}
-
-impl From<UtfError> for ExFatError {
-    fn from(e: UtfError) -> Self {
-        Self::UtfError(e)
     }
 }
 

@@ -334,8 +334,10 @@ name = "libblockid_sys"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "embedded-io",
  "libblockid_core",
  "rustix",
+ "widestring",
  "windows-sys",
 ]
 

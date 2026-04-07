@@ -1,0 +1,99 @@
+#[cfg(feature = "std")]
+pub use std::fs::File;
+
+#[cfg(all(not(feature = "std"), target_family = "unix"))]
+pub use crate::io::unix::File;
+
+#[cfg(all(not(feature = "std"), target_family = "unix"))]
+mod unix {
+    use core::fmt;
+
+    use embedded_io::{
+        Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek,
+        SeekFrom as EmbeddedSeekFrom,
+    };
+    use rustix::{
+        fd::OwnedFd,
+        fs::{SeekFrom as RustixSeekFrom, seek},
+        io::{Errno, read},
+    };
+
+    #[derive(Debug)]
+    pub struct Error(Errno);
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "os error {}", self.0.raw_os_error())
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    impl From<Errno> for Error {
+        fn from(e: Errno) -> Self {
+            Self(e)
+        }
+    }
+
+    impl EmbeddedError for Error {
+        fn kind(&self) -> ErrorKind {
+            match self.0 {
+                Errno::NOENT | Errno::NODEV | Errno::NXIO => ErrorKind::NotFound,
+                Errno::PERM | Errno::ACCESS => ErrorKind::PermissionDenied,
+                Errno::CONNREFUSED => ErrorKind::ConnectionRefused,
+                Errno::CONNRESET => ErrorKind::ConnectionReset,
+                Errno::CONNABORTED => ErrorKind::ConnectionAborted,
+                Errno::NOTCONN => ErrorKind::NotConnected,
+                Errno::ADDRINUSE => ErrorKind::AddrInUse,
+                Errno::ADDRNOTAVAIL => ErrorKind::AddrNotAvailable,
+                Errno::PIPE | Errno::NOLINK => ErrorKind::BrokenPipe,
+                Errno::EXIST => ErrorKind::AlreadyExists,
+                Errno::INVAL | Errno::BADF | Errno::FAULT => ErrorKind::InvalidInput,
+                Errno::ILSEQ | Errno::BADMSG | Errno::PROTO => ErrorKind::InvalidData,
+                Errno::TIMEDOUT => ErrorKind::TimedOut,
+                Errno::INTR => ErrorKind::Interrupted,
+                Errno::NOSYS | Errno::NOTSUP => ErrorKind::Unsupported,
+                Errno::NOMEM => ErrorKind::OutOfMemory,
+                _ => ErrorKind::Other,
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct File {
+        inner: OwnedFd,
+    }
+
+    impl File {
+        pub fn new(fd: OwnedFd) -> File {
+            Self { inner: fd }
+        }
+    }
+
+    impl EmbeddedErrorType for File {
+        type Error = Error;
+    }
+
+    impl Read for File {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+            let out = read(&self.inner, buf)?;
+            Ok(out)
+        }
+    }
+
+    impl Seek for File {
+        fn seek(&mut self, pos: EmbeddedSeekFrom) -> Result<u64, Self::Error> {
+            let new_pos = match pos {
+                EmbeddedSeekFrom::Start(pos) => RustixSeekFrom::Start(pos),
+                EmbeddedSeekFrom::End(pos) => RustixSeekFrom::Current(pos),
+                EmbeddedSeekFrom::Current(pos) => RustixSeekFrom::Current(pos),
+            };
+
+            let ret = seek(&self.inner, new_pos)?;
+            Ok(ret)
+        }
+    }
+}
+
+#[cfg(all(not(feature = "std"), target_family = "windows"))]
+mod windows {}
