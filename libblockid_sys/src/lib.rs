@@ -1,3 +1,4 @@
+mod error;
 mod io;
 mod ioctl;
 mod path;

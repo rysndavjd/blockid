@@ -1,15 +1,17 @@
 #[cfg(feature = "std")]
-pub use std::fs::File;
+pub use std::{
+    fs::File,
+    io::{Error, ErrorKind},
+};
 
 #[cfg(all(not(feature = "std"), target_family = "unix"))]
-pub use crate::io::unix::File;
+pub use impl_unix::{Error, ErrorKind, File};
 
 #[cfg(all(not(feature = "std"), target_family = "unix"))]
-mod unix {
-    use core::fmt;
-
+mod impl_unix {
+    pub use embedded_io::ErrorKind;
     use embedded_io::{
-        Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek,
+        Error as EmbeddedError, ErrorType as EmbeddedErrorType, Read, Seek,
         SeekFrom as EmbeddedSeekFrom,
     };
     use rustix::{
@@ -21,8 +23,8 @@ mod unix {
     #[derive(Debug)]
     pub struct Error(Errno);
 
-    impl fmt::Display for Error {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    impl core::fmt::Display for Error {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             write!(f, "os error {}", self.0.raw_os_error())
         }
     }
@@ -32,6 +34,30 @@ mod unix {
     impl From<Errno> for Error {
         fn from(e: Errno) -> Self {
             Self(e)
+        }
+    }
+
+    impl From<ErrorKind> for Error {
+        fn from(e: ErrorKind) -> Self {
+            Self(match e {
+                ErrorKind::NotFound => Errno::NODEV,
+                ErrorKind::PermissionDenied => Errno::ACCESS,
+                ErrorKind::ConnectionRefused => Errno::CONNREFUSED,
+                ErrorKind::ConnectionReset => Errno::CONNRESET,
+                ErrorKind::ConnectionAborted => Errno::CONNABORTED,
+                ErrorKind::NotConnected => Errno::NOTCONN,
+                ErrorKind::AddrInUse => Errno::ADDRINUSE,
+                ErrorKind::AddrNotAvailable => Errno::ADDRNOTAVAIL,
+                ErrorKind::BrokenPipe => Errno::PIPE,
+                ErrorKind::AlreadyExists => Errno::EXIST,
+                ErrorKind::InvalidInput => Errno::INVAL,
+                ErrorKind::InvalidData => Errno::ILSEQ,
+                ErrorKind::TimedOut => Errno::TIMEDOUT,
+                ErrorKind::Interrupted => Errno::INTR,
+                ErrorKind::Unsupported => Errno::NOTSUP,
+                ErrorKind::OutOfMemory => Errno::NOMEM,
+                _ => Errno::IO,
+            })
         }
     }
 
@@ -64,11 +90,7 @@ mod unix {
         inner: OwnedFd,
     }
 
-    impl File {
-        pub fn new(fd: OwnedFd) -> File {
-            Self { inner: fd }
-        }
-    }
+    impl File {}
 
     impl EmbeddedErrorType for File {
         type Error = Error;

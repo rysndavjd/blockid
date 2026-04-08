@@ -1,6 +1,16 @@
-use crate::{io::File, path::Arg};
+use crate::{
+    error::{Error, ErrorKind},
+    io::File,
+    path::SysPath,
+};
 
-struct Probe<P: Arg> {
+struct Probe<P: SysPath> {
     path: P,
     disk: File,
+}
+
+impl<P: SysPath> Probe<P> {
+    fn new(path: P) -> Result<Probe<P>, Error> {
+        todo!()
+    }
 }
