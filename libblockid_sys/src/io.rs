@@ -16,9 +16,11 @@ mod impl_unix {
     };
     use rustix::{
         fd::OwnedFd,
-        fs::{SeekFrom as RustixSeekFrom, seek},
+        fs::{Access, Mode, OFlags, SeekFrom as RustixSeekFrom, access, open, seek},
         io::{Errno, read},
     };
+
+    use crate::path::SysPath;
 
     #[derive(Debug)]
     pub struct Error(Errno);
@@ -90,7 +92,15 @@ mod impl_unix {
         inner: OwnedFd,
     }
 
-    impl File {}
+    impl File {
+        pub fn open<P: SysPath>(path: P) -> Result<File, Error> {
+            access(path, Access::EXISTS);
+
+            let fd = open(path, OFlags::RDONLY, Mode::ROTH | Mode::RGRP | Mode::RUSR)?;
+
+            Ok(Self { inner: fd })
+        }
+    }
 
     impl EmbeddedErrorType for File {
         type Error = Error;
