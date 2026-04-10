@@ -8,7 +8,7 @@ use zerocopy::{
 use crate::{
     error::{Error, ErrorKind},
     io::{BlockIo, Reader, SeekFrom},
-    probe::{BlockInfo, BlockType, Id, Magic, SecType, Tag, Usage},
+    probe::{BlockInfo, BlockType, Id, Magic, SecType, BlockTag, Usage},
     std::fmt,
     util::decode_utf8_lossy_from,
 };
@@ -515,25 +515,25 @@ pub fn probe_vfat<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::Vfat));
-    info.set(Tag::SecType(sec_type));
-    info.set(Tag::Id(Id::VolumeId32(serno)));
+    info.set(BlockTag::FsType(BlockType::Vfat));
+    info.set(BlockTag::SecType(sec_type));
+    info.set(BlockTag::Id(Id::VolumeId32(serno)));
     if let Some(l) = label {
-        info.set(Tag::Label(l));
+        info.set(BlockTag::Label(l));
     }
-    info.set(Tag::Usage(Usage::Filesystem));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
-    info.set(Tag::FsSize(
+    info.set(BlockTag::Usage(Usage::Filesystem));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsSize(
         u64::from(ms.ms_sector_size) * u64::from(get_sect_count(&ms)),
     ));
-    info.set(Tag::FsLastBlock(
+    info.set(BlockTag::FsLastBlock(
         u64::from(ms.ms_sector_size) * u64::from(get_sect_count(&ms)),
     ));
-    info.set(Tag::FsBlockSize(
+    info.set(BlockTag::FsBlockSize(
         u64::from(vs.vs_cluster_size) * u64::from(ms.ms_sector_size),
     ));
-    info.set(Tag::BlockSize(u64::from(ms.ms_sector_size)));
+    info.set(BlockTag::BlockSize(u64::from(ms.ms_sector_size)));
 
     return Ok(info);
 }

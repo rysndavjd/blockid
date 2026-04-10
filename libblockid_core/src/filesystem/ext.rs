@@ -11,7 +11,7 @@ use crate::util::decode_utf8_lossy_from;
 use crate::{
     error::{Error, ErrorKind},
     io::{BlockIo, Reader},
-    probe::{BlockInfo, BlockType, Id, Magic, Tag, Usage},
+    probe::{BlockInfo, BlockType, Id, Magic, BlockTag, Usage},
     std::{fmt, mem::offset_of},
 };
 
@@ -394,22 +394,22 @@ pub fn probe_jbd<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::Jbd));
+    info.set(BlockTag::FsType(BlockType::Jbd));
     if let Some(l) = label {
-        info.set(Tag::Label(l));
+        info.set(BlockTag::Label(l));
     }
-    info.set(Tag::Id(uuid));
+    info.set(BlockTag::Id(uuid));
     if let Some(id) = journal_uuid {
-        info.set(Tag::ExtJournalId(id));
+        info.set(BlockTag::ExtJournalId(id));
     }
-    info.set(Tag::Usage(Usage::Filesystem));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
-    info.set(Tag::FsSize(fs_size));
-    info.set(Tag::FsLastBlock(fs_last_block));
-    info.set(Tag::FsBlockSize(block_size));
-    info.set(Tag::BlockSize(block_size));
+    info.set(BlockTag::Usage(Usage::Filesystem));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsSize(fs_size));
+    info.set(BlockTag::FsLastBlock(fs_last_block));
+    info.set(BlockTag::FsBlockSize(block_size));
+    info.set(BlockTag::BlockSize(block_size));
 
     return Ok(info);
 }
@@ -450,22 +450,22 @@ pub fn probe_ext2<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::Ext2));
+    info.set(BlockTag::FsType(BlockType::Ext2));
     if let Some(l) = label {
-        info.set(Tag::Label(l));
+        info.set(BlockTag::Label(l));
     }
-    info.set(Tag::Id(uuid));
+    info.set(BlockTag::Id(uuid));
     if let Some(id) = journal_uuid {
-        info.set(Tag::ExtJournalId(id));
+        info.set(BlockTag::ExtJournalId(id));
     }
-    info.set(Tag::Usage(Usage::Filesystem));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
-    info.set(Tag::FsSize(fs_size));
-    info.set(Tag::FsLastBlock(fs_last_block));
-    info.set(Tag::FsBlockSize(block_size));
-    info.set(Tag::BlockSize(block_size));
+    info.set(BlockTag::Usage(Usage::Filesystem));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsSize(fs_size));
+    info.set(BlockTag::FsLastBlock(fs_last_block));
+    info.set(BlockTag::FsBlockSize(block_size));
+    info.set(BlockTag::BlockSize(block_size));
 
     return Ok(info);
 }
@@ -506,22 +506,22 @@ pub fn probe_ext3<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::Ext3));
+    info.set(BlockTag::FsType(BlockType::Ext3));
     if let Some(l) = label {
-        info.set(Tag::Label(l));
+        info.set(BlockTag::Label(l));
     }
-    info.set(Tag::Id(uuid));
+    info.set(BlockTag::Id(uuid));
     if let Some(id) = journal_uuid {
-        info.set(Tag::ExtJournalId(id));
+        info.set(BlockTag::ExtJournalId(id));
     }
-    info.set(Tag::Usage(Usage::Filesystem));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
-    info.set(Tag::FsSize(fs_size));
-    info.set(Tag::FsLastBlock(fs_last_block));
-    info.set(Tag::FsBlockSize(block_size));
-    info.set(Tag::BlockSize(block_size));
+    info.set(BlockTag::Usage(Usage::Filesystem));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsSize(fs_size));
+    info.set(BlockTag::FsLastBlock(fs_last_block));
+    info.set(BlockTag::FsBlockSize(block_size));
+    info.set(BlockTag::BlockSize(block_size));
 
     return Ok(info);
 }
@@ -566,22 +566,22 @@ pub fn probe_ext4<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::Ext4));
+    info.set(BlockTag::FsType(BlockType::Ext4));
     if let Some(l) = label {
-        info.set(Tag::Label(l));
+        info.set(BlockTag::Label(l));
     }
-    info.set(Tag::Id(uuid));
+    info.set(BlockTag::Id(uuid));
     if let Some(id) = journal_uuid {
-        info.set(Tag::ExtJournalId(id));
+        info.set(BlockTag::ExtJournalId(id));
     }
-    info.set(Tag::Usage(Usage::Filesystem));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
-    info.set(Tag::FsSize(fs_size));
-    info.set(Tag::FsLastBlock(fs_last_block));
-    info.set(Tag::FsBlockSize(block_size));
-    info.set(Tag::BlockSize(block_size));
+    info.set(BlockTag::Usage(Usage::Filesystem));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsSize(fs_size));
+    info.set(BlockTag::FsLastBlock(fs_last_block));
+    info.set(BlockTag::FsBlockSize(block_size));
+    info.set(BlockTag::BlockSize(block_size));
 
     return Ok(info);
 }

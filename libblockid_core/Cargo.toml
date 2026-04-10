@@ -2,10 +2,12 @@
 name = "libblockid_core"
 version = "0.1.0"
 edition = "2024"
-description = "Block device identification library"
+description = "Core portable block device identification library"
+readme = "README.md"
+homepage = "https://github.com/rysndavjd/blockid"
 repository = "https://github.com/rysndavjd/blockid"
-keywords = ["partition", "filesystem", "superblock"]
-categories = ["filesystem"]
+keywords = ["partition", "filesystem", "superblock", "no_std"]
+categories = ["filesystem", "no-std", "parsing"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]

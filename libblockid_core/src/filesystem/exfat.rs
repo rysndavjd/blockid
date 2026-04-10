@@ -7,7 +7,7 @@ use zerocopy::{
 use crate::{
     error::{Error, ErrorKind},
     io::{BlockIo, Reader},
-    probe::{BlockInfo, BlockType, Endianness, Id, Magic, Tag, Usage},
+    probe::{BlockInfo, BlockType, Endianness, Id, Magic, BlockTag, Usage},
     std::fmt,
     util::{decode_utf16_lossy_from},
 };
@@ -353,23 +353,23 @@ pub fn probe_exfat<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::Exfat));
-    info.set(Tag::Id(Id::VolumeId32(VolumeId32::from_bytes(
+    info.set(BlockTag::FsType(BlockType::Exfat));
+    info.set(BlockTag::Id(Id::VolumeId32(VolumeId32::from_bytes(
         sb.volume_serial,
     ))));
     if let Some(l) = label {
-        info.set(Tag::Label(l));
+        info.set(BlockTag::Label(l));
     }
-    info.set(Tag::Usage(Usage::Filesystem));
-    info.set(Tag::FsSize(
+    info.set(BlockTag::Usage(Usage::Filesystem));
+    info.set(BlockTag::FsSize(
         sb.block_size() as u64 * u64::from(sb.volume_length),
     ));
-    info.set(Tag::FsBlockSize(sb.block_size() as u64));
-    info.set(Tag::BlockSize(sb.block_size() as u64));
-    info.set(Tag::Usage(Usage::Filesystem));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(mag.magic.to_vec()));
-    info.set(Tag::MagicOffset(mag.b_offset));
+    info.set(BlockTag::FsBlockSize(sb.block_size() as u64));
+    info.set(BlockTag::BlockSize(sb.block_size() as u64));
+    info.set(BlockTag::Usage(Usage::Filesystem));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(mag.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(mag.b_offset));
 
     return Ok(info);
 }

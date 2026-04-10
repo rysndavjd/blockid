@@ -9,7 +9,7 @@ use crate::{
     BlockInfo, Id,
     error::{Error, ErrorKind},
     io::{BlockIo, Reader},
-    probe::{BlockType, Magic, Tag, Usage},
+    probe::{BlockType, Magic, BlockTag, Usage},
     std::{fmt, str::FromStr},
     util::{UtfError, decode_utf8_from},
 };
@@ -165,12 +165,12 @@ pub fn probe_luks1<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::LUKS1));
-    info.set(Tag::Id(Id::Uuid(uuid)));
-    info.set(Tag::Usage(Usage::Crypto));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsType(BlockType::LUKS1));
+    info.set(BlockTag::Id(Id::Uuid(uuid)));
+    info.set(BlockTag::Usage(Usage::Crypto));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
 
     return Ok(info);
 }
@@ -195,12 +195,12 @@ pub fn probe_luks2<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::LUKS2));
-    info.set(Tag::Id(Id::Uuid(uuid)));
-    info.set(Tag::Usage(Usage::Crypto));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsType(BlockType::LUKS2));
+    info.set(BlockTag::Id(Id::Uuid(uuid)));
+    info.set(BlockTag::Usage(Usage::Crypto));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
 
     return Ok(info);
 }
@@ -229,12 +229,12 @@ pub fn probe_luks_opal<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(Tag::FsType(BlockType::LUKSOpal));
-    info.set(Tag::Id(Id::Uuid(uuid)));
-    info.set(Tag::Usage(Usage::Crypto));
-    info.set(Tag::Version(version));
-    info.set(Tag::Magic(magic.magic.to_vec()));
-    info.set(Tag::MagicOffset(magic.b_offset));
+    info.set(BlockTag::FsType(BlockType::LUKSOpal));
+    info.set(BlockTag::Id(Id::Uuid(uuid)));
+    info.set(BlockTag::Usage(Usage::Crypto));
+    info.set(BlockTag::Version(version));
+    info.set(BlockTag::Magic(magic.magic.to_vec()));
+    info.set(BlockTag::MagicOffset(magic.b_offset));
 
     return Ok(info);
 }

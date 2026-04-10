@@ -16,7 +16,7 @@ mod impl_unix {
     };
     use rustix::{
         fd::OwnedFd,
-        fs::{Access, Mode, OFlags, SeekFrom as RustixSeekFrom, access, open, seek},
+        fs::{Mode, OFlags, SeekFrom as RustixSeekFrom, open, seek},
         io::{Errno, read},
     };
 
@@ -63,6 +63,12 @@ mod impl_unix {
         }
     }
 
+    impl From<Error> for embedded_io::ErrorKind {
+        fn from(e: Error) -> embedded_io::ErrorKind {
+            e.kind()
+        }
+    }
+
     impl EmbeddedError for Error {
         fn kind(&self) -> ErrorKind {
             match self.0 {
@@ -94,9 +100,7 @@ mod impl_unix {
 
     impl File {
         pub fn open<P: SysPath>(path: P) -> Result<File, Error> {
-            access(path, Access::EXISTS);
-
-            let fd = open(path, OFlags::RDONLY, Mode::ROTH | Mode::RGRP | Mode::RUSR)?;
+            let fd = open(path.as_ref().as_bytes(), OFlags::RDONLY, Mode::empty())?;
 
             Ok(Self { inner: fd })
         }

@@ -210,7 +210,7 @@ impl Magic {
 
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Tag {
+pub enum BlockTag {
     /// Filesystem type, Eg: EXT4.
     FsType(BlockType),
     /// Secondary filesystem type, Eg: Filsystem is VFAT but secondary type is FAT16.
@@ -251,7 +251,7 @@ pub enum Tag {
 
 #[derive(Debug)]
 pub struct BlockInfo {
-    tags: Vec<Tag>,
+    tags: Vec<BlockTag>,
 }
 
 impl BlockInfo {
@@ -259,126 +259,126 @@ impl BlockInfo {
         BlockInfo { tags: Vec::new() }
     }
 
-    pub fn inner(&self) -> &Vec<Tag> {
+    pub fn inner(&self) -> &Vec<BlockTag> {
         &self.tags
     }
 
-    pub fn into_inner(self) -> Vec<Tag> {
+    pub fn into_inner(self) -> Vec<BlockTag> {
         self.tags
     }
 
-    pub fn set(&mut self, tag: Tag) {
+    pub fn set(&mut self, tag: BlockTag) {
         self.tags.push(tag);
     }
 
-    pub fn fs_type(&self) -> Option<&BlockType> {
+    pub fn fs_type(&self) -> Option<BlockType> {
         self.tags.iter().find_map(|t| match t {
-            Tag::FsType(t) => Some(t),
+            BlockTag::FsType(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn sec_type(&self) -> Option<&SecType> {
+    pub fn sec_type(&self) -> Option<SecType> {
         self.tags.iter().find_map(|t| match t {
-            Tag::SecType(t) => Some(t),
+            BlockTag::SecType(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn label(&self) -> Option<&String> {
         self.tags.iter().find_map(|t| match t {
-            Tag::Label(t) => Some(t),
+            BlockTag::Label(t) => Some(t),
             _ => None,
         })
     }
 
-    pub fn id(&self) -> Option<&Id> {
+    pub fn id(&self) -> Option<Id> {
         self.tags.iter().find_map(|t| match t {
-            Tag::Id(t) => Some(t),
+            BlockTag::Id(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn sub_member_id(&self) -> Option<&Id> {
+    pub fn sub_member_id(&self) -> Option<Id> {
         self.tags.iter().find_map(|t| match t {
-            Tag::SubMemberId(t) => Some(t),
+            BlockTag::SubMemberId(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn ext_log_id(&self) -> Option<&Id> {
+    pub fn ext_log_id(&self) -> Option<Id> {
         self.tags.iter().find_map(|t| match t {
-            Tag::ExtLogId(t) => Some(t),
+            BlockTag::ExtLogId(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn ext_journal_id(&self) -> Option<&Id> {
+    pub fn ext_journal_id(&self) -> Option<Id> {
         self.tags.iter().find_map(|t| match t {
-            Tag::ExtJournalId(t) => Some(t),
+            BlockTag::ExtJournalId(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn usage(&self) -> Option<&Usage> {
+    pub fn usage(&self) -> Option<Usage> {
         self.tags.iter().find_map(|t| match t {
-            Tag::Usage(t) => Some(t),
+            BlockTag::Usage(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn version(&self) -> Option<&String> {
         self.tags.iter().find_map(|t| match t {
-            Tag::Version(t) => Some(t),
+            BlockTag::Version(t) => Some(t),
             _ => None,
         })
     }
 
     pub fn magic(&self) -> Option<&Vec<u8>> {
         self.tags.iter().find_map(|t| match t {
-            Tag::Magic(t) => Some(t),
+            BlockTag::Magic(t) => Some(t),
             _ => None,
         })
     }
 
-    pub fn magic_offset(&self) -> Option<&u64> {
+    pub fn magic_offset(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            Tag::MagicOffset(t) => Some(t),
+            BlockTag::MagicOffset(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn fs_size(&self) -> Option<&u64> {
+    pub fn fs_size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            Tag::FsSize(t) => Some(t),
+            BlockTag::FsSize(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn fs_last_block(&self) -> Option<&u64> {
+    pub fn fs_last_block(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            Tag::FsLastBlock(t) => Some(t),
+            BlockTag::FsLastBlock(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn fs_block_size(&self) -> Option<&u64> {
+    pub fn fs_block_size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            Tag::FsBlockSize(t) => Some(t),
+            BlockTag::FsBlockSize(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn block_size(&self) -> Option<&u64> {
+    pub fn block_size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            Tag::BlockSize(t) => Some(t),
+            BlockTag::BlockSize(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn endianness(&self) -> Option<&Endianness> {
+    pub fn endianness(&self) -> Option<Endianness> {
         self.tags.iter().find_map(|t| match t {
-            Tag::Endianness(t) => Some(t),
+            BlockTag::Endianness(t) => Some(*t),
             _ => None,
         })
     }

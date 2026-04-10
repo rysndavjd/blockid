@@ -5,6 +5,9 @@ pub use embedded_io::{Error, ErrorKind, SeekFrom};
 pub use crate::std::io::SeekFrom;
 
 pub trait BlockIo: crate::std::fmt::Debug {
+    #[cfg(feature = "std")]
+    type Error: crate::std::fmt::Debug;
+    #[cfg(not(feature = "std"))]
     type Error: crate::std::fmt::Debug;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
@@ -33,8 +36,11 @@ impl<R: std::io::Read + std::io::Seek + std::fmt::Debug> BlockIo for R {
 
 #[cfg(not(feature = "std"))]
 impl<
-    R: embedded_io::Read + embedded_io::Seek<Error = embedded_io::ErrorKind> + crate::std::fmt::Debug,
+    E: From<embedded_io::ErrorKind> + core::fmt::Debug,
+    R: embedded_io::Read + embedded_io::Seek<Error = E> + core::fmt::Debug,
 > BlockIo for R
+where
+    embedded_io::ErrorKind: core::convert::From<E>,
 {
     type Error = R::Error;
 
@@ -44,8 +50,8 @@ impl<
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
         self.read_exact(buf).map_err(|e| match e {
-            embedded_io::ReadExactError::UnexpectedEof => ErrorKind::InvalidInput,
-            embedded_io::ReadExactError::Other(e) => e.kind(),
+            embedded_io::ReadExactError::UnexpectedEof => ErrorKind::InvalidInput.into(),
+            embedded_io::ReadExactError::Other(e) => e,
         })
     }
 

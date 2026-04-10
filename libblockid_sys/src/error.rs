@@ -13,9 +13,17 @@ impl From<crate::io::Error> for Error {
     }
 }
 
+#[cfg(all(not(feature = "std"), target_family = "unix"))]
+impl From<rustix::io::Errno> for Error {
+    fn from(e: rustix::io::Errno) -> Self {
+        Self(ErrorKind::IoError(e.into()))
+    }
+}
+
 #[derive(Debug)]
 pub enum ErrorKind {
     IoError(crate::io::Error),
+    PathNotUtf8
 }
 
 impl From<crate::io::Error> for ErrorKind {
