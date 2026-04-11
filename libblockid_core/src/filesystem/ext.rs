@@ -9,9 +9,9 @@ use zerocopy::{
 
 use crate::util::decode_utf8_lossy_from;
 use crate::{
-    error::{Error, ErrorKind},
+    error::Error,
     io::{BlockIo, Reader},
-    probe::{BlockInfo, BlockType, Id, Magic, BlockTag, Usage},
+    probe::{BlockInfo, BlockTag, BlockType, Id, Magic, Usage},
     std::{fmt, mem::offset_of},
 };
 
@@ -54,7 +54,7 @@ impl fmt::Display for ExtError {
 
 impl<IO: BlockIo> From<ExtError> for Error<IO> {
     fn from(e: ExtError) -> Self {
-        Self(ErrorKind::ExtError(e))
+        Error::Ext(e)
     }
 }
 
@@ -373,10 +373,6 @@ pub fn probe_jbd<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
-    if magic.is_empty() {
-        return Err(ErrorKind::MagicCannotBeEmpty.into());
-    }
-
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
         .map_err(Error::<IO>::io)?;
@@ -410,6 +406,7 @@ pub fn probe_jbd<IO: BlockIo>(
     info.set(BlockTag::FsLastBlock(fs_last_block));
     info.set(BlockTag::FsBlockSize(block_size));
     info.set(BlockTag::BlockSize(block_size));
+    info.set(BlockTag::Creator(creator));
 
     return Ok(info);
 }
@@ -419,10 +416,6 @@ pub fn probe_ext2<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
-    if magic.is_empty() {
-        return Err(ErrorKind::MagicCannotBeEmpty.into());
-    }
-
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
         .map_err(Error::<IO>::io)?;
@@ -466,6 +459,7 @@ pub fn probe_ext2<IO: BlockIo>(
     info.set(BlockTag::FsLastBlock(fs_last_block));
     info.set(BlockTag::FsBlockSize(block_size));
     info.set(BlockTag::BlockSize(block_size));
+    info.set(BlockTag::Creator(creator));
 
     return Ok(info);
 }
@@ -475,10 +469,6 @@ pub fn probe_ext3<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
-    if magic.is_empty() {
-        return Err(ErrorKind::MagicCannotBeEmpty.into());
-    }
-
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
         .map_err(Error::io)?;
@@ -522,6 +512,7 @@ pub fn probe_ext3<IO: BlockIo>(
     info.set(BlockTag::FsLastBlock(fs_last_block));
     info.set(BlockTag::FsBlockSize(block_size));
     info.set(BlockTag::BlockSize(block_size));
+    info.set(BlockTag::Creator(creator));
 
     return Ok(info);
 }
@@ -531,10 +522,6 @@ pub fn probe_ext4<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
-    if magic.is_empty() {
-        return Err(ErrorKind::MagicCannotBeEmpty.into());
-    }
-
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
         .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
         .map_err(Error::io)?;
@@ -582,6 +569,7 @@ pub fn probe_ext4<IO: BlockIo>(
     info.set(BlockTag::FsLastBlock(fs_last_block));
     info.set(BlockTag::FsBlockSize(block_size));
     info.set(BlockTag::BlockSize(block_size));
+    info.set(BlockTag::Creator(creator));
 
     return Ok(info);
 }

@@ -3,7 +3,7 @@ use fat_volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 
 use crate::{
-    error::{Error, ErrorKind},
+    error::Error,
     filesystem::{
         exfat::{EXFAT_MAGICS, probe_exfat},
         ext::{EXT_MAGICS, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
@@ -15,16 +15,17 @@ use crate::{
     io::{BlockIo, Reader, SeekFrom},
 };
 
-const BLOCK_DETECT_ORDER: &[(Filter, Filter, BlockType)] = &[
-    (Filter::SKIP_FS, Filter::SKIP_LUKS1, BlockType::LUKS1),
-    (Filter::SKIP_FS, Filter::SKIP_LUKS2, BlockType::LUKS2),
-    (Filter::SKIP_FS, Filter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
-    (Filter::SKIP_FS, Filter::SKIP_EXFAT, BlockType::Exfat),
-    (Filter::SKIP_FS, Filter::SKIP_JBD, BlockType::Jbd),
-    (Filter::SKIP_FS, Filter::SKIP_EXT2, BlockType::Ext2),
-    (Filter::SKIP_FS, Filter::SKIP_EXT3, BlockType::Ext3),
-    (Filter::SKIP_FS, Filter::SKIP_EXT4, BlockType::Ext4),
-    (Filter::SKIP_FS, Filter::SKIP_VFAT, BlockType::Vfat),
+#[rustfmt::skip]
+const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockFilter, BlockType)] = &[
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_LUKS1, BlockType::LUKS1),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_LUKS2, BlockType::LUKS2),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXFAT, BlockType::Exfat),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_JBD, BlockType::Jbd),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXT2, BlockType::Ext2),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXT3, BlockType::Ext3),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXT4, BlockType::Ext4),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_VFAT, BlockType::Vfat),
 ];
 
 #[derive(Debug, Copy, Clone, Hash)]
@@ -35,6 +36,7 @@ pub struct SuperblockInfo<IO: BlockIo> {
     pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<BlockInfo, Error<IO>>,
 }
 
+#[non_exhaustive]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockType {
     LUKS1,
@@ -247,6 +249,8 @@ pub enum BlockTag {
     BlockSize(u64),
     /// Endianness of filesystem.
     Endianness(Endianness),
+    /// OS used to create filesystem.
+    Creator(String),
 }
 
 #[derive(Debug)]
@@ -382,78 +386,86 @@ impl BlockInfo {
             _ => None,
         })
     }
+
+    pub fn creator(&self) -> Option<&String> {
+        self.tags.iter().find_map(|t| match t {
+            BlockTag::Creator(t) => Some(t),
+            _ => None,
+        })
+    }
 }
 
 #[derive(Debug)]
 pub struct LowProbe<IO: BlockIo> {
     reader: Reader<IO>,
     offset: u64,
-    filter: Filter,
 }
 
 impl<IO: BlockIo> LowProbe<IO> {
-    pub fn new(reader: IO, offset: u64, filter: Filter) -> LowProbe<IO> {
+    pub fn new(reader: IO, offset: u64) -> LowProbe<IO> {
         LowProbe {
             reader: Reader::new(reader),
             offset,
-            filter,
         }
     }
 
-    fn get_magic(&mut self, magics: Option<&'static [Magic]>) -> Result<Option<Magic>, Error<IO>> {
-        match magics {
-            Some(mags) => {
-                let mut buf = [0u8; 16];
+    fn get_magic(&mut self, magics: &'static [Magic]) -> Result<Option<Magic>, Error<IO>> {
+        let mut buf = [0u8; 16];
 
-                for magic in mags {
-                    self.reader
-                        .seek(SeekFrom::Start(magic.b_offset))
-                        .map_err(Error::<IO>::io)?;
+        for magic in magics {
+            debug_assert!(
+                magic.len <= buf.len(),
+                "Magic should not be greater then `buf`"
+            );
 
-                    self.reader
-                        .read_exact(&mut buf[..magic.len])
-                        .map_err(Error::<IO>::io)?;
+            self.reader
+                .seek(SeekFrom::Start(magic.b_offset))
+                .map_err(Error::<IO>::io)?;
 
-                    if &buf[..magic.len] == magic.magic {
-                        return Ok(Some(*magic));
-                    }
-                }
-            }
-            None => {
-                return Ok(None);
+            self.reader
+                .read_exact(&mut buf[..magic.len])
+                .map_err(Error::<IO>::io)?;
+
+            if &buf[..magic.len] == magic.magic {
+                return Ok(Some(*magic));
             }
         }
+
         return Ok(None);
     }
 
-    pub fn probe(&mut self) -> Result<BlockInfo, Error<IO>> {
+    pub fn probe(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO>> {
         for block in BLOCK_DETECT_ORDER {
-            if self.filter.contains(block.0) || self.filter.contains(block.1) {
+            if filter.contains(block.0) || filter.contains(block.1) {
                 continue;
             }
 
             let info = block.2.block_info::<IO>();
 
-            let magic = match self.get_magic(info.magics)? {
-                Some(m) => m,
+            let magic = match info.magics {
+                Some(magics) => match self.get_magic(magics)? {
+                    Some(magic) => magic,
+                    None => continue,
+                },
                 None => Magic::EMPTY_MAGIC,
             };
 
             match (info.probe)(&mut self.reader, self.offset, magic) {
                 Ok(t) => return Ok(t),
-                Err(e) => match e.0 {
-                    ErrorKind::IoError(_) => return Err(e),
-                    _ => continue,
-                },
+                Err(e) => {
+                    if let Error::Io(_) = e {
+                        return Err(e);
+                    }
+                }
             };
         }
-        return Err(ErrorKind::ProbesExhausted.into());
+        return Err(Error::ProbesExhausted);
     }
 }
 
 bitflags! {
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    pub struct Filter: u64 {
+    pub struct BlockFilter: u64 {
         const SKIP_PT = 1 << 1;
         const SKIP_FS = 1 << 2;
         const SKIP_LUKS1 = 1 << 3;

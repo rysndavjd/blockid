@@ -7,9 +7,9 @@ use zerocopy::{
 
 use crate::{
     BlockInfo, Id,
-    error::{Error, ErrorKind},
+    error::Error,
     io::{BlockIo, Reader},
-    probe::{BlockType, Magic, BlockTag, Usage},
+    probe::{BlockTag, BlockType, Magic, Usage},
     std::{fmt, str::FromStr},
     util::{UtfError, decode_utf8_from},
 };
@@ -55,7 +55,7 @@ impl From<UtfError> for LuksError {
 
 impl<IO: BlockIo> From<LuksError> for Error<IO> {
     fn from(e: LuksError) -> Self {
-        Self(ErrorKind::LuksError(e))
+        Error::Luks(e)
     }
 }
 

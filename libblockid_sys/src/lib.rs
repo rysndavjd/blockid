@@ -3,7 +3,6 @@ mod io;
 mod ioctl;
 mod path;
 mod probe;
-mod topology;
 
 #[cfg(any(feature = "std", test))]
 extern crate std;
@@ -12,3 +11,5 @@ extern crate std;
 extern crate core as std;
 
 extern crate alloc;
+
+pub use crate::probe::{AlignmentOffset, Probe, TopologyInfo};

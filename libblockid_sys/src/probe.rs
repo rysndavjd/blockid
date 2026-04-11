@@ -1,36 +1,81 @@
-use libblockid_core::{BlockInfo, Filter, LowProbe};
+use libblockid_core::{BlockFilter, BlockInfo, LowProbe};
 
 use crate::{
-    error::{Error, ErrorKind},
+    error::Error,
     io::File,
-    path::{Path, PathBuf, SysPath},
-    topology::TopologyInfo,
+    ioctl::{
+        ioctl_alignment_offset, ioctl_logical_sector_size, ioctl_minimum_io_size,
+        ioctl_optimal_io_size, ioctl_physical_sector_size,
+    },
 };
 
-struct Probe {
-    path: PathBuf,
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum AlignmentOffset {
+    Misaligned,
+    Offset(u64),
+}
+
+#[derive(Debug)]
+pub struct TopologyInfo {
+    logical_sector_size: u64,
+    physical_sector_size: u64,
+    minimum_io_size: u64,
+    optimal_io_size: u64,
+    alignment_offset: AlignmentOffset,
+}
+
+impl TopologyInfo {
+    pub fn logical_sector_size(&self) -> u64 {
+        self.logical_sector_size
+    }
+
+    pub fn physical_sector_size(&self) -> u64 {
+        self.physical_sector_size
+    }
+
+    pub fn minimum_io_size(&self) -> u64 {
+        self.minimum_io_size
+    }
+
+    pub fn optimal_io_size(&self) -> u64 {
+        self.optimal_io_size
+    }
+
+    pub fn alignment_offset(&self) -> AlignmentOffset {
+        self.alignment_offset
+    }
+}
+
+pub struct Probe {
     disk: File,
 }
 
 impl Probe {
-    pub fn open<P: SysPath>(path: P) -> Result<Probe, Error> {
-        let file = File::open(&path)?;
+    pub fn new(file: File) -> Result<Probe, Error> {
+        Ok(Self { disk: file })
+    }
 
-        Ok(Self {
-            path: path.as_ref().to_path_buf(),
-            disk: file,
+    pub fn probe_info(&mut self, offset: u64, filter: BlockFilter) -> Result<BlockInfo, Error> {
+        let mut low_probe = LowProbe::new(&mut self.disk, offset);
+
+        let info = low_probe.probe(filter)?;
+
+        Ok(info)
+    }
+
+    pub fn probe_topology(&mut self) -> Result<TopologyInfo, Error> {
+        let logical_sector_size = ioctl_logical_sector_size(&mut self.disk)?;
+        let physical_sector_size = ioctl_physical_sector_size(&mut self.disk)?;
+        let minimum_io_size = ioctl_minimum_io_size(&mut self.disk)?;
+        let optimal_io_size = ioctl_optimal_io_size(&mut self.disk)?;
+        let alignment_offset = ioctl_alignment_offset(&mut self.disk)?;
+
+        Ok(TopologyInfo {
+            logical_sector_size,
+            physical_sector_size,
+            minimum_io_size,
+            optimal_io_size,
+            alignment_offset,
         })
-    }
-
-    pub fn probe_info(&mut self, offset: u64, filter: Filter) -> Result<BlockInfo, Error> {
-        let mut low_probe = LowProbe::new(&mut self.disk, offset, filter);
-
-        let info = low_probe.probe();
-
-        todo!()
-    }
-
-    pub fn probe_topology(&self) -> Result<TopologyInfo, Error> {
-        todo!()
     }
 }

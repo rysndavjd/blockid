@@ -5,9 +5,6 @@ pub use embedded_io::{Error, ErrorKind, SeekFrom};
 pub use crate::std::io::SeekFrom;
 
 pub trait BlockIo: crate::std::fmt::Debug {
-    #[cfg(feature = "std")]
-    type Error: crate::std::fmt::Debug;
-    #[cfg(not(feature = "std"))]
     type Error: crate::std::fmt::Debug;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;

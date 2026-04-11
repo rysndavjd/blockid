@@ -1,21 +1,17 @@
 #[cfg(feature = "std")]
-pub use std::{
-    fs::File,
-    io::{Error, ErrorKind},
-};
+pub use std::{fs::File, io::Error};
 
 #[cfg(all(not(feature = "std"), target_family = "unix"))]
-pub use impl_unix::{Error, ErrorKind, File};
+pub use impl_unix::{Error, File};
 
 #[cfg(all(not(feature = "std"), target_family = "unix"))]
 mod impl_unix {
-    pub use embedded_io::ErrorKind;
     use embedded_io::{
-        Error as EmbeddedError, ErrorType as EmbeddedErrorType, Read, Seek,
+        Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek,
         SeekFrom as EmbeddedSeekFrom,
     };
     use rustix::{
-        fd::OwnedFd,
+        fd::{AsFd, BorrowedFd, OwnedFd},
         fs::{Mode, OFlags, SeekFrom as RustixSeekFrom, open, seek},
         io::{Errno, read},
     };
@@ -127,6 +123,12 @@ mod impl_unix {
 
             let ret = seek(&self.inner, new_pos)?;
             Ok(ret)
+        }
+    }
+
+    impl AsFd for File {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            self.inner.as_fd()
         }
     }
 }

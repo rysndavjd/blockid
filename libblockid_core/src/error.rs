@@ -6,33 +6,24 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BuilderError {}
 
-#[derive(Debug)]
-pub struct Error<IO: BlockIo>(pub(crate) ErrorKind<IO>);
-
-impl<IO: BlockIo> Error<IO> {
-    pub fn io(e: IO::Error) -> Self {
-        Error(ErrorKind::IoError(e))
-    }
-}
-
-impl<IO: BlockIo> From<ErrorKind<IO>> for Error<IO> {
-    fn from(e: ErrorKind<IO>) -> Self {
-        Self(e)
-    }
-}
-
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum ErrorKind<IO: BlockIo> {
-    IoError(IO::Error),
-    LuksError(LuksError),
-    ExFatError(ExFatError),
-    ExtError(ExtError),
-    VFatError(VFatError),
-    MagicCannotBeEmpty,
+pub enum Error<IO: BlockIo> {
+    Io(IO::Error),
+    Luks(LuksError),
+    ExFat(ExFatError),
+    Ext(ExtError),
+    VFat(VFatError),
     ProbesExhausted,
 }
 
+impl<IO: BlockIo> Error<IO> {}
+
+impl<IO: BlockIo> Error<IO> {
+    pub(crate) fn io(e: IO::Error) -> Self {
+        Self::Io(e)
+    }
+}
 // #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 
 // impl crate::std::error::Error for Error {}

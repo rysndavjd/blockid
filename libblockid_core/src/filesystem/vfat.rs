@@ -6,7 +6,7 @@ use zerocopy::{
 };
 
 use crate::{
-    error::{Error, ErrorKind},
+    error::{Error},
     io::{BlockIo, Reader, SeekFrom},
     probe::{BlockInfo, BlockType, Id, Magic, SecType, BlockTag, Usage},
     std::fmt,
@@ -54,7 +54,7 @@ impl fmt::Display for VFatError {
 
 impl<IO: BlockIo> From<VFatError> for Error<IO> {
     fn from(e: VFatError) -> Self {
-        Self(ErrorKind::VFatError(e))
+        Error::VFat(e)
     }
 }
 
@@ -492,10 +492,6 @@ pub fn probe_vfat<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
-    if magic.is_empty() {
-        return Err(ErrorKind::MagicCannotBeEmpty.into());
-    }
-
     let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::io)?;
 
     let ms: MsDosSuperBlock = transmute!(buf);

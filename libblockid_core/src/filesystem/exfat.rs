@@ -5,11 +5,11 @@ use zerocopy::{
 };
 
 use crate::{
-    error::{Error, ErrorKind},
+    error::Error,
     io::{BlockIo, Reader},
-    probe::{BlockInfo, BlockType, Endianness, Id, Magic, BlockTag, Usage},
+    probe::{BlockInfo, BlockTag, BlockType, Endianness, Id, Magic, Usage},
     std::fmt,
-    util::{decode_utf16_lossy_from},
+    util::decode_utf16_lossy_from,
 };
 
 #[derive(Debug)]
@@ -59,7 +59,7 @@ impl fmt::Display for ExFatError {
 
 impl<IO: BlockIo> From<ExFatError> for Error<IO> {
     fn from(e: ExFatError) -> Self {
-        Self(ErrorKind::ExFatError(e))
+        Error::ExFat(e)
     }
 }
 
