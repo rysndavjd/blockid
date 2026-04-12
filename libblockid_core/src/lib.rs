@@ -18,7 +18,9 @@ pub use crate::{
     error::Error,
     filesystem::{exfat::ExFatError, ext::ExtError, luks::LuksError, vfat::VFatError},
     io::BlockIo,
-    probe::{BlockInfo, BlockTag, BlockType, Endianness, BlockFilter, Id, LowProbe, SecType, Usage},
+    probe::{
+        BlockFilter, BlockInfo, BlockTag, BlockType, Endianness, Id, LowProbe, SecType, Usage,
+    },
 };
 
 #[cfg(all(feature = "std", feature = "no_std"))]

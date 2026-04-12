@@ -1,9 +1,6 @@
 use libblockid_core::{BlockFilter, BlockInfo, LowProbe};
 
-use crate::{
-    error::Error,
-    io::File,
-};
+use crate::{error::Error, io::File};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum AlignmentOffset {
@@ -53,8 +50,14 @@ pub struct Probe {
 }
 
 impl Probe {
+    #[cfg(feature = "std")]
     pub fn new(file: File) -> Result<Probe, Error> {
         Ok(Self { disk: file })
+    }
+
+    #[cfg(all(feature = "no_std", target_family = "unix"))]
+    pub fn new(file: rustix::fd::OwnedFd) -> Result<Probe, Error> {
+        Ok(Self { disk: file.into() })
     }
 
     pub fn probe_info(&mut self, offset: u64, filter: BlockFilter) -> Result<BlockInfo, Error> {

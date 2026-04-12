@@ -61,27 +61,20 @@ pub fn minimum_io_size(file: &mut File) -> Result<u64, Error> {
 
 #[cfg(target_os = "linux")]
 pub fn optimal_io_size(file: &mut File) -> Result<u64, Error> {
-    // #[cfg(target_os = "freebsd")]
-    #[cfg(target_os = "linux")]
-    {
-        let sz = linux::ioctl_blkioopt(file)?;
-        Ok(sz.into())
-    }
-    // #[cfg(target_os = "macos")]
-    // #[cfg(target_os = "windows")]
+    let sz = linux::ioctl_blkioopt(file)?;
+    Ok(sz.into())
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-pub fn alignment_offset(file: &mut File) -> Result<AlignmentOffset, Error> {
-    use crate::probe::AlignmentOffset;
+pub fn alignment_offset(file: &mut File) -> Result<crate::probe::AlignmentOffset, Error> {
     // #[cfg(target_os = "freebsd")]
     #[cfg(target_os = "linux")]
     {
         let sz = linux::ioctl_blkalignoff(file)?;
         Ok(if sz >= 0 {
-            AlignmentOffset::Offset(sz as u64)
+            crate::probe::AlignmentOffset::Offset(sz as u64)
         } else {
-            AlignmentOffset::Misaligned
+            crate::probe::AlignmentOffset::Misaligned
         })
     }
     // #[cfg(target_os = "macos")]

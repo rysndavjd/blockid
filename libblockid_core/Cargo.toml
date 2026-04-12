@@ -29,16 +29,17 @@ fat_volume_id = { version = "0.1.0", default-features = false, features = [
 embedded-io = { version = "0.7.1", default-features = false, features = [
     "alloc",
 ], optional = true }
-crc-fast = {version = "=1.9.0", default-features = false, features = []}
+crc-fast = { version = "1.10.0", default-features = false, features = ["std"], optional = true }
+crc = { version = "3.4.0", default-features = false, optional = true }
 
 [features]
-default = ["std"]
+default = ["no_std"]
 std = [
     "zerocopy/std",
     "bitflags/std",
     "widestring/std",
     "fat_volume_id/std",
     "uuid/std",
-    "crc-fast/std",
+    "dep:crc-fast",
 ]
-no_std = ["dep:embedded-io"]
+no_std = ["dep:embedded-io", "dep:crc"]

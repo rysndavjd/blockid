@@ -131,6 +131,12 @@ mod impl_unix {
             self.inner.as_fd()
         }
     }
+
+    impl From<OwnedFd> for File {
+        fn from(fd: OwnedFd) -> Self {
+            File { inner: fd }
+        }
+    }
 }
 
 #[cfg(all(not(feature = "std"), target_family = "windows"))]

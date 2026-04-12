@@ -7,4 +7,4 @@ edition = "2024"
 bitflags = { version = "2.9.1", features = ["std"] }
 clap = { version = "4.5.41", features = ["derive"] }
 rustix = { version = "1.0.7", features = ["fs"] }
-libblockid_sys = { path = "../libblockid_sys" }
+libblockid_sys = { path = "../libblockid_sys", default-features = false, features = ["no_std"]}
