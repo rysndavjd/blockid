@@ -15,31 +15,40 @@ mod windows;
  *   read::<u32>(b'd', 24) == 1074029592 on macOS
  */
 
-use crate::{error::Error, io::File, probe::AlignmentOffset};
+use crate::{error::Error, io::File};
 
-pub fn ioctl_logical_sector_size(file: &mut File) -> Result<u64, Error> {
+pub fn logical_sector_size(file: &mut File) -> Result<u64, Error> {
     // #[cfg(target_os = "freebsd")]
     #[cfg(target_os = "linux")]
     {
         let sz = rustix::fs::ioctl_blksszget(file)?;
         Ok(sz.into())
     }
-    // #[cfg(target_os = "macos")]
+    #[cfg(target_os = "macos")]
+    {
+        let sz = macos::ioctl_dkiocgetblocksize(file)?;
+        Ok(sz.into())
+    }
     // #[cfg(target_os = "windows")]
 }
 
-pub fn ioctl_physical_sector_size(file: &mut File) -> Result<u64, Error> {
+pub fn physical_sector_size(file: &mut File) -> Result<u64, Error> {
     // #[cfg(target_os = "freebsd")]
     #[cfg(target_os = "linux")]
     {
         let sz = rustix::fs::ioctl_blkpbszget(file)?;
         Ok(sz.into())
     }
-    // #[cfg(target_os = "macos")]
+    #[cfg(target_os = "macos")]
+    {
+        let sz = macos::ioctl_dkiocgetphysicalblocksize(file)?;
+        Ok(sz.into())
+    }
     // #[cfg(target_os = "windows")]
 }
 
-pub fn ioctl_minimum_io_size(file: &mut File) -> Result<u64, Error> {
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
+pub fn minimum_io_size(file: &mut File) -> Result<u64, Error> {
     // #[cfg(target_os = "freebsd")]
     #[cfg(target_os = "linux")]
     {
@@ -50,7 +59,8 @@ pub fn ioctl_minimum_io_size(file: &mut File) -> Result<u64, Error> {
     // #[cfg(target_os = "windows")]
 }
 
-pub fn ioctl_optimal_io_size(file: &mut File) -> Result<u64, Error> {
+#[cfg(target_os = "linux")]
+pub fn optimal_io_size(file: &mut File) -> Result<u64, Error> {
     // #[cfg(target_os = "freebsd")]
     #[cfg(target_os = "linux")]
     {
@@ -61,7 +71,9 @@ pub fn ioctl_optimal_io_size(file: &mut File) -> Result<u64, Error> {
     // #[cfg(target_os = "windows")]
 }
 
-pub fn ioctl_alignment_offset(file: &mut File) -> Result<AlignmentOffset, Error> {
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+pub fn alignment_offset(file: &mut File) -> Result<AlignmentOffset, Error> {
+    use crate::probe::AlignmentOffset;
     // #[cfg(target_os = "freebsd")]
     #[cfg(target_os = "linux")]
     {

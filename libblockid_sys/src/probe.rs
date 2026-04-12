@@ -3,10 +3,6 @@ use libblockid_core::{BlockFilter, BlockInfo, LowProbe};
 use crate::{
     error::Error,
     io::File,
-    ioctl::{
-        ioctl_alignment_offset, ioctl_logical_sector_size, ioctl_minimum_io_size,
-        ioctl_optimal_io_size, ioctl_physical_sector_size,
-    },
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -72,11 +68,11 @@ impl Probe {
     pub fn probe_topology(&mut self) -> Result<TopologyInfo, Error> {
         #[cfg(target_os = "linux")]
         {
-            let logical_sector_size = ioctl_logical_sector_size(&mut self.disk)?;
-            let physical_sector_size = ioctl_physical_sector_size(&mut self.disk)?;
-            let minimum_io_size = ioctl_minimum_io_size(&mut self.disk)?;
-            let optimal_io_size = ioctl_optimal_io_size(&mut self.disk)?;
-            let alignment_offset = ioctl_alignment_offset(&mut self.disk)?;
+            let logical_sector_size = crate::ioctl::logical_sector_size(&mut self.disk)?;
+            let physical_sector_size = crate::ioctl::physical_sector_size(&mut self.disk)?;
+            let minimum_io_size = crate::ioctl::minimum_io_size(&mut self.disk)?;
+            let optimal_io_size = crate::ioctl::optimal_io_size(&mut self.disk)?;
+            let alignment_offset = crate::ioctl::alignment_offset(&mut self.disk)?;
 
             Ok(TopologyInfo {
                 logical_sector_size,
@@ -84,6 +80,16 @@ impl Probe {
                 minimum_io_size,
                 optimal_io_size,
                 alignment_offset,
+            })
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let logical_sector_size = crate::ioctl::logical_sector_size(&mut self.disk)?;
+            let physical_sector_size = crate::ioctl::physical_sector_size(&mut self.disk)?;
+
+            Ok(TopologyInfo {
+                logical_sector_size,
+                physical_sector_size,
             })
         }
     }

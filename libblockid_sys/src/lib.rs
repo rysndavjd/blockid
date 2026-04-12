@@ -13,3 +13,4 @@ extern crate core as std;
 extern crate alloc;
 
 pub use crate::probe::{AlignmentOffset, Probe, TopologyInfo};
+pub use libblockid_core::BlockFilter;
