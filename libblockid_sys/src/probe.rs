@@ -19,8 +19,11 @@ pub enum AlignmentOffset {
 pub struct TopologyInfo {
     logical_sector_size: u64,
     physical_sector_size: u64,
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
     minimum_io_size: u64,
+    #[cfg(target_os = "linux")]
     optimal_io_size: u64,
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     alignment_offset: AlignmentOffset,
 }
 
@@ -33,14 +36,17 @@ impl TopologyInfo {
         self.physical_sector_size
     }
 
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
     pub fn minimum_io_size(&self) -> u64 {
         self.minimum_io_size
     }
 
+    #[cfg(target_os = "linux")]
     pub fn optimal_io_size(&self) -> u64 {
         self.optimal_io_size
     }
 
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     pub fn alignment_offset(&self) -> AlignmentOffset {
         self.alignment_offset
     }
@@ -64,18 +70,21 @@ impl Probe {
     }
 
     pub fn probe_topology(&mut self) -> Result<TopologyInfo, Error> {
-        let logical_sector_size = ioctl_logical_sector_size(&mut self.disk)?;
-        let physical_sector_size = ioctl_physical_sector_size(&mut self.disk)?;
-        let minimum_io_size = ioctl_minimum_io_size(&mut self.disk)?;
-        let optimal_io_size = ioctl_optimal_io_size(&mut self.disk)?;
-        let alignment_offset = ioctl_alignment_offset(&mut self.disk)?;
+        #[cfg(target_os = "linux")]
+        {
+            let logical_sector_size = ioctl_logical_sector_size(&mut self.disk)?;
+            let physical_sector_size = ioctl_physical_sector_size(&mut self.disk)?;
+            let minimum_io_size = ioctl_minimum_io_size(&mut self.disk)?;
+            let optimal_io_size = ioctl_optimal_io_size(&mut self.disk)?;
+            let alignment_offset = ioctl_alignment_offset(&mut self.disk)?;
 
-        Ok(TopologyInfo {
-            logical_sector_size,
-            physical_sector_size,
-            minimum_io_size,
-            optimal_io_size,
-            alignment_offset,
-        })
+            Ok(TopologyInfo {
+                logical_sector_size,
+                physical_sector_size,
+                minimum_io_size,
+                optimal_io_size,
+                alignment_offset,
+            })
+        }
     }
 }
