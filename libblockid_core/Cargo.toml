@@ -33,7 +33,7 @@ crc-fast = { version = "1.10.0", default-features = false, features = ["std"], o
 crc = { version = "3.4.0", default-features = false, optional = true }
 
 [features]
-default = ["no_std"]
+default = ["std"]
 std = [
     "zerocopy/std",
     "bitflags/std",

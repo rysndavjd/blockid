@@ -32,6 +32,6 @@ default-features = false
 features = ["alloc"]
 
 [features]
-default = ["no_std"]
+default = ["std"]
 std = ["bitflags/std", "libblockid_core/std", "rustix/std", "widestring/std"]
 no_std = ["dep:embedded-io", "libblockid_core/no_std"]

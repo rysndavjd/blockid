@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bitflags = { version = "2.9.1", features = ["std"] }
-clap = { version = "4.5.41", features = ["derive"] }
-rustix = { version = "1.0.7", features = ["fs"] }
-libblockid_sys = { path = "../libblockid_sys", default-features = false, features = ["no_std"]}
+clap = { version = "4.5.41", default-features = false, features = ["std", "derive", "color", "cargo", "suggestions", "usage", "help"] }
+libblockid_sys = { path = "../libblockid_sys", default-features = false, features = ["std"]}
+shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "git2", "build"]}
+
+[build-dependencies]
+shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "git2", "build"]}

@@ -1,21 +1,22 @@
-use alloc::format;
-use core::{panic::PanicInfo, str::FromStr};
+use clap::{ArgAction, Parser};
 use libblockid_sys::{BlockFilter, Probe};
-use rustix::{
-    fd::OwnedFd,
-    fs::{Mode, OFlags, open},
-    ioctl::opcode::*,
-};
-extern crate alloc;
+use shadow_rs::{Format, shadow};
+
+shadow!(build);
+
+#[derive(Parser)]
+#[command(version)]
+#[command(about, long_about)]
+struct Cli {
+    /// Print long version from build time
+    #[arg(long = "long-version", action = ArgAction::SetTrue)]
+    version_long: bool,
+}
 
 fn main() {
-    let file = open("/dev/nvme0n1p3", OFlags::RDONLY, Mode::empty()).unwrap();
-    // let file = File::open("/dev/nvme0n1p3").unwrap();
-    let mut p = Probe::new(file).unwrap();
+    let cli = Cli::parse();
 
-    let t = p.probe_info(0, BlockFilter::empty()).unwrap();
-
-    let t = format!("{:?}\n", t);
-
-    rustix::io::write(rustix::stdio::stdout(), t.as_bytes()).unwrap();
+    if cli.version_long {
+        build::print_build_in();
+    }
 }

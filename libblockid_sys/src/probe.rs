@@ -56,8 +56,8 @@ impl Probe {
     }
 
     #[cfg(all(feature = "no_std", target_family = "unix"))]
-    pub fn new(file: rustix::fd::OwnedFd) -> Result<Probe, Error> {
-        Ok(Self { disk: file.into() })
+    pub fn new(fd: rustix::fd::OwnedFd) -> Result<Probe, Error> {
+        Ok(Self { disk: fd.into() })
     }
 
     pub fn probe_info(&mut self, offset: u64, filter: BlockFilter) -> Result<BlockInfo, Error> {
