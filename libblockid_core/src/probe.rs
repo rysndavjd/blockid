@@ -13,6 +13,7 @@ use crate::{
         vfat::{VFAT_MAGICS, probe_vfat},
     },
     io::{BlockIo, Reader, SeekFrom},
+    partition::mbr::{MBR_MAGICS, probe_mbr},
 };
 
 #[rustfmt::skip]
@@ -29,7 +30,34 @@ const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockFilter, BlockType)] = &[
 ];
 
 #[derive(Debug, Copy, Clone, Hash)]
-pub struct SuperblockInfo<IO: BlockIo> {
+pub struct PtHandler<IO: BlockIo> {
+    pub minsz: Option<u64>,
+    pub magics: Option<&'static [Magic]>,
+    #[allow(clippy::type_complexity)]
+    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<PartTableInfo, Error<IO>>,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum PTType {
+    Mbr,
+}
+
+impl PTType {
+    fn pt_handler<IO: BlockIo>(&self) -> PtHandler<IO> {
+        match self {
+            PTType::Mbr => PtHandler {
+                minsz: None,
+                magics: MBR_MAGICS,
+                probe: probe_mbr,
+            },
+            _ => todo!(),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash)]
+pub struct BlockHandler<IO: BlockIo> {
     pub minsz: Option<u64>,
     pub magics: Option<&'static [Magic]>,
     #[allow(clippy::type_complexity)]
@@ -42,8 +70,6 @@ pub enum BlockType {
     LUKS1,
     LUKS2,
     LUKSOpal,
-    Dos,
-    Gpt,
     Exfat,
     Jbd,
     Apfs,
@@ -67,51 +93,51 @@ pub enum BlockType {
 }
 
 impl BlockType {
-    fn block_info<IO: BlockIo>(&self) -> SuperblockInfo<IO> {
+    fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
         match self {
-            BlockType::LUKS1 => SuperblockInfo {
+            BlockType::LUKS1 => BlockHandler {
                 minsz: None,
                 magics: LUKS1_MAGICS,
                 probe: probe_luks1,
             },
 
-            BlockType::LUKS2 => SuperblockInfo {
+            BlockType::LUKS2 => BlockHandler {
                 minsz: None,
                 magics: LUKS2_MAGICS,
                 probe: probe_luks2,
             },
 
-            BlockType::LUKSOpal => SuperblockInfo {
+            BlockType::LUKSOpal => BlockHandler {
                 minsz: None,
                 magics: LUKSOPAL_MAGICS,
                 probe: probe_luks_opal,
             },
-            BlockType::Exfat => SuperblockInfo {
+            BlockType::Exfat => BlockHandler {
                 minsz: None,
                 magics: EXFAT_MAGICS,
                 probe: probe_exfat,
             },
-            BlockType::Jbd => SuperblockInfo {
+            BlockType::Jbd => BlockHandler {
                 minsz: None,
                 magics: EXT_MAGICS,
                 probe: probe_jbd,
             },
-            BlockType::Ext2 => SuperblockInfo {
+            BlockType::Ext2 => BlockHandler {
                 minsz: None,
                 magics: EXT_MAGICS,
                 probe: probe_ext2,
             },
-            BlockType::Ext3 => SuperblockInfo {
+            BlockType::Ext3 => BlockHandler {
                 minsz: None,
                 magics: EXT_MAGICS,
                 probe: probe_ext3,
             },
-            BlockType::Ext4 => SuperblockInfo {
+            BlockType::Ext4 => BlockHandler {
                 minsz: None,
                 magics: EXT_MAGICS,
                 probe: probe_ext4,
             },
-            BlockType::Vfat => SuperblockInfo {
+            BlockType::Vfat => BlockHandler {
                 minsz: None,
                 magics: VFAT_MAGICS,
                 probe: probe_vfat,
@@ -122,7 +148,7 @@ impl BlockType {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum SecType {
+pub enum SubType {
     Fat12,
     Fat16,
     Fat32,
@@ -205,18 +231,18 @@ impl Magic {
         b_offset: 0,
     };
 
-    pub fn is_empty(&self) -> bool {
-        self == &Magic::EMPTY_MAGIC
-    }
+    // fn is_empty(&self) -> bool {
+    //     self == &Magic::EMPTY_MAGIC
+    // }
 }
 
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockTag {
-    /// Filesystem type, Eg: EXT4.
-    FsType(BlockType),
-    /// Secondary filesystem type, Eg: Filsystem is VFAT but secondary type is FAT16.
-    SecType(SecType),
+    /// Block type, Eg: EXT4.
+    BlockType(BlockType),
+    /// Sub block type, Eg: Filsystem is VFAT but subtype is FAT16.
+    SubType(SubType),
     /// Filesystem label, Eg: `LABEL`.
     Label(String),
     /// Filesystem identifier in lower case hex.
@@ -275,16 +301,16 @@ impl BlockInfo {
         self.tags.push(tag);
     }
 
-    pub fn fs_type(&self) -> Option<BlockType> {
+    pub fn block_type(&self) -> Option<BlockType> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::FsType(t) => Some(*t),
+            BlockTag::BlockType(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn sec_type(&self) -> Option<SecType> {
+    pub fn sub_type(&self) -> Option<SubType> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::SecType(t) => Some(*t),
+            BlockTag::SubType(t) => Some(*t),
             _ => None,
         })
     }
@@ -395,6 +421,15 @@ impl BlockInfo {
     }
 }
 
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartTableTag {}
+
+#[derive(Debug)]
+pub struct PartTableInfo {
+    tags: Vec<PartTableTag>,
+}
+
 #[derive(Debug)]
 pub struct LowProbe<IO: BlockIo> {
     reader: Reader<IO>,
@@ -434,13 +469,13 @@ impl<IO: BlockIo> LowProbe<IO> {
         return Ok(None);
     }
 
-    pub fn probe(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO>> {
+    pub fn probe_block(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO>> {
         for block in BLOCK_DETECT_ORDER {
             if filter.contains(block.0) || filter.contains(block.1) {
                 continue;
             }
 
-            let info = block.2.block_info::<IO>();
+            let info = block.2.block_handler::<IO>();
 
             let magic = match info.magics {
                 Some(magics) => match self.get_magic(magics)? {

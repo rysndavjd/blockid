@@ -1,6 +1,7 @@
 use crate::{
     filesystem::{exfat::ExFatError, ext::ExtError, luks::LuksError, vfat::VFatError},
     io::BlockIo,
+    partition::mbr::MbrError,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -14,6 +15,7 @@ pub enum Error<IO: BlockIo> {
     ExFat(ExFatError),
     Ext(ExtError),
     VFat(VFatError),
+    Mbr(MbrError),
     ProbesExhausted,
 }
 

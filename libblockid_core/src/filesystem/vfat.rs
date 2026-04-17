@@ -8,7 +8,7 @@ use zerocopy::{
 use crate::{
     error::{Error},
     io::{BlockIo, Reader, SeekFrom},
-    probe::{BlockInfo, BlockType, Id, Magic, SecType, BlockTag, Usage},
+    probe::{BlockInfo, BlockType, Id, Magic, SubType, BlockTag, Usage},
     std::fmt,
     util::decode_utf8_lossy_from,
 };
@@ -283,7 +283,7 @@ pub fn valid_fat(
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     mag: &Magic,
-) -> Result<SecType, VFatError> {
+) -> Result<SubType, VFatError> {
     if mag.len <= 2 {
         if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
             return Err(VFatError::ProbablyDOS);
@@ -332,11 +332,11 @@ pub fn valid_fat(
     }
 
     if cluster_count < FAT12_MAX {
-        return Ok(SecType::Fat12);
+        return Ok(SubType::Fat12);
     } else if cluster_count < FAT16_MAX {
-        return Ok(SecType::Fat16);
+        return Ok(SubType::Fat16);
     } else if cluster_count < FAT32_MAX {
-        return Ok(SecType::Fat32);
+        return Ok(SubType::Fat32);
     } else {
         return Err(VFatError::InvalidClusterCount);
     }
@@ -511,8 +511,8 @@ pub fn probe_vfat<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::Vfat));
-    info.set(BlockTag::SecType(sec_type));
+    info.set(BlockTag::BlockType(BlockType::Vfat));
+    info.set(BlockTag::SubType(sec_type));
     info.set(BlockTag::Id(Id::VolumeId32(serno)));
     if let Some(l) = label {
         info.set(BlockTag::Label(l));

@@ -11,6 +11,7 @@ extern crate alloc;
 mod error;
 mod filesystem;
 mod io;
+mod partition;
 mod probe;
 mod util;
 
@@ -19,7 +20,7 @@ pub use crate::{
     filesystem::{exfat::ExFatError, ext::ExtError, luks::LuksError, vfat::VFatError},
     io::BlockIo,
     probe::{
-        BlockFilter, BlockInfo, BlockTag, BlockType, Endianness, Id, LowProbe, SecType, Usage,
+        BlockFilter, BlockInfo, BlockTag, BlockType, Endianness, Id, LowProbe, SubType, Usage,
     },
 };
 

@@ -418,7 +418,7 @@ pub fn probe_jbd<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::Jbd));
+    info.set(BlockTag::BlockType(BlockType::Jbd));
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
@@ -471,7 +471,7 @@ pub fn probe_ext2<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::Ext2));
+    info.set(BlockTag::BlockType(BlockType::Ext2));
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
@@ -524,7 +524,7 @@ pub fn probe_ext3<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::Ext3));
+    info.set(BlockTag::BlockType(BlockType::Ext3));
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
@@ -581,7 +581,7 @@ pub fn probe_ext4<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::Ext4));
+    info.set(BlockTag::BlockType(BlockType::Ext4));
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }

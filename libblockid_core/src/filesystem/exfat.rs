@@ -353,7 +353,7 @@ pub fn probe_exfat<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::Exfat));
+    info.set(BlockTag::BlockType(BlockType::Exfat));
     info.set(BlockTag::Id(Id::VolumeId32(VolumeId32::from_bytes(
         sb.volume_serial,
     ))));

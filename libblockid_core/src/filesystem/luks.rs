@@ -165,7 +165,7 @@ pub fn probe_luks1<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::LUKS1));
+    info.set(BlockTag::BlockType(BlockType::LUKS1));
     info.set(BlockTag::Id(Id::Uuid(uuid)));
     info.set(BlockTag::Usage(Usage::Crypto));
     info.set(BlockTag::Version(version));
@@ -195,7 +195,7 @@ pub fn probe_luks2<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::LUKS2));
+    info.set(BlockTag::BlockType(BlockType::LUKS2));
     info.set(BlockTag::Id(Id::Uuid(uuid)));
     info.set(BlockTag::Usage(Usage::Crypto));
     info.set(BlockTag::Version(version));
@@ -229,7 +229,7 @@ pub fn probe_luks_opal<IO: BlockIo>(
 
     let mut info = BlockInfo::new();
 
-    info.set(BlockTag::FsType(BlockType::LUKSOpal));
+    info.set(BlockTag::BlockType(BlockType::LUKSOpal));
     info.set(BlockTag::Id(Id::Uuid(uuid)));
     info.set(BlockTag::Usage(Usage::Crypto));
     info.set(BlockTag::Version(version));

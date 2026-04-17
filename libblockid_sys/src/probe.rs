@@ -60,40 +60,33 @@ impl Probe {
         Ok(Self { disk: fd.into() })
     }
 
-    pub fn probe_info(&mut self, offset: u64, filter: BlockFilter) -> Result<BlockInfo, Error> {
+    pub fn probe_block(&mut self, offset: u64, filter: BlockFilter) -> Result<BlockInfo, Error> {
         let mut low_probe = LowProbe::new(&mut self.disk, offset);
 
-        let info = low_probe.probe(filter)?;
+        let info = low_probe.probe_block(filter)?;
 
         Ok(info)
     }
 
     pub fn probe_topology(&mut self) -> Result<TopologyInfo, Error> {
+        let logical_sector_size = crate::ioctl::logical_sector_size(&mut self.disk)?;
+        let physical_sector_size = crate::ioctl::physical_sector_size(&mut self.disk)?;
+        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
+        let minimum_io_size = crate::ioctl::minimum_io_size(&mut self.disk)?;
         #[cfg(target_os = "linux")]
-        {
-            let logical_sector_size = crate::ioctl::logical_sector_size(&mut self.disk)?;
-            let physical_sector_size = crate::ioctl::physical_sector_size(&mut self.disk)?;
-            let minimum_io_size = crate::ioctl::minimum_io_size(&mut self.disk)?;
-            let optimal_io_size = crate::ioctl::optimal_io_size(&mut self.disk)?;
-            let alignment_offset = crate::ioctl::alignment_offset(&mut self.disk)?;
+        let optimal_io_size = crate::ioctl::optimal_io_size(&mut self.disk)?;
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        let alignment_offset = crate::ioctl::alignment_offset(&mut self.disk)?;
 
-            Ok(TopologyInfo {
-                logical_sector_size,
-                physical_sector_size,
-                minimum_io_size,
-                optimal_io_size,
-                alignment_offset,
-            })
-        }
-        #[cfg(target_os = "macos")]
-        {
-            let logical_sector_size = crate::ioctl::logical_sector_size(&mut self.disk)?;
-            let physical_sector_size = crate::ioctl::physical_sector_size(&mut self.disk)?;
-
-            Ok(TopologyInfo {
-                logical_sector_size,
-                physical_sector_size,
-            })
-        }
+        Ok(TopologyInfo {
+            logical_sector_size,
+            physical_sector_size,
+            #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
+            minimum_io_size,
+            #[cfg(target_os = "linux")]
+            optimal_io_size,
+            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+            alignment_offset,
+        })
     }
 }
