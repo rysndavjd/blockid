@@ -1,8 +1,10 @@
+#[cfg(feature = "std")]
+pub use std::io::SeekFrom;
+
 #[cfg(not(feature = "std"))]
 pub use embedded_io::{Error, ErrorKind, SeekFrom};
 
-#[cfg(feature = "std")]
-pub use crate::std::io::SeekFrom;
+use crate::{error::Error, probe::Magic};
 
 pub trait BlockIo: crate::std::fmt::Debug {
     type Error: crate::std::fmt::Debug;
@@ -95,5 +97,24 @@ impl<IO: BlockIo> Reader<IO> {
         self.0.seek(SeekFrom::Start(offset))?;
         self.0.read_exact(&mut buf)?;
         Ok(buf)
+    }
+
+    pub fn get_magic(&mut self, magics: &'static [Magic]) -> Result<Option<Magic>, Error<IO>> {
+        let mut buf = [0u8; 16];
+
+        for magic in magics {
+            debug_assert!(
+                magic.len <= buf.len(),
+                "Magic should not be greater then `buf`"
+            );
+
+            self.read_at(magic.b_offset, &mut buf).map_err(Error::io)?;
+
+            if &buf[..magic.len] == magic.magic {
+                return Ok(Some(*magic));
+            }
+        }
+
+        return Ok(None);
     }
 }

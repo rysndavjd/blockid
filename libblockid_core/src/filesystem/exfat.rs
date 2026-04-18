@@ -1,7 +1,7 @@
 use fat_volume_id::VolumeId32;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
-    byteorder::U32, byteorder::U64, transmute,
+    byteorder::U32, byteorder::U64, transmute_ref,
 };
 
 use crate::{
@@ -176,7 +176,7 @@ pub fn get_exfatcsum(sectors: &[u8], sector_size: usize) -> u32 {
 fn verify_exfat_checksum<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
-    sb: ExFatSuperBlock,
+    sb: &ExFatSuperBlock,
 ) -> Result<(), Error<IO>> {
     let sector_size = sb.block_size();
     let data = reader
@@ -208,7 +208,7 @@ fn in_range_inclusive<T: PartialOrd>(val: T, start: T, stop: T) -> bool {
 fn valid_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
-    sb: ExFatSuperBlock,
+    sb: &ExFatSuperBlock,
 ) -> Result<(), Error<IO>> {
     if u16::from(sb.boot_signature) != 0xAA55 {
         return Err(ExFatError::ProbablyDOS.into());
@@ -275,36 +275,39 @@ fn valid_exfat<IO: BlockIo>(
     return Ok(());
 }
 
-// pub fn probe_is_exfat<IO: BlockIo>(reader: &mut Reader<IO>) -> Result<(), Error<IO>> {
-//     let sb: ExFatSuperBlock =
-//         probe.map_from_file::<{ size_of::<ExFatSuperBlock>() }, ExFatSuperBlock>(probe.offset())?;
+pub fn probe_is_exfat<IO: BlockIo>(reader: &mut Reader<IO>, offset: u64) -> Result<(), Error<IO>> {
+    let buf: [u8; size_of::<ExFatSuperBlock>()] =
+        reader.read_exact_at(offset).map_err(Error::io)?;
 
-//     if probe.get_magic(&EXFAT_ID_INFO).is_ok() {
-//         return Err(ExFatError::ProbablyNotEXFAT);
-//     }
+    let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 
-//     valid_exfat(probe, sb)?;
+    if reader
+        .get_magic(EXFAT_MAGICS.expect("EXFAT magics is not `None`"))
+        .is_ok()
+    {
+        return Err(ExFatError::ProbablyNotEXFAT.into());
+    }
 
-//     return Ok(());
-// }
+    valid_exfat(reader, offset, sb)?;
+
+    return Ok(());
+}
 
 fn find_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    sb: ExFatSuperBlock,
+    sb: &ExFatSuperBlock,
 ) -> Result<Option<String>, Error<IO>> {
     let mut cluster = u32::from(sb.first_clustor_of_root);
     let mut offset = sb.cluster_to_offset(cluster);
 
     let mut i = 0;
+    let mut buf: [u8; EXFAT_ENTRY_SIZE] = [0u8; 32];
 
     while i < 8388608 {
         // EXFAT_MAX_DIR_SIZE / EXFAT_ENTRY_SIZE
-        let buf = match reader.read_exact_at::<EXFAT_ENTRY_SIZE>(offset) {
-            Ok(t) => t,
-            Err(_) => return Ok(None),
-        };
+        reader.read_at(offset, &mut buf).map_err(Error::io)?;
 
-        let entry: ExfatEntryLabel = transmute!(buf);
+        let entry: &ExfatEntryLabel = transmute_ref!(&buf);
 
         if entry.label_type == EXFAT_ENTRY_EOD {
             return Ok(None);
@@ -343,7 +346,7 @@ pub fn probe_exfat<IO: BlockIo>(
     let buf: [u8; size_of::<ExFatSuperBlock>()] =
         reader.read_exact_at(offset).map_err(Error::io)?;
 
-    let sb = transmute!(buf);
+    let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 
     valid_exfat(reader, offset, sb)?;
 

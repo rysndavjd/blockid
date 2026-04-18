@@ -12,7 +12,7 @@ use crate::{
         },
         vfat::{VFAT_MAGICS, probe_vfat},
     },
-    io::{BlockIo, Reader, SeekFrom},
+    io::{BlockIo, Reader},
     partition::mbr::{MBR_MAGICS, probe_mbr},
 };
 
@@ -444,31 +444,6 @@ impl<IO: BlockIo> LowProbe<IO> {
         }
     }
 
-    fn get_magic(&mut self, magics: &'static [Magic]) -> Result<Option<Magic>, Error<IO>> {
-        let mut buf = [0u8; 16];
-
-        for magic in magics {
-            debug_assert!(
-                magic.len <= buf.len(),
-                "Magic should not be greater then `buf`"
-            );
-
-            self.reader
-                .seek(SeekFrom::Start(magic.b_offset))
-                .map_err(Error::<IO>::io)?;
-
-            self.reader
-                .read_exact(&mut buf[..magic.len])
-                .map_err(Error::<IO>::io)?;
-
-            if &buf[..magic.len] == magic.magic {
-                return Ok(Some(*magic));
-            }
-        }
-
-        return Ok(None);
-    }
-
     pub fn probe_block(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO>> {
         for block in BLOCK_DETECT_ORDER {
             if filter.contains(block.0) || filter.contains(block.1) {
@@ -478,7 +453,7 @@ impl<IO: BlockIo> LowProbe<IO> {
             let info = block.2.block_handler::<IO>();
 
             let magic = match info.magics {
-                Some(magics) => match self.get_magic(magics)? {
+                Some(magics) => match self.reader.get_magic(magics)? {
                     Some(magic) => magic,
                     None => continue,
                 },

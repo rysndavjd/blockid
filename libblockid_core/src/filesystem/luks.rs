@@ -2,7 +2,7 @@ use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned,
     byteorder::{BigEndian, U16, U32, U64},
-    transmute,
+    transmute_ref,
 };
 
 use crate::{
@@ -130,11 +130,11 @@ impl Luks2Header {
             return Ok(true);
         }
 
+        let mut buf: [u8; size_of::<Luks2Header>()] = [0u8; size_of::<Luks2Header>()];
         for offset in SECONDARY_OFFSETS {
-            let buf: [u8; size_of::<Luks2Header>()] =
-                reader.read_exact_at(offset).map_err(Error::io)?;
+            reader.read_at(offset, &mut buf).map_err(Error::io)?;
 
-            let hdr: Luks2Header = transmute!(buf);
+            let hdr: &Luks2Header = transmute_ref!(&buf);
 
             if u16::from(hdr.version) == 2 && u64::from(hdr.hdr_offset) == offset {
                 return Ok(true);
@@ -152,7 +152,7 @@ pub fn probe_luks1<IO: BlockIo>(
 ) -> Result<BlockInfo, Error<IO>> {
     let buf: [u8; size_of::<Luks1Header>()] = reader.read_exact_at(offset).map_err(Error::io)?;
 
-    let hdr: Luks1Header = transmute!(buf);
+    let hdr: &Luks1Header = transmute_ref!(&buf);
 
     if !hdr.luks_valid() {
         return Err(LuksError::InvalidLuks1.into());
@@ -182,7 +182,7 @@ pub fn probe_luks2<IO: BlockIo>(
 ) -> Result<BlockInfo, Error<IO>> {
     let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::io)?;
 
-    let hdr: Luks2Header = transmute!(buf);
+    let hdr: &Luks2Header = transmute_ref!(&buf);
 
     if !hdr.luks_valid(reader)? {
         return Err(LuksError::InvalidLuks2.into());
@@ -212,7 +212,7 @@ pub fn probe_luks_opal<IO: BlockIo>(
 ) -> Result<BlockInfo, Error<IO>> {
     let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::io)?;
 
-    let hdr: Luks2Header = transmute!(buf);
+    let hdr: &Luks2Header = transmute_ref!(&buf);
 
     if !hdr.luks_valid(reader)? {
         return Err(LuksError::InvalidLuks2Opal.into());

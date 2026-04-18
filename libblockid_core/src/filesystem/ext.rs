@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 use uuid::Uuid;
-use zerocopy::transmute;
+use zerocopy::transmute_ref;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64,
@@ -264,7 +264,7 @@ const EXT3_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat =
  *	frc = feature_ro_compat
  */
 
-fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
+fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
     let ro_compat = es.feature_rocompat();
 
     if ro_compat.contains(ExtFeatureRoCompat::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
@@ -272,15 +272,7 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
         {
             use crc_fast::{CrcParams, checksum_with_params};
 
-            let crc32c = CrcParams::new(
-                "EXT_CRC",
-                32,
-                0x1EDC6F41,
-                0xffffffff,
-                true,
-                0,
-                0xe3069283,
-            );
+            let crc32c = CrcParams::new("EXT_CRC", 32, 0x1EDC6F41, 0xffffffff, true, 0, 0xe3069283);
 
             let calc_sum = checksum_with_params(
                 crc32c,
@@ -326,7 +318,7 @@ fn ext_checksum(es: Ext2SuperBlock) -> Result<(), ExtError> {
 
 #[allow(clippy::type_complexity)]
 fn ext_get_info(
-    es: Ext2SuperBlock,
+    es: &Ext2SuperBlock,
 ) -> Result<
     (
         Option<String>,
@@ -402,10 +394,10 @@ pub fn probe_jbd<IO: BlockIo>(
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
-        .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
+        .read_exact_at(offset + 1024)
         .map_err(Error::<IO>::io)?;
 
-    let es: Ext2SuperBlock = transmute!(buf);
+    let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
     let fi = es.feature_incompat();
 
@@ -445,10 +437,10 @@ pub fn probe_ext2<IO: BlockIo>(
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
-        .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
+        .read_exact_at(offset + 1024)
         .map_err(Error::<IO>::io)?;
 
-    let es: Ext2SuperBlock = transmute!(buf);
+    let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
     ext_checksum(es)?;
 
@@ -497,11 +489,10 @@ pub fn probe_ext3<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
-        .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
-        .map_err(Error::io)?;
+    let buf: [u8; size_of::<Ext2SuperBlock>()] =
+        reader.read_exact_at(offset + 1024).map_err(Error::io)?;
 
-    let es: Ext2SuperBlock = transmute!(buf);
+    let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
     ext_checksum(es)?;
 
@@ -550,11 +541,10 @@ pub fn probe_ext4<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
-        .read_exact_at::<{ size_of::<Ext2SuperBlock>() }>(offset + 1024)
-        .map_err(Error::io)?;
+    let buf: [u8; size_of::<Ext2SuperBlock>()] =
+        reader.read_exact_at(offset + 1024).map_err(Error::io)?;
 
-    let es: Ext2SuperBlock = transmute!(buf);
+    let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
     ext_checksum(es)?;
 
