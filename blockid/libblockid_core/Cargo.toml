@@ -1,0 +1,45 @@
+[package]
+name = "libblockid_core"
+version = "0.1.0"
+edition = "2024"
+description = "Core portable block device identification library"
+readme = "README.md"
+homepage = "https://github.com/rysndavjd/blockid"
+repository = "https://github.com/rysndavjd/blockid"
+keywords = ["partition", "filesystem", "superblock", "no_std"]
+categories = ["filesystem", "no-std", "parsing"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+bitflags = { version = "2.11.0", default-features = false }
+zerocopy = { version = "0.8.48", default-features = false, features = [
+    "derive",
+    "alloc",
+] }
+uuid = { version = "1.16.0", default-features = false, features = ["zerocopy"] }
+widestring = { version = "1.2.1", default-features = false, features = [
+    "alloc",
+] }
+fat_volume_id = { version = "0.1.0", default-features = false, features = [
+    "id32",
+    "id64",
+    "alloc",
+    "zerocopy",
+] }
+embedded-io = { version = "0.7.1", default-features = false, features = [
+    "alloc",
+], optional = true }
+crc-fast = { version = "1.10.0", default-features = false, features = ["std"], optional = true }
+crc = { version = "3.4.0", default-features = false, optional = true }
+
+[features]
+default = ["std"]
+std = [
+    "zerocopy/std",
+    "bitflags/std",
+    "widestring/std",
+    "fat_volume_id/std",
+    "uuid/std",
+    "dep:crc-fast",
+]
+no_std = ["dep:embedded-io", "dep:crc"]

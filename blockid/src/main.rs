@@ -1,3 +1,5 @@
+use std::fs::File;
+
 use clap::{ArgAction, Parser};
 use libblockid_sys::{BlockFilter, Probe};
 use shadow_rs::{Format, shadow};
@@ -19,4 +21,12 @@ fn main() {
     if cli.version_long {
         build::print_build_in();
     }
+
+    let file = File::open("/dev/nvme0n1p2").unwrap();
+
+    let mut t = libblockid_sys::Probe::new(file).unwrap();
+
+    let info = t.probe_block(0, BlockFilter::empty()).unwrap();
+
+    println!("{:?}", info);
 }

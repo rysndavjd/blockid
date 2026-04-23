@@ -60,10 +60,10 @@ impl Probe {
         Ok(Self { disk: fd.into() })
     }
 
-    pub fn probe_block(&mut self, offset: u64, filter: BlockFilter) -> Result<BlockInfo, Error> {
+    pub fn probe_block(&mut self, offset: u64, block_filter: BlockFilter) -> Result<BlockInfo, Error> {
         let mut low_probe = LowProbe::new(&mut self.disk, offset);
 
-        let info = low_probe.probe_block(filter)?;
+        let info = low_probe.probe_block(block_filter)?;
 
         Ok(info)
     }

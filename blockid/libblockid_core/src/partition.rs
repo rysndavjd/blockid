@@ -1,3 +1,2 @@
 pub mod aix;
-pub mod gpt;
 pub mod mbr;

@@ -17,16 +17,16 @@ use crate::{
 };
 
 #[rustfmt::skip]
-const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
-    (BlockFilter::SKIP_LUKS1, BlockType::LUKS1),
-    (BlockFilter::SKIP_LUKS2, BlockType::LUKS2),
-    (BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
-    (BlockFilter::SKIP_EXFAT, BlockType::Exfat),
-    (BlockFilter::SKIP_JBD, BlockType::Jbd),
-    (BlockFilter::SKIP_EXT2, BlockType::Ext2),
-    (BlockFilter::SKIP_EXT3, BlockType::Ext3),
-    (BlockFilter::SKIP_EXT4, BlockType::Ext4),
-    (BlockFilter::SKIP_VFAT, BlockType::Vfat),
+const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockFilter, BlockType)] = &[
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_LUKS1, BlockType::LUKS1),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_LUKS2, BlockType::LUKS2),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXFAT, BlockType::Exfat),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_JBD, BlockType::Jbd),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXT2, BlockType::Ext2),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXT3, BlockType::Ext3),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_EXT4, BlockType::Ext4),
+    (BlockFilter::SKIP_FS, BlockFilter::SKIP_VFAT, BlockType::Vfat),
 ];
 
 #[derive(Debug, Copy, Clone, Hash)]
@@ -421,32 +421,19 @@ impl BlockInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PartType {
-    Hex(u8),
-    Uuid(Uuid),
-    String(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PartId {
-    Uuid(Uuid),
-    Mbr { disk: u32, partno: u8 },
-}
-
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartTableTag {
     PtType(PTType),
     PtId(Id),
-    // EntryScheme(String),
-    PartName(String),
-    PartId(PartId),
-    PartType(PartType),
-    PartFlags(u64),
-    PartNumber(u64),
-    PartOffset(u64),
-    PartSize(u64),
+    EntryScheme(String),
+    EntryName(String),
+    EntryUuid(String),
+    EntryType(String),
+    EntryFlags(u64),
+    EntryNumber(u32),
+    EntryOffset(u64),
+    EntrySize(u64),
 }
 
 #[derive(Debug)]
@@ -470,13 +457,13 @@ impl<IO: BlockIo> LowProbe<IO> {
 
     pub fn probe_block(&mut self, block_filter: BlockFilter) -> Result<BlockInfo, Error<IO>> {
         for block in BLOCK_DETECT_ORDER {
-            if block_filter.contains(block.0) {
+            if block_filter.contains(block.0) || block_filter.contains(block.1) {
                 continue;
             }
 
-            let handle = block.1.block_handler::<IO>();
+            let info = block.2.block_handler::<IO>();
 
-            let magic = match handle.magics {
+            let magic = match info.magics {
                 Some(magics) => match self.reader.get_magic(magics)? {
                     Some(magic) => magic,
                     None => continue,
@@ -484,7 +471,7 @@ impl<IO: BlockIo> LowProbe<IO> {
                 None => Magic::EMPTY_MAGIC,
             };
 
-            match (handle.probe)(&mut self.reader, self.offset, magic) {
+            match (info.probe)(&mut self.reader, self.offset, magic) {
                 Ok(t) => return Ok(t),
                 Err(e) => {
                     if let Error::Io(_) = e {
@@ -500,6 +487,8 @@ impl<IO: BlockIo> LowProbe<IO> {
 bitflags! {
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct BlockFilter: u64 {
+        const SKIP_PT = 1 << 1;
+        const SKIP_FS = 1 << 2;
         const SKIP_LUKS1 = 1 << 3;
         const SKIP_LUKS2 = 1 << 4;
         const SKIP_LUKS_OPAL = 1 << 5;
