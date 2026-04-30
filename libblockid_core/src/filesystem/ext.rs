@@ -31,7 +31,6 @@ pub enum ExtError {
     InvalidExt4Features,
     Ext4DetectedAsJbd,
 }
-
 impl fmt::Display for ExtError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -67,13 +66,20 @@ pub const EXT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct Ext2SuperBlock {
     pub s_inodes_count: U32<LittleEndian>,
-    pub s_blocks_count: U32<LittleEndian>,
-    pub s_r_blocks_count: U32<LittleEndian>,
-    pub s_free_blocks_count: U32<LittleEndian>,
+    pub s_blocks_count_lo: U32<LittleEndian>,
+    pub s_r_blocks_count_lo: U32<LittleEndian>,
+    pub s_free_blocks_count_lo: U32<LittleEndian>,
     pub s_free_inodes_count: U32<LittleEndian>,
     pub s_first_data_block: U32<LittleEndian>,
     pub s_log_block_size: U32<LittleEndian>,
-    s_dummy3: [U32<LittleEndian>; 7],
+    pub s_log_cluster_size: U32<LittleEndian>,
+    pub s_blocks_per_group: U32<LittleEndian>,
+    pub s_clusters_per_group: U32<LittleEndian>,
+    pub s_inodes_per_group: U32<LittleEndian>,
+    pub s_mtime: U32<LittleEndian>,
+    pub s_wtime: U32<LittleEndian>,
+    pub s_mnt_count: U16<LittleEndian>,
+    pub s_max_mnt_count: U16<LittleEndian>,
     pub s_magic: [u8; 2],
     pub s_state: U16<LittleEndian>,
     pub s_errors: U16<LittleEndian>,
@@ -84,6 +90,19 @@ pub struct Ext2SuperBlock {
     pub s_rev_level: U32<LittleEndian>,
     pub s_def_resuid: U16<LittleEndian>,
     pub s_def_resgid: U16<LittleEndian>,
+    /*
+     * These fields are for EXT4_DYNAMIC_REV superblocks only.
+     *
+     * Note: the difference between the compatible feature set and
+     * the incompatible feature set is that if there is a bit set
+     * in the incompatible feature set that the kernel doesn't
+     * know about, it should refuse to mount the filesystem.
+     *
+     * e2fsck's requirements are more strict; if it doesn't know
+     * about a feature in either the compatible or incompatible
+     * feature set, it must abort and not try to meddle with
+     * things it doesn't understand...
+     */
     pub s_first_ino: U32<LittleEndian>,
     pub s_inode_size: U16<LittleEndian>,
     pub s_block_group_nr: U16<LittleEndian>,
@@ -94,9 +113,16 @@ pub struct Ext2SuperBlock {
     pub s_volume_name: [u8; 16],
     pub s_last_mounted: [u8; 64],
     pub s_algorithm_usage_bitmap: U32<LittleEndian>,
+    /*
+     * Performance hints.  Directory preallocation should only
+     * happen if the EXT4_FEATURE_COMPAT_DIR_PREALLOC flag is on.
+     */
     pub s_prealloc_blocks: u8,
     pub s_prealloc_dir_blocks: u8,
     pub s_reserved_gdt_blocks: U16<LittleEndian>,
+    /*
+     * Journaling support valid if EXT4_FEATURE_COMPAT_HAS_JOURNAL set.
+     */
     pub s_journal_uuid: [u8; 16],
     pub s_journal_inum: U32<LittleEndian>,
     pub s_journal_dev: U32<LittleEndian>,
@@ -104,11 +130,12 @@ pub struct Ext2SuperBlock {
     pub s_hash_seed: [U32<LittleEndian>; 4],
     pub s_def_hash_version: u8,
     pub s_jnl_backup_type: u8,
-    pub s_reserved_word_pad: U16<LittleEndian>,
+    pub s_desc_size: U16<LittleEndian>,
     pub s_default_mount_opts: U32<LittleEndian>,
     pub s_first_meta_bg: U32<LittleEndian>,
     pub s_mkfs_time: U32<LittleEndian>,
     pub s_jnl_blocks: [U32<LittleEndian>; 17],
+    /* 64bit support valid if EXT4_FEATURE_INCOMPAT_64BIT */
     pub s_blocks_count_hi: U32<LittleEndian>,
     pub s_r_blocks_count_hi: U32<LittleEndian>,
     pub s_free_blocks_hi: U32<LittleEndian>,
@@ -119,7 +146,52 @@ pub struct Ext2SuperBlock {
     pub s_mmp_interval: U16<LittleEndian>,
     pub s_mmp_block: U64<LittleEndian>,
     pub s_raid_stripe_width: U32<LittleEndian>,
-    s_reserved: [U32<LittleEndian>; 162],
+    pub s_log_groups_per_flex: u8,
+    pub s_checksum_type: u8,
+    pub s_encryption_level: u8,
+    pub s_reserved_pad: u8,
+    pub s_kbytes_written: U64<LittleEndian>,
+    pub s_snapshot_inum: U32<LittleEndian>,
+    pub s_snapshot_id: U32<LittleEndian>,
+    pub s_snapshot_r_blocks_count: U64<LittleEndian>,
+
+    pub s_snapshot_list: U32<LittleEndian>,
+
+    pub s_error_count: U32<LittleEndian>,
+    pub s_first_error_time: U32<LittleEndian>,
+    pub s_first_error_ino: U32<LittleEndian>,
+    pub s_first_error_block: U64<LittleEndian>,
+    pub s_first_error_func: [u8; 32],
+    pub s_first_error_line: U32<LittleEndian>,
+    pub s_last_error_time: U32<LittleEndian>,
+    pub s_last_error_ino: U32<LittleEndian>,
+    pub s_last_error_line: U32<LittleEndian>,
+    pub s_last_error_block: U64<LittleEndian>,
+    pub s_last_error_func: [u8; 32],
+    pub s_mount_opts: [u8; 64],
+    pub s_usr_quota_inum: U32<LittleEndian>,
+    pub s_grp_quota_inum: U32<LittleEndian>,
+    pub s_overhead_clusters: U32<LittleEndian>,
+    pub s_backup_bgs: [U32<LittleEndian>; 2],
+    pub s_encrypt_algos: [u8; 4],
+    pub s_encrypt_pw_salt: [u8; 16],
+    pub s_lpf_ino: U32<LittleEndian>,
+    pub s_prj_quota_inum: U32<LittleEndian>,
+    pub s_checksum_seed: U32<LittleEndian>,
+    pub s_wtime_hi: u8,
+    pub s_mtime_hi: u8,
+    pub s_mkfs_time_hi: u8,
+    pub s_lastcheck_hi: u8,
+    pub s_first_error_time_hi: u8,
+    pub s_last_error_time_hi: u8,
+    pub s_first_error_errcode: u8,
+    pub s_last_error_errcode: u8,
+    pub s_encoding: U16<LittleEndian>,
+    pub s_encoding_flags: U16<LittleEndian>,
+    pub s_orphan_file_inum: U32<LittleEndian>,
+    pub s_def_resuid_hi: U16<LittleEndian>,
+    pub s_def_resgid_hi: U16<LittleEndian>,
+    s_reserved: [U32<LittleEndian>; 93],
     pub s_checksum: U32<LittleEndian>,
 }
 
@@ -155,6 +227,18 @@ impl Ext2SuperBlock {
     fn ext_flags(&self) -> ExtFlags {
         ExtFlags::from_bits_truncate(u32::from(self.s_flags))
     }
+
+    fn get_block_count(&self) -> u64 {
+        u64::from(self.s_blocks_count_lo)
+            | if self
+                .feature_incompat()
+                .contains(ExtFeatureIncompat::SixtyFourBIT)
+            {
+                u64::from(self.s_blocks_count_hi) << 32
+            } else {
+                0
+            }
+    }
 }
 
 bitflags! {
@@ -177,33 +261,35 @@ bitflags! {
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtFeatureCompat: u32 {
-        const EXT3_FEATURE_COMPAT_HAS_JOURNAL = 0x0004;
+        const HAS_JOURNAL = 0x0004;
+        const SPARSE_SUPER2 = 0x200;
     }
 
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtFeatureIncompat: u32 {
-        const EXT2_FEATURE_INCOMPAT_FILETYPE         = 0x0002;
-        const EXT3_FEATURE_INCOMPAT_RECOVER          = 0x0004;
-        const EXT3_FEATURE_INCOMPAT_JOURNAL_DEV      = 0x0008;
-        const EXT2_FEATURE_INCOMPAT_META_BG          = 0x0010;
-        const EXT4_FEATURE_INCOMPAT_EXTENTS          = 0x0040;
-        const EXT4_FEATURE_INCOMPAT_64BIT            = 0x0080;
-        const EXT4_FEATURE_INCOMPAT_MMP              = 0x0100;
-        const EXT4_FEATURE_INCOMPAT_FLEX_BG          = 0x0200;
+        const FILETYPE         = 0x0002;
+        const RECOVER          = 0x0004;
+        const JOURNAL_DEV      = 0x0008;
+        const META_BG          = 0x0010;
+        const EXTENTS          = 0x0040;
+        const SixtyFourBIT     = 0x0080;
+        const MMP              = 0x0100;
+        const FLEX_BG          = 0x0200;
     }
 
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct ExtFeatureRoCompat: u32 {
-        const EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER     = 0x0001;
-        const EXT2_FEATURE_RO_COMPAT_LARGE_FILE       = 0x0002;
-        const EXT2_FEATURE_RO_COMPAT_BTREE_DIR        = 0x0004;
-        const EXT4_FEATURE_RO_COMPAT_HUGE_FILE        = 0x0008;
-        const EXT4_FEATURE_RO_COMPAT_GDT_CSUM         = 0x0010;
-        const EXT4_FEATURE_RO_COMPAT_DIR_NLINK        = 0x0020;
-        const EXT4_FEATURE_RO_COMPAT_EXTRA_ISIZE      = 0x0040;
-        const EXT4_FEATURE_RO_COMPAT_METADATA_CSUM    = 0x0400;
+        const SPARSE_SUPER     = 0x0001;
+        const LARGE_FILE       = 0x0002;
+        const BTREE_DIR        = 0x0004;
+        const HUGE_FILE        = 0x0008;
+        const GDT_CSUM         = 0x0010;
+        const DIR_NLINK        = 0x0020;
+        const EXTRA_ISIZE      = 0x0040;
+        const BIGALLOC         = 0x0200;
+        const METADATA_CSUM    = 0x0400;
     }
 
     #[repr(transparent)]
@@ -233,28 +319,26 @@ impl std::fmt::Display for ExtCreator {
 // This is abit janky but works without nightly rust
 const EXT2_FEATURE_INCOMPAT_UNSUPPORTED: ExtFeatureIncompat =
     ExtFeatureIncompat::from_bits_truncate(
-        !(ExtFeatureIncompat::EXT2_FEATURE_INCOMPAT_FILETYPE.bits()
-            | ExtFeatureIncompat::EXT2_FEATURE_INCOMPAT_META_BG.bits()),
+        !(ExtFeatureIncompat::FILETYPE.bits() | ExtFeatureIncompat::META_BG.bits()),
     );
 
 const EXT2_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat =
     ExtFeatureRoCompat::from_bits_truncate(
-        !(ExtFeatureRoCompat::EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER.bits()
-            | ExtFeatureRoCompat::EXT2_FEATURE_RO_COMPAT_LARGE_FILE.bits()
-            | ExtFeatureRoCompat::EXT2_FEATURE_RO_COMPAT_BTREE_DIR.bits()),
+        !(ExtFeatureRoCompat::SPARSE_SUPER.bits()
+            | ExtFeatureRoCompat::LARGE_FILE.bits()
+            | ExtFeatureRoCompat::BTREE_DIR.bits()),
     );
 
 const EXT3_FEATURE_INCOMPAT_UNSUPPORTED: ExtFeatureIncompat =
     ExtFeatureIncompat::from_bits_truncate(
-        !(ExtFeatureIncompat::EXT2_FEATURE_INCOMPAT_FILETYPE.bits()
-            | ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_RECOVER.bits()),
+        !(ExtFeatureIncompat::FILETYPE.bits() | ExtFeatureIncompat::RECOVER.bits()),
     );
 
 const EXT3_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat =
     ExtFeatureRoCompat::from_bits_truncate(
-        !(ExtFeatureRoCompat::EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER.bits()
-            | ExtFeatureRoCompat::EXT2_FEATURE_RO_COMPAT_LARGE_FILE.bits()
-            | ExtFeatureRoCompat::EXT2_FEATURE_RO_COMPAT_BTREE_DIR.bits()),
+        !(ExtFeatureRoCompat::SPARSE_SUPER.bits()
+            | ExtFeatureRoCompat::LARGE_FILE.bits()
+            | ExtFeatureRoCompat::BTREE_DIR.bits()),
     );
 
 /*
@@ -267,7 +351,7 @@ const EXT3_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat =
 fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
     let ro_compat = es.feature_rocompat();
 
-    if ro_compat.contains(ExtFeatureRoCompat::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
+    if ro_compat.contains(ExtFeatureRoCompat::METADATA_CSUM) {
         #[cfg(feature = "std")]
         {
             use crc_fast::{CrcParams, checksum_with_params};
@@ -333,7 +417,6 @@ fn ext_get_info(
     ExtError,
 > {
     let fc = es.feature_compat();
-    let fi = es.feature_incompat();
 
     let label: Option<String> = if es.s_volume_name[0] != 0 {
         Some(decode_utf8_lossy_from(&es.s_volume_name))
@@ -343,8 +426,7 @@ fn ext_get_info(
 
     let uuid = Id::Uuid(Uuid::from_bytes(es.s_uuid));
 
-    let journal_uuid: Option<Id> = if fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL)
-    {
+    let journal_uuid: Option<Id> = if fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
         if es.s_journal_uuid == [0; 16] {
             None //Journal is internal to the filesystem   
         } else {
@@ -365,16 +447,9 @@ fn ext_get_info(
         0
     };
 
-    let fslastblock: u64 = u64::from(u32::from(es.s_blocks_count))
-        | if fi.contains(ExtFeatureIncompat::EXT4_FEATURE_INCOMPAT_64BIT) {
-            (u64::from(u32::from(es.s_blocks_count_hi))) << 32
-        } else {
-            0
-        };
+    let fs_size: u64 = block_size * es.get_block_count();
 
-    let fs_size: u64 = block_size * u32::from(es.s_blocks_count) as u64;
-
-    let creator = es.s_creator_os;
+    let fslastblock: u64 = es.get_block_count();
 
     Ok((
         label,
@@ -384,7 +459,7 @@ fn ext_get_info(
         block_size,
         fslastblock,
         fs_size,
-        creator.to_string(),
+        es.s_creator_os.to_string(),
     ))
 }
 
@@ -401,7 +476,7 @@ pub fn probe_jbd<IO: BlockIo>(
 
     let fi = es.feature_incompat();
 
-    if !fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
+    if !fi.contains(ExtFeatureIncompat::JOURNAL_DEV) {
         return Err(ExtError::MissingExt3FeatureIncompatJournalDev.into());
     }
 
@@ -448,7 +523,7 @@ pub fn probe_ext2<IO: BlockIo>(
     let fi = es.feature_incompat();
     let frc = es.feature_rocompat();
 
-    if fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
+    if fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
         return Err(ExtError::Ext2BlockHasJournal.into());
     };
 
@@ -500,7 +575,7 @@ pub fn probe_ext3<IO: BlockIo>(
     let fi = es.feature_incompat();
     let frc = es.feature_rocompat();
 
-    if !fc.contains(ExtFeatureCompat::EXT3_FEATURE_COMPAT_HAS_JOURNAL) {
+    if !fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
         return Err(ExtError::Ext3BlockMissingJournal.into());
     };
 
@@ -552,7 +627,7 @@ pub fn probe_ext4<IO: BlockIo>(
     let frc = es.feature_rocompat();
     let flags = es.ext_flags();
 
-    if fi.contains(ExtFeatureIncompat::EXT3_FEATURE_INCOMPAT_JOURNAL_DEV) {
+    if fi.contains(ExtFeatureIncompat::JOURNAL_DEV) {
         return Err(ExtError::Ext4DetectedAsJbd.into());
     }
 

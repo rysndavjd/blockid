@@ -22,7 +22,7 @@ fn main() {
         build::print_build_in();
     }
 
-    let file = File::open("/dev/nvme0n1p2").unwrap();
+    let file = File::open("/dev/nvme0n1p3").unwrap();
 
     let mut t = libblockid_sys::Probe::new(file).unwrap();
 
