@@ -9,8 +9,9 @@ use zerocopy::{
 use crate::util::decode_utf8_lossy_from;
 use crate::{
     error::Error,
+    filesystem::{BlockInfo, BlockTag, BlockType},
     io::{BlockIo, Reader},
-    probe::{BlockInfo, BlockTag, BlockType, Id, Magic, Usage},
+    probe::{Id, Magic, Usage},
     std::{fmt, mem::offset_of},
 };
 
@@ -50,7 +51,7 @@ impl fmt::Display for ExtError {
     }
 }
 
-impl<IO: BlockIo> From<ExtError> for Error<IO> {
+impl<E: core::fmt::Debug> From<ExtError> for Error<E> {
     fn from(e: ExtError) -> Self {
         Error::Ext(e)
     }
@@ -467,10 +468,9 @@ pub fn probe_jbd<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
-        .read_exact_at(offset + 1024)
-        .map_err(Error::<IO>::io)?;
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let buf: [u8; size_of::<Ext2SuperBlock>()] =
+        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
@@ -510,10 +510,9 @@ pub fn probe_ext2<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; size_of::<Ext2SuperBlock>()] = reader
-        .read_exact_at(offset + 1024)
-        .map_err(Error::<IO>::io)?;
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let buf: [u8; size_of::<Ext2SuperBlock>()] =
+        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
@@ -563,9 +562,9 @@ pub fn probe_ext3<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
+) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
-        reader.read_exact_at(offset + 1024).map_err(Error::io)?;
+        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
@@ -615,9 +614,9 @@ pub fn probe_ext4<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
+) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
-        reader.read_exact_at(offset + 1024).map_err(Error::io)?;
+        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 

@@ -1,6 +1,9 @@
+pub mod exfat;
+pub mod ext;
+pub mod luks;
+pub mod vfat;
+
 use bitflags::bitflags;
-use fat_volume_id::{VolumeId32, VolumeId64};
-use uuid::Uuid;
 
 use crate::{
     error::Error,
@@ -13,11 +16,11 @@ use crate::{
         vfat::{VFAT_MAGICS, probe_vfat},
     },
     io::{BlockIo, Reader},
-    partition::mbr::{MBR_MAGICS, probe_mbr},
+    probe::{Endianness, Id, Magic, Usage},
 };
 
 #[rustfmt::skip]
-const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
+pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
     (BlockFilter::SKIP_LUKS1, BlockType::LUKS1),
     (BlockFilter::SKIP_LUKS2, BlockType::LUKS2),
     (BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
@@ -30,38 +33,11 @@ const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
 ];
 
 #[derive(Debug, Copy, Clone, Hash)]
-pub struct PtHandler<IO: BlockIo> {
-    pub minsz: Option<u64>,
-    pub magics: Option<&'static [Magic]>,
-    #[allow(clippy::type_complexity)]
-    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<PartTableInfo, Error<IO>>,
-}
-
-#[non_exhaustive]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum PTType {
-    Mbr,
-}
-
-impl PTType {
-    fn pt_handler<IO: BlockIo>(&self) -> PtHandler<IO> {
-        match self {
-            PTType::Mbr => PtHandler {
-                minsz: None,
-                magics: MBR_MAGICS,
-                probe: probe_mbr,
-            },
-            _ => todo!(),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Hash)]
 pub struct BlockHandler<IO: BlockIo> {
     pub minsz: Option<u64>,
     pub magics: Option<&'static [Magic]>,
     #[allow(clippy::type_complexity)]
-    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<BlockInfo, Error<IO>>,
+    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<BlockInfo, Error<IO::Error>>,
 }
 
 #[non_exhaustive]
@@ -93,7 +69,7 @@ pub enum BlockType {
 }
 
 impl BlockType {
-    fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
+    pub fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
         match self {
             BlockType::LUKS1 => BlockHandler {
                 minsz: None,
@@ -152,88 +128,6 @@ pub enum SubType {
     Fat12,
     Fat16,
     Fat32,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum Usage {
-    Filesystem,
-    PartitionTable,
-    Raid,
-    Crypto,
-    Other(&'static str),
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum Id {
-    Uuid(Uuid),
-    VolumeId32(VolumeId32),
-    VolumeId64(VolumeId64),
-}
-
-impl Id {
-    pub fn as_uuid(&self) -> Option<Uuid> {
-        match self {
-            Id::Uuid(t) => Some(*t),
-            _ => None,
-        }
-    }
-
-    pub fn as_volumeid32(&self) -> Option<VolumeId32> {
-        match self {
-            Id::VolumeId32(t) => Some(*t),
-            _ => None,
-        }
-    }
-
-    pub fn as_volumeid64(&self) -> Option<VolumeId64> {
-        match self {
-            Id::VolumeId64(t) => Some(*t),
-            _ => None,
-        }
-    }
-}
-
-impl From<Uuid> for Id {
-    fn from(value: Uuid) -> Self {
-        Id::Uuid(value)
-    }
-}
-
-impl From<VolumeId32> for Id {
-    fn from(value: VolumeId32) -> Self {
-        Id::VolumeId32(value)
-    }
-}
-
-impl From<VolumeId64> for Id {
-    fn from(value: VolumeId64) -> Self {
-        Id::VolumeId64(value)
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum Endianness {
-    Little,
-    Big,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Magic {
-    pub magic: &'static [u8],
-    pub len: usize,
-    pub b_offset: u64,
-}
-
-impl Magic {
-    pub const EMPTY_MAGIC: Magic = Magic {
-        magic: &[0],
-        len: 0,
-        b_offset: 0,
-    };
-
-    // fn is_empty(&self) -> bool {
-    //     self == &Magic::EMPTY_MAGIC
-    // }
 }
 
 #[non_exhaustive]
@@ -418,82 +312,6 @@ impl BlockInfo {
             BlockTag::Creator(t) => Some(t),
             _ => None,
         })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PartType {
-    Hex(u8),
-    Uuid(Uuid),
-    String(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PartId {
-    Uuid(Uuid),
-    Mbr { disk: u32, partno: u8 },
-}
-
-#[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PartTableTag {
-    PtType(PTType),
-    PtId(Id),
-    // EntryScheme(String),
-    PartName(String),
-    PartId(PartId),
-    PartType(PartType),
-    PartFlags(u64),
-    PartNumber(u64),
-    PartOffset(u64),
-    PartSize(u64),
-}
-
-#[derive(Debug)]
-pub struct PartTableInfo {
-    tags: Vec<PartTableTag>,
-}
-
-#[derive(Debug)]
-pub struct LowProbe<IO: BlockIo> {
-    reader: Reader<IO>,
-    offset: u64,
-}
-
-impl<IO: BlockIo> LowProbe<IO> {
-    pub fn new(reader: IO, offset: u64) -> LowProbe<IO> {
-        LowProbe {
-            reader: Reader::new(reader),
-            offset,
-        }
-    }
-
-    pub fn probe_block(&mut self, block_filter: BlockFilter) -> Result<BlockInfo, Error<IO>> {
-        for block in BLOCK_DETECT_ORDER {
-            if block_filter.contains(block.0) {
-                continue;
-            }
-
-            let handle = block.1.block_handler::<IO>();
-
-            let magic = match handle.magics {
-                Some(magics) => match self.reader.get_magic(magics)? {
-                    Some(magic) => magic,
-                    None => continue,
-                },
-                None => Magic::EMPTY_MAGIC,
-            };
-
-            match (handle.probe)(&mut self.reader, self.offset, magic) {
-                Ok(t) => return Ok(t),
-                Err(e) => {
-                    if let Error::Io(_) = e {
-                        return Err(e);
-                    }
-                }
-            };
-        }
-        return Err(Error::ProbesExhausted);
     }
 }
 

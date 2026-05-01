@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use bitflags::bitflags;
 use fat_volume_id::VolumeId32;
 use zerocopy::{
@@ -7,8 +9,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
+    filesystem::{BlockInfo, BlockTag, BlockType, SubType},
     io::{BlockIo, Reader},
-    probe::{BlockInfo, BlockTag, BlockType, Id, Magic, SubType, Usage},
+    probe::{Id, Magic, Usage},
     std::fmt,
     util::decode_utf8_lossy_from,
 };
@@ -52,7 +55,7 @@ impl fmt::Display for VFatError {
     }
 }
 
-impl<IO: BlockIo> From<VFatError> for Error<IO> {
+impl<E: Debug> From<VFatError> for Error<E> {
     fn from(e: VFatError) -> Self {
         Error::VFat(e)
     }
@@ -327,8 +330,11 @@ pub fn valid_fat(
     }
 }
 
-pub fn probe_is_vfat<IO: BlockIo>(reader: &mut Reader<IO>, offset: u64) -> Result<(), Error<IO>> {
-    let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::io)?;
+pub fn probe_is_vfat<IO: BlockIo>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+) -> Result<(), Error<IO::Error>> {
+    let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::Io)?;
 
     let ms: &MsDosSuperBlock = transmute_ref!(&buf);
     let vs: &VFatSuperBlock = transmute_ref!(&buf);
@@ -347,13 +353,13 @@ pub fn search_fat_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
     root_start: u64,
     root_dir_entries: u64,
-) -> Result<Option<String>, Error<IO>> {
+) -> Result<Option<String>, Error<IO::Error>> {
     let mut buf = [0u8; size_of::<VfatDirEntry>()];
 
     for i in 0..root_dir_entries {
         let offset = root_start + (i * 32);
 
-        reader.read_at(offset, &mut buf).map_err(Error::io)?;
+        reader.read_at(offset, &mut buf).map_err(Error::Io)?;
 
         let entry: &VfatDirEntry = transmute_ref!(&buf);
         let attr = entry.flags();
@@ -387,7 +393,7 @@ fn probe_fat16<IO: BlockIo>(
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
-) -> Result<(Option<String>, VolumeId32), Error<IO>> {
+) -> Result<(Option<String>, VolumeId32), Error<IO::Error>> {
     let reserved: u32 = ms.ms_reserved.into();
 
     let root_start: u32 = (reserved + fat_size) * u32::from(ms.ms_sector_size);
@@ -408,7 +414,7 @@ fn probe_fat32<IO: BlockIo>(
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
-) -> Result<(Option<String>, VolumeId32), Error<IO>> {
+) -> Result<(Option<String>, VolumeId32), Error<IO::Error>> {
     let reserved: u32 = ms.ms_reserved.into();
 
     let buf_size: u64 = vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size);
@@ -438,7 +444,7 @@ fn probe_fat32<IO: BlockIo>(
                     (u64::from(reserved) * u64::from(ms.ms_sector_size)) + (u64::from(next) * 4);
                 let buf = reader
                     .read_vec_at(fat_entry_off, buf_size as usize)
-                    .map_err(Error::io)?;
+                    .map_err(Error::Io)?;
 
                 if buf.len() < 4 {
                     break None;
@@ -455,7 +461,7 @@ fn probe_fat32<IO: BlockIo>(
     if fsinfo_sect != 0 {
         let buf: [u8; size_of::<Fat32FsInfo>()] = reader
             .read_exact_at(fsinfo_sect * u64::from(ms.ms_sector_size))
-            .map_err(Error::io)?;
+            .map_err(Error::Io)?;
 
         let fsinfo: &Fat32FsInfo = transmute_ref!(&buf);
 
@@ -478,8 +484,8 @@ pub fn probe_vfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::io)?;
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::Io)?;
 
     let ms: &MsDosSuperBlock = transmute_ref!(&buf);
     let vs: &VFatSuperBlock = transmute_ref!(&buf);

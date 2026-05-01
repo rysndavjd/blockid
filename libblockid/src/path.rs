@@ -7,16 +7,16 @@ impl<T: AsRef<std::path::Path>> SysPath for T {}
 #[cfg(feature = "std")]
 pub use std::path::{Path, PathBuf};
 
-#[cfg(all(not(feature = "std"), target_family = "unix"))]
+#[cfg(all(feature = "no_std", target_family = "unix"))]
 pub trait SysPath: AsRef<Path> {}
 
-#[cfg(all(not(feature = "std"), target_family = "unix"))]
+#[cfg(all(feature = "no_std", target_family = "unix"))]
 impl<T: AsRef<Path>> SysPath for T {}
 
-#[cfg(all(not(feature = "std"), target_family = "unix"))]
+#[cfg(all(feature = "no_std", target_family = "unix"))]
 pub use unix_path::{Path, PathBuf};
 
-#[cfg(all(not(feature = "std"), target_family = "unix"))]
+#[cfg(all(feature = "no_std", target_family = "unix"))]
 mod unix_path {
     use core::ops::Deref;
 

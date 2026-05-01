@@ -1,8 +1,8 @@
 [package]
-name = "libblockid_core"
+name = "libblockid"
 version = "0.1.0"
 edition = "2024"
-description = "Core portable block device identification library"
+description = "Core block device identification library"
 readme = "README.md"
 homepage = "https://github.com/rysndavjd/blockid"
 repository = "https://github.com/rysndavjd/blockid"
@@ -26,14 +26,22 @@ fat_volume_id = { version = "0.1.0", default-features = false, features = [
     "alloc",
     "zerocopy",
 ] }
+
 embedded-io = { version = "0.7.1", default-features = false, features = [
     "alloc",
 ], optional = true }
+
 crc-fast = { version = "1.10.0", default-features = false, features = ["std"], optional = true }
 crc = { version = "3.4.0", default-features = false, optional = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))'.dependencies.rustix]
+version = "1.1.4"
+default-features = false
+features = ["stdio", "fs", "alloc"]
+optional = true
+
 [features]
-default = ["std"]
+default = ["no_std", "os_calls"]
 std = [
     "zerocopy/std",
     "bitflags/std",
@@ -41,5 +49,7 @@ std = [
     "fat_volume_id/std",
     "uuid/std",
     "dep:crc-fast",
+    "os_calls"
 ]
 no_std = ["dep:embedded-io", "dep:crc"]
+os_calls = ["dep:rustix"]

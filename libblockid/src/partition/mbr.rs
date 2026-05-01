@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use bitflags::bitflags;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
@@ -9,8 +11,8 @@ use crate::{
     error::Error,
     filesystem::{exfat::probe_is_exfat, vfat::probe_is_vfat},
     io::{BlockIo, Reader},
-    partition::aix::AIX_MAGIC,
-    probe::{Magic, PartTableInfo},
+    partition::{PartTableInfo, aix::AIX_MAGIC},
+    probe::Magic,
     std::fmt,
 };
 
@@ -47,7 +49,7 @@ impl fmt::Display for MbrError {
     }
 }
 
-impl<IO: BlockIo> From<MbrError> for Error<IO> {
+impl<E: Debug> From<MbrError> for Error<E> {
     fn from(e: MbrError) -> Self {
         Error::Mbr(e)
     }
@@ -234,7 +236,7 @@ fn is_valid_mbr<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     pt: &MbrTable,
-) -> Result<(), Error<IO>> {
+) -> Result<(), Error<IO::Error>> {
     for entry in pt.partition_entries {
         let boot_ind = entry.flags();
         if !boot_ind.contains(MbrAttributes::INACTIVE) && !boot_ind.contains(MbrAttributes::ACTIVE)
@@ -247,15 +249,15 @@ fn is_valid_mbr<IO: BlockIo>(
         }
     }
 
-    if probe_is_vfat(reader, offset).is_err() {
+    if probe_is_vfat(reader, offset).is_ok() {
         return Err(MbrError::ProbablyVFAT.into());
     }
 
-    if probe_is_exfat(reader, offset).is_err() {
+    if probe_is_exfat(reader, offset).is_ok() {
         return Err(MbrError::ProbablyEXFAT.into());
     }
 
-    // if probe_is_ntfs(probe).is_err() {
+    // if probe_is_ntfs(probe).is_ok() {
     //     return Err(MbrError::ProbablyNTFS);
     // }
 
@@ -268,8 +270,8 @@ pub fn probe_mbr<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     mag: Magic,
-) -> Result<PartTableInfo, Error<IO>> {
-    let buf: [u8; size_of::<MbrTable>()] = reader.read_exact_at(offset).map_err(Error::io)?;
+) -> Result<PartTableInfo, Error<IO::Error>> {
+    let buf: [u8; size_of::<MbrTable>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
 
     let mbr_pt: &MbrTable = transmute_ref!(&buf);
 

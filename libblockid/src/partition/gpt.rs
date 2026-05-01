@@ -1,23 +1,35 @@
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, U16, U32, U64, Unaligned,
+    transmute_ref,
 };
 
-use crate::{probe::Magic, std::fmt};
+use crate::{BlockInfo, BlockIo, error::Error, io::Reader, probe::Magic, std::fmt};
 
 #[derive(Debug)]
-pub enum GptError {}
+pub enum GptError {
+    UnableToGetSectorSize,
+}
 
 impl fmt::Display for GptError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            // GptError::IoError(e) => write!(f, "I/O operation failed: {e}"),
-            _ => todo!(),
+            GptError::UnableToGetSectorSize => {
+                write!(f, "Unable to get sector size of GPT partition table")
+            }
         }
     }
 }
 
+impl<E: core::fmt::Debug> From<GptError> for Error<E> {
+    fn from(e: GptError) -> Self {
+        Error::Gpt(e)
+    }
+}
+
 pub const GPT_MAGICS: Option<&'static [Magic]> = None;
+/// The offset used that is read off the disk to find the GPT header and its block size.
+pub const GPT_DETECT_OFFSET: usize = 32768;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, PartialEq)]
@@ -101,6 +113,31 @@ pub struct GptEntry {
 }
 
 impl GptTable {
-    const HEADER_SIGNATURE: u64 = 0x5452415020494645;
-    const HEADER_SIGNATURE_STR: &[u8] = b"EFI PART";
+    const SIGNATURE: u64 = 0x5452415020494645;
+    const SIGNATURE_STR: &[u8] = b"EFI PART";
+}
+
+fn probe_gpt<IO: BlockIo>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+    _: Magic,
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let buf: [u8; GPT_DETECT_OFFSET] = reader.read_exact_at(offset).map_err(Error::Io)?;
+
+    let ssz = buf
+        .chunks_exact(GptTable::SIGNATURE_STR.len())
+        .enumerate()
+        .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GPT_DETECT_OFFSET)
+        .find_map(|(i, raw)| {
+            if raw == GptTable::SIGNATURE_STR {
+                Some(i * GptTable::SIGNATURE_STR.len())
+            } else {
+                None
+            }
+        })
+        .ok_or(GptError::UnableToGetSectorSize)?;
+
+    let sb: &GptTable = transmute_ref!(&buf);
+
+    todo!()
 }

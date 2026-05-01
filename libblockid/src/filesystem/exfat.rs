@@ -6,8 +6,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
+    filesystem::{BlockInfo, BlockTag, BlockType},
     io::{BlockIo, Reader},
-    probe::{BlockInfo, BlockTag, BlockType, Endianness, Id, Magic, Usage},
+    probe::{Endianness, Id, Magic, Usage},
     std::fmt,
     util::decode_utf16_lossy_from,
 };
@@ -57,9 +58,9 @@ impl fmt::Display for ExFatError {
     }
 }
 
-impl<IO: BlockIo> From<ExFatError> for Error<IO> {
+impl<E: core::fmt::Debug> From<ExFatError> for Error<E> {
     fn from(e: ExFatError) -> Self {
-        Error::ExFat(e)
+        Self::ExFat(e)
     }
 }
 
@@ -130,9 +131,9 @@ impl ExFatSuperBlock {
         &self,
         reader: &mut Reader<IO>,
         cluster: u32,
-    ) -> Result<u32, Error<IO>> {
+    ) -> Result<u32, Error<IO::Error>> {
         let fat_offset = self.block_to_offset(u64::from(self.fat_offset)) + (cluster as u64 * 4);
-        let next: [u8; 4] = reader.read_exact_at(fat_offset).map_err(Error::io)?;
+        let next: [u8; 4] = reader.read_exact_at(fat_offset).map_err(Error::Io)?;
 
         return Ok(u32::from_le_bytes(next));
     }
@@ -177,11 +178,11 @@ fn verify_exfat_checksum<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     sb: &ExFatSuperBlock,
-) -> Result<(), Error<IO>> {
+) -> Result<(), Error<IO::Error>> {
     let sector_size = sb.block_size();
     let data = reader
         .read_vec_at(offset, sector_size * 12)
-        .map_err(Error::io)?;
+        .map_err(Error::Io)?;
     let checksum = get_exfatcsum(&data, sector_size);
 
     for i in 0..(sector_size / 4) {
@@ -209,7 +210,7 @@ fn valid_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     sb: &ExFatSuperBlock,
-) -> Result<(), Error<IO>> {
+) -> Result<(), Error<IO::Error>> {
     if u16::from(sb.boot_signature) != 0xAA55 {
         return Err(ExFatError::ProbablyDOS.into());
     }
@@ -275,9 +276,12 @@ fn valid_exfat<IO: BlockIo>(
     return Ok(());
 }
 
-pub fn probe_is_exfat<IO: BlockIo>(reader: &mut Reader<IO>, offset: u64) -> Result<(), Error<IO>> {
+pub fn probe_is_exfat<IO: BlockIo>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+) -> Result<(), Error<IO::Error>> {
     let buf: [u8; size_of::<ExFatSuperBlock>()] =
-        reader.read_exact_at(offset).map_err(Error::io)?;
+        reader.read_exact_at(offset).map_err(Error::Io)?;
 
     let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 
@@ -296,7 +300,7 @@ pub fn probe_is_exfat<IO: BlockIo>(reader: &mut Reader<IO>, offset: u64) -> Resu
 fn find_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
     sb: &ExFatSuperBlock,
-) -> Result<Option<String>, Error<IO>> {
+) -> Result<Option<String>, Error<IO::Error>> {
     let mut cluster = u32::from(sb.first_clustor_of_root);
     let mut offset = sb.cluster_to_offset(cluster);
 
@@ -305,7 +309,7 @@ fn find_label<IO: BlockIo>(
 
     while i < 8388608 {
         // EXFAT_MAX_DIR_SIZE / EXFAT_ENTRY_SIZE
-        reader.read_at(offset, &mut buf).map_err(Error::io)?;
+        reader.read_at(offset, &mut buf).map_err(Error::Io)?;
 
         let entry: &ExfatEntryLabel = transmute_ref!(&buf);
 
@@ -342,9 +346,9 @@ pub fn probe_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     mag: Magic,
-) -> Result<BlockInfo, Error<IO>> {
+) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<ExFatSuperBlock>()] =
-        reader.read_exact_at(offset).map_err(Error::io)?;
+        reader.read_exact_at(offset).map_err(Error::Io)?;
 
     let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 

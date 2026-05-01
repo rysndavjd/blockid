@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.41", default-features = false, features = ["std", "derive", "color", "cargo", "suggestions", "usage", "help"] }
-libblockid_sys = { path = "../libblockid_sys", default-features = false, features = ["std"]}
+libblockid_sys = { path = "../libblockid_sys", default-features = false, features = []}
 shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "git2", "build"]}
 
 [build-dependencies]

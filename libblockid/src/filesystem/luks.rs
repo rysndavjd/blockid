@@ -8,8 +8,9 @@ use zerocopy::{
 use crate::{
     BlockInfo, Id,
     error::Error,
+    filesystem::{BlockTag, BlockType},
     io::{BlockIo, Reader},
-    probe::{BlockTag, BlockType, Magic, Usage},
+    probe::{Magic, Usage},
     std::{fmt, str::FromStr},
     util::{UtfError, decode_utf8_from},
 };
@@ -53,7 +54,7 @@ impl From<UtfError> for LuksError {
     }
 }
 
-impl<IO: BlockIo> From<LuksError> for Error<IO> {
+impl<E: core::fmt::Debug> From<LuksError> for Error<E> {
     fn from(e: LuksError) -> Self {
         Error::Luks(e)
     }
@@ -125,14 +126,14 @@ pub struct Luks2Header {
 }
 
 impl Luks2Header {
-    fn luks_valid<IO: BlockIo>(self, reader: &mut Reader<IO>) -> Result<bool, Error<IO>> {
+    fn luks_valid<IO: BlockIo>(self, reader: &mut Reader<IO>) -> Result<bool, Error<IO::Error>> {
         if self.magic == LUKS1_MAGIC && u16::from(self.version) == 2 {
             return Ok(true);
         }
 
         let mut buf: [u8; size_of::<Luks2Header>()] = [0u8; size_of::<Luks2Header>()];
         for offset in SECONDARY_OFFSETS {
-            reader.read_at(offset, &mut buf).map_err(Error::io)?;
+            reader.read_at(offset, &mut buf).map_err(Error::Io)?;
 
             let hdr: &Luks2Header = transmute_ref!(&buf);
 
@@ -149,19 +150,19 @@ pub fn probe_luks1<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; size_of::<Luks1Header>()] = reader.read_exact_at(offset).map_err(Error::io)?;
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let buf: [u8; size_of::<Luks1Header>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
 
-    let hdr: &Luks1Header = transmute_ref!(&buf);
+    let sb: &Luks1Header = transmute_ref!(&buf);
 
-    if !hdr.luks_valid() {
+    if !sb.luks_valid() {
         return Err(LuksError::InvalidLuks1.into());
     }
 
-    let utf = decode_utf8_from(&hdr.uuid).map_err(LuksError::UtfError)?;
+    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::UtfError)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
-    let version = hdr.version.to_string();
+    let version = sb.version.to_string();
 
     let mut info = BlockInfo::new();
 
@@ -179,19 +180,19 @@ pub fn probe_luks2<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::io)?;
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
 
-    let hdr: &Luks2Header = transmute_ref!(&buf);
+    let sb: &Luks2Header = transmute_ref!(&buf);
 
-    if !hdr.luks_valid(reader)? {
+    if !sb.luks_valid(reader)? {
         return Err(LuksError::InvalidLuks2.into());
     }
 
-    let utf = decode_utf8_from(&hdr.uuid).map_err(LuksError::UtfError)?;
+    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::UtfError)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
-    let version = hdr.version.to_string();
+    let version = sb.version.to_string();
 
     let mut info = BlockInfo::new();
 
@@ -209,23 +210,23 @@ pub fn probe_luks_opal<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO>> {
-    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::io)?;
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
 
-    let hdr: &Luks2Header = transmute_ref!(&buf);
+    let sb: &Luks2Header = transmute_ref!(&buf);
 
-    if !hdr.luks_valid(reader)? {
+    if !sb.luks_valid(reader)? {
         return Err(LuksError::InvalidLuks2Opal.into());
     }
 
-    if hdr.subsystem[0..7] != LUKS2_HW_OPAL_SUBSYSTEM {
+    if sb.subsystem[0..7] != LUKS2_HW_OPAL_SUBSYSTEM {
         return Err(LuksError::InvalidLuks2Opal.into());
     }
 
-    let utf = decode_utf8_from(&hdr.uuid).map_err(LuksError::UtfError)?;
+    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::UtfError)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
-    let version = hdr.version.to_string();
+    let version = sb.version.to_string();
 
     let mut info = BlockInfo::new();
 

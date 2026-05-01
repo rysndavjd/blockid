@@ -1,0 +1,42 @@
+#![allow(clippy::needless_return)]
+
+#[cfg(any(feature = "std", test))]
+extern crate std;
+
+#[cfg(all(feature = "no_std", not(test)))]
+extern crate core as std;
+
+extern crate alloc;
+
+mod error;
+mod filesystem;
+mod io;
+mod partition;
+#[cfg(feature = "no_std")]
+mod path;
+mod probe;
+#[cfg(feature = "os_calls")]
+mod topology;
+mod util;
+
+pub use crate::{
+    error::Error,
+    filesystem::{
+        BlockFilter, BlockInfo, BlockTag, BlockType, SubType, exfat::ExFatError, ext::ExtError,
+        luks::LuksError, vfat::VFatError,
+    },
+    io::BlockIo,
+    probe::{Endianness, Id, LowProbe, Usage},
+};
+
+#[cfg(all(feature = "std", feature = "no_std"))]
+compile_error!("`std` and `no_std` are mutually exclusive");
+
+#[cfg(not(any(feature = "std", feature = "no_std")))]
+compile_error!("must enable either `std` or `no_std`");
+
+#[cfg(all(feature = "std", feature = "os_calls"))]
+compile_error!("`os_calls` requires `no_std`");
+
+#[cfg(all(feature = "os_calls", not(feature = "no_std")))]
+compile_error!("`os_calls` requires `no_std` to be enabled");

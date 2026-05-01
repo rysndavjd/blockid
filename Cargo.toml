@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "libblockid_core",
+    "libblockid",
     "libblockid_sys",
     "blockid"
 ]

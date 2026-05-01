@@ -1,7 +1,8 @@
+use std::fmt::Debug;
+
 use crate::{
     filesystem::{exfat::ExFatError, ext::ExtError, luks::LuksError, vfat::VFatError},
-    io::BlockIo,
-    partition::mbr::MbrError,
+    partition::{gpt::GptError, mbr::MbrError},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -9,23 +10,17 @@ pub enum BuilderError {}
 
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum Error<IO: BlockIo> {
-    Io(IO::Error),
+pub enum Error<E: Debug> {
+    Io(E),
     Luks(LuksError),
     ExFat(ExFatError),
     Ext(ExtError),
     VFat(VFatError),
     Mbr(MbrError),
+    Gpt(GptError),
     ProbesExhausted,
 }
 
-impl<IO: BlockIo> Error<IO> {}
-
-impl<IO: BlockIo> Error<IO> {
-    pub(crate) fn io(e: IO::Error) -> Self {
-        Self::Io(e)
-    }
-}
 // #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 
 // impl crate::std::error::Error for Error {}
