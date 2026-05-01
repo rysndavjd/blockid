@@ -124,6 +124,7 @@ fn probe_gpt<IO: BlockIo>(
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; GPT_DETECT_OFFSET] = reader.read_exact_at(offset).map_err(Error::Io)?;
 
+    #[cfg(not(feature = "os_calls"))]
     let ssz = buf
         .chunks_exact(GptTable::SIGNATURE_STR.len())
         .enumerate()
@@ -136,6 +137,8 @@ fn probe_gpt<IO: BlockIo>(
             }
         })
         .ok_or(GptError::UnableToGetSectorSize)?;
+    
+    // let ssz = crate::topology::physical_sector_size(file)
 
     let sb: &GptTable = transmute_ref!(&buf);
 

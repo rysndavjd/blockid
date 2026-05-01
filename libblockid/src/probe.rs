@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     error::Error,
     filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo},
-    io::{BlockIo, File, IoError, Reader},
+    io::{BlockIo, File, IoError, Reader, ioctl::Ioctl},
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -89,15 +89,17 @@ impl Magic {
     // }
 }
 
+#[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
 #[derive(Debug)]
-pub struct LowProbe<IO: BlockIo> {
+pub struct Probe<IO: BlockIo> {
     reader: Reader<IO>,
     offset: u64,
 }
 
-impl<IO: BlockIo> LowProbe<IO> {
-    pub fn new(reader: IO, offset: u64) -> LowProbe<IO> {
-        LowProbe {
+#[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
+impl<IO: BlockIo> Probe<IO> {
+    pub fn new(reader: IO, offset: u64) -> Probe<IO> {
+        Probe {
             reader: Reader::new(reader),
             offset,
         }
@@ -135,54 +137,25 @@ impl<IO: BlockIo> LowProbe<IO> {
     }
 }
 
+#[cfg(feature = "os_calls")]
+#[derive(Debug)]
 pub struct Probe {
     disk: File,
+    offset: u64,
 }
 
 #[cfg(feature = "os_calls")]
 impl Probe {
     #[cfg(feature = "std")]
-    pub fn new(file: File) -> Result<Probe, Error> {
-        Ok(Self { disk: file })
+    pub fn new(file: File, offset: u64) -> Result<Probe, Error> {
+        Ok(Self { disk: file, offset })
     }
 
     #[cfg(all(feature = "no_std", target_family = "unix"))]
-    pub fn new(fd: rustix::fd::OwnedFd) -> Result<Probe, Error<IoError>> {
-        Ok(Self { disk: fd.into() })
-    }
-
-    pub fn probe_block(
-        &mut self,
-        offset: u64,
-        block_filter: BlockFilter,
-    ) -> Result<BlockInfo, Error<IoError>> {
-        let mut low_probe = LowProbe::new(&mut self.disk, offset);
-
-        let info = low_probe.probe_block(block_filter)?;
-
-        Ok(info)
-    }
-
-    pub fn probe_topology(&mut self) -> Result<crate::topology::TopologyInfo, Error<IoError>> {
-        let logical_sector_size =
-            crate::topology::logical_sector_size(&mut self.disk).map_err(Error::Io)?;
-        let physical_sector_size = crate::topology::physical_sector_size(&mut self.disk).map_err(Error::Io)?;
-        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
-        let minimum_io_size = crate::topology::minimum_io_size(&mut self.disk).map_err(Error::Io)?;
-        #[cfg(target_os = "linux")]
-        let optimal_io_size = crate::topology::optimal_io_size(&mut self.disk).map_err(Error::Io)?;
-        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-        let alignment_offset = crate::topology::alignment_offset(&mut self.disk).map_err(Error::Io)?;
-
-        Ok(crate::topology::TopologyInfo {
-            logical_sector_size,
-            physical_sector_size,
-            #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
-            minimum_io_size,
-            #[cfg(target_os = "linux")]
-            optimal_io_size,
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            alignment_offset,
+    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<IoError>> {
+        Ok(Self {
+            disk: fd.into(),
+            offset,
         })
     }
 }

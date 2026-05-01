@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "libblockid",
-    "libblockid_sys",
     "blockid"
 ]
 resolver = "2"

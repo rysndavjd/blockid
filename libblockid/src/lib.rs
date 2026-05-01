@@ -12,11 +12,7 @@ mod error;
 mod filesystem;
 mod io;
 mod partition;
-#[cfg(feature = "no_std")]
-mod path;
 mod probe;
-#[cfg(feature = "os_calls")]
-mod topology;
 mod util;
 
 pub use crate::{
@@ -26,7 +22,7 @@ pub use crate::{
         luks::LuksError, vfat::VFatError,
     },
     io::BlockIo,
-    probe::{Endianness, Id, LowProbe, Usage},
+    probe::{Endianness, Id, Probe, Usage},
 };
 
 #[cfg(all(feature = "std", feature = "no_std"))]

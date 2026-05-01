@@ -72,7 +72,8 @@ name = "blockid"
 version = "0.1.0"
 dependencies = [
  "clap",
- "libblockid_sys",
+ "libblockid",
+ "rustix",
  "shadow-rs",
 ]
 
@@ -554,18 +555,6 @@ dependencies = [
  "uuid",
  "widestring",
  "zerocopy",
-]
-
-[[package]]
-name = "libblockid_sys"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "embedded-io",
- "libblockid",
- "rustix",
- "widestring",
- "windows-sys",
 ]
 
 [[package]]
