@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::{ArgAction, Parser};
-use libblockid::{BlockFilter, Probe};
+use libblockid::{BlockFilter, PTFilter, Probe};
 use rustix::fd::{FromRawFd, OwnedFd};
 use shadow_rs::{Format, shadow};
 
@@ -26,11 +26,11 @@ fn main() {
         build::print_build_in();
     }
 
-    let file = File::open("/dev/nvme0n1p3").unwrap();
+    let file = File::open("/dev/nvme0n1").unwrap();
 
-    let mut t = Probe::new(unsafe { OwnedFd::from_raw_fd(file.as_raw_fd()) }).unwrap();
+    let mut t = Probe::new(file, 0).unwrap();
 
-    let info = t.probe_block(0, BlockFilter::empty()).unwrap();
+    let info = t.probe_part_table(PTFilter::empty()).unwrap();
 
     println!("{:?}", info);
 }

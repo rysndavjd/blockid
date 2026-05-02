@@ -271,7 +271,7 @@ pub fn probe_mbr<IO: BlockIo>(
     offset: u64,
     mag: Magic,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
-    let buf: [u8; size_of::<MbrTable>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
+    let buf: [u8; size_of::<MbrTable>()] = reader.read_exact_at(offset)?;
 
     let mbr_pt: &MbrTable = transmute_ref!(&buf);
 

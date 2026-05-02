@@ -470,7 +470,7 @@ pub fn probe_jbd<IO: BlockIo>(
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
-        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
+        reader.read_exact_at(offset + 1024)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
@@ -512,7 +512,7 @@ pub fn probe_ext2<IO: BlockIo>(
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
-        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
+        reader.read_exact_at(offset + 1024)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
@@ -564,7 +564,7 @@ pub fn probe_ext3<IO: BlockIo>(
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
-        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
+        reader.read_exact_at(offset + 1024)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
@@ -616,7 +616,7 @@ pub fn probe_ext4<IO: BlockIo>(
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
-        reader.read_exact_at(offset + 1024).map_err(Error::Io)?;
+        reader.read_exact_at(offset + 1024)?;
 
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 

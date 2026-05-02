@@ -10,7 +10,7 @@ shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "g
 [dependencies.rustix]
 version = "1.1.4"
 default-features = false
-features = ["stdio", "fs", "alloc"]
+features = ["stdio", "fs", "alloc", "std"]
 
 [build-dependencies]
 shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "git2", "build"]}

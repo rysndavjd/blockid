@@ -2,14 +2,23 @@ pub mod aix;
 pub mod gpt;
 pub mod mbr;
 
+use bitflags::bitflags;
 use uuid::Uuid;
 
 use crate::{
     error::Error,
     io::{BlockIo, Reader},
-    partition::mbr::{MBR_MAGICS, probe_mbr},
+    partition::{
+        gpt::probe_gpt,
+        mbr::{MBR_MAGICS, probe_mbr},
+    },
     probe::{Id, Magic},
 };
+
+#[rustfmt::skip]
+pub const PT_DETECT_ORDER: &[(PTFilter, PTType)] = &[
+    (PTFilter::SKIP_GPT, PTType::Gpt),
+];
 
 #[derive(Debug, Copy, Clone, Hash)]
 pub struct PtHandler<IO: BlockIo> {
@@ -27,12 +36,17 @@ pub enum PTType {
 }
 
 impl PTType {
-    fn pt_handler<IO: BlockIo>(&self) -> PtHandler<IO> {
+    pub(crate) fn pt_handler<IO: BlockIo>(&self) -> PtHandler<IO> {
         match self {
             PTType::Mbr => PtHandler {
                 minsz: None,
                 magics: MBR_MAGICS,
                 probe: probe_mbr,
+            },
+            PTType::Gpt => PtHandler {
+                minsz: None,
+                magics: None,
+                probe: probe_gpt,
             },
             _ => todo!(),
         }
@@ -70,4 +84,12 @@ pub enum PartTableTag {
 #[derive(Debug)]
 pub struct PartTableInfo {
     tags: Vec<PartTableTag>,
+}
+
+bitflags! {
+    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct PTFilter: u64 {
+        const SKIP_MBR = 1 << 0;
+        const SKIP_GPT = 1 << 1;
+    }
 }

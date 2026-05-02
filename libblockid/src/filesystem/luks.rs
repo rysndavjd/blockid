@@ -133,7 +133,7 @@ impl Luks2Header {
 
         let mut buf: [u8; size_of::<Luks2Header>()] = [0u8; size_of::<Luks2Header>()];
         for offset in SECONDARY_OFFSETS {
-            reader.read_at(offset, &mut buf).map_err(Error::Io)?;
+            reader.read_at(offset, &mut buf)?;
 
             let hdr: &Luks2Header = transmute_ref!(&buf);
 
@@ -151,7 +151,7 @@ pub fn probe_luks1<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
-    let buf: [u8; size_of::<Luks1Header>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
+    let buf: [u8; size_of::<Luks1Header>()] = reader.read_exact_at(offset)?;
 
     let sb: &Luks1Header = transmute_ref!(&buf);
 
@@ -181,7 +181,7 @@ pub fn probe_luks2<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
-    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
+    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset)?;
 
     let sb: &Luks2Header = transmute_ref!(&buf);
 
@@ -211,7 +211,7 @@ pub fn probe_luks_opal<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
-    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset).map_err(Error::Io)?;
+    let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset)?;
 
     let sb: &Luks2Header = transmute_ref!(&buf);
 

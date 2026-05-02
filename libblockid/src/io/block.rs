@@ -4,30 +4,32 @@ pub use std::io::SeekFrom;
 #[cfg(feature = "no_std")]
 pub use embedded_io::SeekFrom;
 
+use crate::error::Error;
+
 pub trait Io: crate::std::fmt::Debug {
     type Error: crate::std::fmt::Debug;
 
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error<Self::Error>>;
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error>;
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error<Self::Error>>;
 
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error>;
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Error<Self::Error>>;
 }
 
 #[cfg(feature = "std")]
 impl<R: std::io::Read + std::io::Seek + std::fmt::Debug> Io for R {
     type Error = std::io::Error;
 
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        self.read(buf)
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error<Self::Error>> {
+        self.read(buf).map_err(Error::Io)
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
-        self.read_exact(buf)
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error<Self::Error>> {
+        self.read_exact(buf).map_err(Error::Io)
     }
 
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
-        self.seek(pos)
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Error<Self::Error>> {
+        self.seek(pos).map_err(Error::Io)
     }
 }
 
@@ -41,20 +43,20 @@ where
 {
     type Error = R::Error;
 
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        self.read(buf)
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error<Self::Error>> {
+        self.read(buf).map_err(Error::Io)
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error<Self::Error>> {
         self.read_exact(buf).map_err(|e| match e {
             embedded_io::ReadExactError::UnexpectedEof => {
-                embedded_io::ErrorKind::InvalidInput.into()
+                Error::Io(embedded_io::ErrorKind::InvalidInput.into())
             }
-            embedded_io::ReadExactError::Other(e) => e,
+            embedded_io::ReadExactError::Other(e) => Error::Io(e),
         })
     }
 
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
-        self.seek(pos)
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Error<Self::Error>> {
+        self.seek(pos).map_err(Error::Io)
     }
 }

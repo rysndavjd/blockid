@@ -69,7 +69,7 @@ pub enum BlockType {
 }
 
 impl BlockType {
-    pub fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
+    pub(crate) fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
         match self {
             BlockType::LUKS1 => BlockHandler {
                 minsz: None,

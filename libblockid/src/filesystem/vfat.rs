@@ -334,7 +334,7 @@ pub fn probe_is_vfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
 ) -> Result<(), Error<IO::Error>> {
-    let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::Io)?;
+    let buf: [u8; 512] = reader.read_exact_at(offset)?;
 
     let ms: &MsDosSuperBlock = transmute_ref!(&buf);
     let vs: &VFatSuperBlock = transmute_ref!(&buf);
@@ -359,7 +359,7 @@ pub fn search_fat_label<IO: BlockIo>(
     for i in 0..root_dir_entries {
         let offset = root_start + (i * 32);
 
-        reader.read_at(offset, &mut buf).map_err(Error::Io)?;
+        reader.read_at(offset, &mut buf)?;
 
         let entry: &VfatDirEntry = transmute_ref!(&buf);
         let attr = entry.flags();
@@ -442,9 +442,7 @@ fn probe_fat32<IO: BlockIo>(
             None => {
                 let fat_entry_off =
                     (u64::from(reserved) * u64::from(ms.ms_sector_size)) + (u64::from(next) * 4);
-                let buf = reader
-                    .read_vec_at(fat_entry_off, buf_size as usize)
-                    .map_err(Error::Io)?;
+                let buf = reader.read_vec_at(fat_entry_off, buf_size as usize)?;
 
                 if buf.len() < 4 {
                     break None;
@@ -459,9 +457,8 @@ fn probe_fat32<IO: BlockIo>(
 
     let fsinfo_sect = u64::from(vs.vs_fsinfo_sector);
     if fsinfo_sect != 0 {
-        let buf: [u8; size_of::<Fat32FsInfo>()] = reader
-            .read_exact_at(fsinfo_sect * u64::from(ms.ms_sector_size))
-            .map_err(Error::Io)?;
+        let buf: [u8; size_of::<Fat32FsInfo>()] =
+            reader.read_exact_at(fsinfo_sect * u64::from(ms.ms_sector_size))?;
 
         let fsinfo: &Fat32FsInfo = transmute_ref!(&buf);
 
@@ -485,7 +482,7 @@ pub fn probe_vfat<IO: BlockIo>(
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
-    let buf: [u8; 512] = reader.read_exact_at(offset).map_err(Error::Io)?;
+    let buf: [u8; 512] = reader.read_exact_at(offset)?;
 
     let ms: &MsDosSuperBlock = transmute_ref!(&buf);
     let vs: &VFatSuperBlock = transmute_ref!(&buf);

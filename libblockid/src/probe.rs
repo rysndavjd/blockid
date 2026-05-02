@@ -4,7 +4,8 @@ use uuid::Uuid;
 use crate::{
     error::Error,
     filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo},
-    io::{BlockIo, Reader, IoError, File},
+    io::{BlockIo, Reader},
+    partition::{PT_DETECT_ORDER, PTFilter, PartTableInfo},
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -89,32 +90,68 @@ impl Magic {
     // }
 }
 
-fn probe_block<IO: BlockIo>(reader: &mut Reader<IO>, offset: u64, block_filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
-        for block in BLOCK_DETECT_ORDER {
-            if block_filter.contains(block.0) {
-                continue;
-            }
-
-            let handle = block.1.block_handler::<IO>();
-
-            let magic = match handle.magics {
-                Some(magics) => match reader.get_magic(magics)? {
-                    Some(magic) => magic,
-                    None => continue,
-                },
-                None => Magic::EMPTY_MAGIC,
-            };
-
-            match (handle.probe)(reader, offset, magic) {
-                Ok(t) => return Ok(t),
-                Err(e) => {
-                    if let Error::Io(_) = e {
-                        return Err(e);
-                    }
-                }
-            };
+fn probe_block<IO: BlockIo>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+    filter: BlockFilter,
+) -> Result<BlockInfo, Error<IO::Error>> {
+    for block in BLOCK_DETECT_ORDER {
+        if filter.contains(block.0) {
+            continue;
         }
-        return Err(Error::ProbesExhausted);
+
+        let handle = block.1.block_handler();
+
+        let magic = match handle.magics {
+            Some(magics) => match reader.get_magic(magics)? {
+                Some(magic) => magic,
+                None => continue,
+            },
+            None => Magic::EMPTY_MAGIC,
+        };
+
+        match (handle.probe)(reader, offset, magic) {
+            Ok(t) => return Ok(t),
+            Err(e) => {
+                if let Error::Io(_) = e {
+                    return Err(e);
+                }
+            }
+        };
+    }
+    return Err(Error::ProbesExhausted);
+}
+
+fn probe_part_table<IO: BlockIo>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+    filter: PTFilter,
+) -> Result<PartTableInfo, Error<IO::Error>> {
+    for block in PT_DETECT_ORDER {
+        if filter.contains(block.0) {
+            continue;
+        }
+
+        let handle = block.1.pt_handler();
+
+        let magic = match handle.magics {
+            Some(magics) => match reader.get_magic(magics)? {
+                Some(magic) => magic,
+                None => continue,
+            },
+            None => Magic::EMPTY_MAGIC,
+        };
+
+        match (handle.probe)(reader, offset, magic) {
+            Ok(t) => return Ok(t),
+            Err(e) => {
+                if let Error::Io(_) = e {
+                    return Err(e);
+                }
+            }
+        };
+    }
+    return Err(Error::ProbesExhausted);
 }
 
 #[cfg(not(feature = "os_calls"))]
@@ -134,11 +171,8 @@ impl<IO: BlockIo> Probe<IO> {
     }
 
     #[inline]
-    pub fn probe_block(
-        &mut self,
-        block_filter: BlockFilter,
-    ) -> Result<BlockInfo, Error<IO::Error>> {
-        probe_block(&mut self.reader, self.offset, block_filter)
+    pub fn probe_block(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
+        probe_block(&mut self.reader, self.offset, filter)
     }
 }
 
@@ -152,14 +186,17 @@ pub struct Probe {
 #[cfg(feature = "os_calls")]
 impl Probe {
     #[cfg(feature = "std")]
-    pub fn new(file: File, offset: u64) -> Result<Probe, Error<IoError>> {
-        Ok(Self { reader: Reader::new(file), offset })
+    pub fn new(file: crate::io::File, offset: u64) -> Result<Probe, Error<crate::io::IoError>> {
+        Ok(Self {
+            reader: Reader::new(file),
+            offset,
+        })
     }
 
     #[cfg(all(feature = "no_std", target_family = "unix"))]
-    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<IoError>> {
+    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<crate::io::IoError>> {
         Ok(Self {
-            reader: fd.into(),
+            reader: Reader::new(crate::io::File::from(fd)),
             offset,
         })
     }
@@ -167,9 +204,16 @@ impl Probe {
     #[inline]
     pub fn probe_block(
         &mut self,
-        block_filter: BlockFilter,
-    ) -> Result<BlockInfo, Error<IoError>> {
-        probe_block(&mut self.reader, self.offset, block_filter)
+        filter: BlockFilter,
+    ) -> Result<BlockInfo, Error<crate::io::IoError>> {
+        probe_block(&mut self.reader, self.offset, filter)
     }
 
+    #[inline]
+    pub fn probe_part_table(
+        &mut self,
+        filter: PTFilter,
+    ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
+        probe_part_table(&mut self.reader, self.offset, filter)
+    }
 }

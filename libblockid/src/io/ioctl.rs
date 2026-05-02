@@ -5,12 +5,10 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 
-use crate::{error::Error, io::block::Io};
-use rustix::fd::AsFd;
-#[cfg(feature = "no_std")]
-use embedded_io::{Read, Seek};
-#[cfg(feature = "std")]
-use std::io::{Read, Seek};
+use crate::{
+    error::Error,
+    io::{File, block::Io},
+};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum AlignmentOffset {
@@ -19,65 +17,80 @@ pub enum AlignmentOffset {
 }
 
 pub trait Ioctl: Io {
-    fn logical_sector_size(&mut self) -> Result<u64, Error<Self::Error>>;
+    fn device_size(&self) -> Result<u64, Error<Self::Error>>;
 
-    fn physical_sector_size(&mut self) -> Result<u64, Error<Self::Error>>;
+    fn logical_sector_size(&self) -> Result<u64, Error<Self::Error>>;
+
+    fn physical_sector_size(&self) -> Result<u64, Error<Self::Error>>;
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn minimum_io_size(&mut self) -> Result<u64, Error<Self::Error>>;
+    fn minimum_io_size(&self) -> Result<u64, Error<Self::Error>>;
 
     #[cfg(target_os = "linux")]
-    fn optimal_io_size(&mut self) -> Result<u64, Error<Self::Error>>;
+    fn optimal_io_size(&self) -> Result<u64, Error<Self::Error>>;
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn alignment_offset(&mut self)
-    -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>>;
+    fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>>;
 }
 
-impl<R: Read + Seek + core::fmt::Debug + AsFd> Ioctl for R {
-    fn logical_sector_size(&mut self) -> Result<u64, Error<Self::Error>> {
+impl Ioctl for File {
+    fn device_size(&self) -> Result<u64, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
 
         #[cfg(target_os = "linux")]
         {
-            let sz = rustix::fs::ioctl_blksszget(self)?;
-            Ok(sz.into())
+            let ds = crate::io::ioctl::linux::ioctl_blkgetsize64(self)?;
+            return Ok(ds);
+        }
+
+        #[cfg(target_os = "macos")]
+        todo!();
+    }
+
+    fn logical_sector_size(&self) -> Result<u64, Error<Self::Error>> {
+        #[cfg(target_os = "freebsd")]
+        todo!();
+
+        #[cfg(target_os = "linux")]
+        {
+            let lssz = rustix::fs::ioctl_blksszget(self)?;
+            Ok(lssz.into())
         }
 
         #[cfg(target_os = "macos")]
         {
-            let sz = macos::ioctl_dkiocgetblocksize(self)?;
-            Ok(sz.into())
+            let lssz = macos::ioctl_dkiocgetblocksize(self)?;
+            Ok(lssz.into())
         }
     }
 
-    fn physical_sector_size(&mut self) -> Result<u64, Error<Self::Error>> {
+    fn physical_sector_size(&self) -> Result<u64, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
 
         #[cfg(target_os = "linux")]
         {
-            let sz = rustix::fs::ioctl_blkpbszget(self)?;
-            Ok(sz.into())
+            let psz = rustix::fs::ioctl_blkpbszget(self)?;
+            Ok(psz.into())
         }
 
         #[cfg(target_os = "macos")]
         {
-            let sz = macos::ioctl_dkiocgetphysicalblocksize(self)?;
-            Ok(sz.into())
+            let psz = macos::ioctl_dkiocgetphysicalblocksize(self)?;
+            Ok(psz.into())
         }
     }
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn minimum_io_size(&mut self) -> Result<u64, Error<Self::Error>> {
+    fn minimum_io_size(&self) -> Result<u64, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
 
         #[cfg(target_os = "linux")]
         {
-            let sz = linux::ioctl_blkiomin(self)?;
-            Ok(sz.into())
+            let mios = linux::ioctl_blkiomin(self)?;
+            Ok(mios.into())
         }
 
         #[cfg(target_os = "macos")]
@@ -85,23 +98,21 @@ impl<R: Read + Seek + core::fmt::Debug + AsFd> Ioctl for R {
     }
 
     #[cfg(target_os = "linux")]
-    fn optimal_io_size(&mut self) -> Result<u64, Error<Self::Error>> {
-        let sz = linux::ioctl_blkioopt(self)?;
-        Ok(sz.into())
+    fn optimal_io_size(&self) -> Result<u64, Error<Self::Error>> {
+        let oios = linux::ioctl_blkioopt(self)?;
+        Ok(oios.into())
     }
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn alignment_offset(
-        &mut self,
-    ) -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>> {
+    fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
 
         #[cfg(target_os = "linux")]
         {
-            let sz = linux::ioctl_blkalignoff(self)?;
-            Ok(if sz >= 0 {
-                AlignmentOffset::Offset(sz as u64)
+            let alnoff = linux::ioctl_blkalignoff(self)?;
+            Ok(if alnoff >= 0 {
+                AlignmentOffset::Offset(alnoff as u64)
             } else {
                 AlignmentOffset::Misaligned
             })

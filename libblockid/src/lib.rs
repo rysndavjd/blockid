@@ -22,6 +22,7 @@ pub use crate::{
         luks::LuksError, vfat::VFatError,
     },
     io::BlockIo,
+    partition::{PTFilter, PTType, PartTableInfo, PartTableTag},
     probe::{Endianness, Id, Probe, Usage},
 };
 
@@ -34,5 +35,8 @@ compile_error!("must enable either `std` or `no_std`");
 #[cfg(all(not(any(feature = "std", feature = "no_std")), feature = "os_calls"))]
 compile_error!("`os_calls` requires `std` or `no_std`");
 
-#[cfg(all(feature = "os_calls", not(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))))]
+#[cfg(all(
+    feature = "os_calls",
+    not(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))
+))]
 compile_error!("`os_calls` cannot be used on an unsupported operation system");

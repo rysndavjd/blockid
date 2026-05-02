@@ -139,3 +139,5 @@ impl From<OwnedFd> for File {
         File { inner: fd }
     }
 }
+
+impl BlockIo for File {}
