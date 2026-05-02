@@ -31,8 +31,5 @@ compile_error!("`std` and `no_std` are mutually exclusive");
 #[cfg(not(any(feature = "std", feature = "no_std")))]
 compile_error!("must enable either `std` or `no_std`");
 
-#[cfg(all(feature = "std", feature = "os_calls"))]
-compile_error!("`os_calls` requires `no_std`");
-
-#[cfg(all(feature = "os_calls", not(feature = "no_std")))]
-compile_error!("`os_calls` requires `no_std` to be enabled");
+#[cfg(all(not(any(feature = "std", feature = "no_std")), feature = "os_calls"))]
+compile_error!("`os_calls` requires `std` or `no_std`");

@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     error::Error,
     filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo},
-    io::{BlockIo, File, IoError, Reader, ioctl::Ioctl},
+    io::{BlockIo, Reader},
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -140,19 +140,19 @@ impl<IO: BlockIo> Probe<IO> {
 #[cfg(feature = "os_calls")]
 #[derive(Debug)]
 pub struct Probe {
-    disk: File,
+    disk: crate::io::File,
     offset: u64,
 }
 
 #[cfg(feature = "os_calls")]
 impl Probe {
     #[cfg(feature = "std")]
-    pub fn new(file: File, offset: u64) -> Result<Probe, Error> {
+    pub fn new(file: std::fs::File, offset: u64) -> Result<Probe, Error<std::io::Error>> {
         Ok(Self { disk: file, offset })
     }
 
     #[cfg(all(feature = "no_std", target_family = "unix"))]
-    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<IoError>> {
+    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<crate::io::IoError>> {
         Ok(Self {
             disk: fd.into(),
             offset,

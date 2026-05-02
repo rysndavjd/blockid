@@ -1,7 +1,5 @@
-use embedded_io::{
-    Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek,
-    SeekFrom as EmbeddedSeekFrom,
-};
+pub use embedded_io::SeekFrom;
+use embedded_io::{Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek};
 use rustix::{
     fd::{AsFd, BorrowedFd, OwnedFd},
     fs::{Mode, OFlags, SeekFrom as RustixSeekFrom, open, seek},
@@ -24,6 +22,18 @@ impl core::error::Error for Error {}
 impl From<Errno> for Error {
     fn from(e: Errno) -> Self {
         Self(e)
+    }
+}
+
+impl From<Error> for crate::error::Error<Error> {
+    fn from(e: Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl From<Errno> for crate::error::Error<Error> {
+    fn from(e: Errno) -> Self {
+        Self::Io(Error(e))
     }
 }
 
@@ -106,11 +116,11 @@ impl Read for File {
 }
 
 impl Seek for File {
-    fn seek(&mut self, pos: EmbeddedSeekFrom) -> Result<u64, Self::Error> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
         let new_pos = match pos {
-            EmbeddedSeekFrom::Start(pos) => RustixSeekFrom::Start(pos),
-            EmbeddedSeekFrom::End(pos) => RustixSeekFrom::Current(pos),
-            EmbeddedSeekFrom::Current(pos) => RustixSeekFrom::Current(pos),
+            SeekFrom::Start(pos) => RustixSeekFrom::Start(pos),
+            SeekFrom::End(pos) => RustixSeekFrom::Current(pos),
+            SeekFrom::Current(pos) => RustixSeekFrom::Current(pos),
         };
 
         let ret = seek(&self.inner, new_pos)?;

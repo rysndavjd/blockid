@@ -4,15 +4,15 @@ use zerocopy::{
     transmute_ref,
 };
 
-use crate::{BlockInfo, BlockIo, error::Error, io::Reader, probe::Magic, std::fmt};
+use crate::{BlockInfo, BlockIo, error::Error, io::Reader, probe::Magic};
 
 #[derive(Debug)]
 pub enum GptError {
     UnableToGetSectorSize,
 }
 
-impl fmt::Display for GptError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for GptError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             GptError::UnableToGetSectorSize => {
                 write!(f, "Unable to get sector size of GPT partition table")
@@ -137,7 +137,7 @@ fn probe_gpt<IO: BlockIo>(
             }
         })
         .ok_or(GptError::UnableToGetSectorSize)?;
-    
+
     // let ssz = crate::topology::physical_sector_size(file)
 
     let sb: &GptTable = transmute_ref!(&buf);
