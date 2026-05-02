@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     error::Error,
     filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo},
-    io::{BlockIo, Reader},
+    io::{BlockIo, Reader, IoError, File},
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -89,26 +89,7 @@ impl Magic {
     // }
 }
 
-#[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
-#[derive(Debug)]
-pub struct Probe<IO: BlockIo> {
-    reader: Reader<IO>,
-    offset: u64,
-}
-
-#[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
-impl<IO: BlockIo> Probe<IO> {
-    pub fn new(reader: IO, offset: u64) -> Probe<IO> {
-        Probe {
-            reader: Reader::new(reader),
-            offset,
-        }
-    }
-
-    pub fn probe_block(
-        &mut self,
-        block_filter: BlockFilter,
-    ) -> Result<BlockInfo, Error<IO::Error>> {
+fn probe_block<IO: BlockIo>(reader: &mut Reader<IO>, offset: u64, block_filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
         for block in BLOCK_DETECT_ORDER {
             if block_filter.contains(block.0) {
                 continue;
@@ -117,14 +98,14 @@ impl<IO: BlockIo> Probe<IO> {
             let handle = block.1.block_handler::<IO>();
 
             let magic = match handle.magics {
-                Some(magics) => match self.reader.get_magic(magics)? {
+                Some(magics) => match reader.get_magic(magics)? {
                     Some(magic) => magic,
                     None => continue,
                 },
                 None => Magic::EMPTY_MAGIC,
             };
 
-            match (handle.probe)(&mut self.reader, self.offset, magic) {
+            match (handle.probe)(reader, offset, magic) {
                 Ok(t) => return Ok(t),
                 Err(e) => {
                     if let Error::Io(_) = e {
@@ -134,28 +115,61 @@ impl<IO: BlockIo> Probe<IO> {
             };
         }
         return Err(Error::ProbesExhausted);
+}
+
+#[cfg(not(feature = "os_calls"))]
+#[derive(Debug)]
+pub struct Probe<IO: BlockIo> {
+    reader: Reader<IO>,
+    offset: u64,
+}
+
+#[cfg(not(feature = "os_calls"))]
+impl<IO: BlockIo> Probe<IO> {
+    pub fn new(reader: IO, offset: u64) -> Probe<IO> {
+        Probe {
+            reader: Reader::new(reader),
+            offset,
+        }
+    }
+
+    #[inline]
+    pub fn probe_block(
+        &mut self,
+        block_filter: BlockFilter,
+    ) -> Result<BlockInfo, Error<IO::Error>> {
+        probe_block(&mut self.reader, self.offset, block_filter)
     }
 }
 
 #[cfg(feature = "os_calls")]
 #[derive(Debug)]
 pub struct Probe {
-    disk: crate::io::File,
+    reader: Reader<crate::io::File>,
     offset: u64,
 }
 
 #[cfg(feature = "os_calls")]
 impl Probe {
     #[cfg(feature = "std")]
-    pub fn new(file: std::fs::File, offset: u64) -> Result<Probe, Error<std::io::Error>> {
-        Ok(Self { disk: file, offset })
+    pub fn new(file: File, offset: u64) -> Result<Probe, Error<IoError>> {
+        Ok(Self { reader: Reader::new(file), offset })
     }
 
     #[cfg(all(feature = "no_std", target_family = "unix"))]
-    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<crate::io::IoError>> {
+    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<IoError>> {
         Ok(Self {
-            disk: fd.into(),
+            reader: fd.into(),
             offset,
         })
     }
+
+    #[inline]
+    pub fn probe_block(
+        &mut self,
+        block_filter: BlockFilter,
+    ) -> Result<BlockInfo, Error<IoError>> {
+        probe_block(&mut self.reader, self.offset, block_filter)
+    }
+
 }

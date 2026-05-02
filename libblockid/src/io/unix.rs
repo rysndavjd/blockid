@@ -6,7 +6,7 @@ use rustix::{
     io::{Errno, read},
 };
 
-use crate::io::path::SysPath;
+use crate::io::{BlockIo, block::Io, path::SysPath};
 
 #[derive(Debug)]
 pub struct Error(Errno);

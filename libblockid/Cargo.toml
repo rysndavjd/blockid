@@ -41,7 +41,7 @@ features = ["stdio", "fs", "alloc"]
 optional = true
 
 [features]
-default = ["std"]
+default = ["no_std", "os_calls"]
 std = [
     "zerocopy/std",
     "bitflags/std",
@@ -49,7 +49,7 @@ std = [
     "fat_volume_id/std",
     "uuid/std",
     "dep:crc-fast",
-    "os_calls"
+    "rustix/std",
 ]
 no_std = ["dep:embedded-io", "dep:crc"]
 os_calls = ["dep:rustix"]

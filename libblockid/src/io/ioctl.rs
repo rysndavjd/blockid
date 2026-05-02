@@ -4,10 +4,13 @@ mod freebsd;
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(target_os = "windows")]
-mod windows;
 
-use crate::{error::Error, io::File, io::block::Io};
+use crate::{error::Error, io::block::Io};
+use rustix::fd::AsFd;
+#[cfg(feature = "no_std")]
+use embedded_io::{Read, Seek};
+#[cfg(feature = "std")]
+use std::io::{Read, Seek};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum AlignmentOffset {
@@ -20,7 +23,7 @@ pub trait Ioctl: Io {
 
     fn physical_sector_size(&mut self) -> Result<u64, Error<Self::Error>>;
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn minimum_io_size(&mut self) -> Result<u64, Error<Self::Error>>;
 
     #[cfg(target_os = "linux")]
@@ -31,7 +34,7 @@ pub trait Ioctl: Io {
     -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>>;
 }
 
-impl Ioctl for File {
+impl<R: Read + Seek + core::fmt::Debug + AsFd> Ioctl for R {
     fn logical_sector_size(&mut self) -> Result<u64, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
@@ -44,12 +47,9 @@ impl Ioctl for File {
 
         #[cfg(target_os = "macos")]
         {
-            let sz = macos::ioctl_dkiocgetblocksize(file)?;
+            let sz = macos::ioctl_dkiocgetblocksize(self)?;
             Ok(sz.into())
         }
-
-        #[cfg(target_os = "windows")]
-        todo!();
     }
 
     fn physical_sector_size(&mut self) -> Result<u64, Error<Self::Error>> {
@@ -67,12 +67,9 @@ impl Ioctl for File {
             let sz = macos::ioctl_dkiocgetphysicalblocksize(self)?;
             Ok(sz.into())
         }
-
-        #[cfg(target_os = "windows")]
-        todo!();
     }
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn minimum_io_size(&mut self) -> Result<u64, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
@@ -84,9 +81,6 @@ impl Ioctl for File {
         }
 
         #[cfg(target_os = "macos")]
-        todo!();
-
-        #[cfg(target_os = "windows")]
         todo!();
     }
 
@@ -114,9 +108,6 @@ impl Ioctl for File {
         }
 
         #[cfg(target_os = "macos")]
-        todo!();
-
-        #[cfg(target_os = "windows")]
         todo!();
     }
 }

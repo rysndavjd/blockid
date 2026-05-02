@@ -7,16 +7,14 @@ mod path;
 mod std;
 #[cfg(all(feature = "os_calls", feature = "no_std", target_family = "unix"))]
 mod unix;
-#[cfg(all(feature = "os_calls", feature = "no_std", target_family = "windows"))]
-mod windows;
 
 #[cfg(feature = "no_std")]
 pub use embedded_io::SeekFrom;
 
 #[cfg(feature = "std")]
-pub use crate::io::std::{File, IoError, SeekFrom};
+pub use crate::io::std::{File, SeekFrom, IoError};
 #[cfg(all(feature = "os_calls", feature = "no_std", target_family = "unix"))]
-pub use crate::io::unix::{Error as IoError, File};
+pub use crate::io::unix::{File};
 use crate::{error::Error, probe::Magic};
 
 #[cfg(not(feature = "os_calls"))]
@@ -99,7 +97,7 @@ impl<IO: BlockIo> Reader<IO> {
 
     #[cfg(all(
         feature = "os_calls",
-        any(target_os = "linux", target_os = "freebsd", target_os = "windows")
+        any(target_os = "linux", target_os = "freebsd")
     ))]
     pub fn minimum_io_size(&mut self) -> Result<u64, Error<IO::Error>> {
         self.0.minimum_io_size()
