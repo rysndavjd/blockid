@@ -66,6 +66,9 @@ pub enum PartId {
     Mbr { disk: u32, partno: u8 },
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Partition {}
+
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartTableTag {

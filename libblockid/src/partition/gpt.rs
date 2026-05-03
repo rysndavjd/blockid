@@ -21,6 +21,8 @@ pub enum GptError {
     InvalidHeaderChecksum,
     MismatchMyLBA,
     InvalidLbaUsableRegions,
+    GptEntriesUndefined,
+    InvalidGptEntriesChecksum,
 }
 
 impl core::fmt::Display for GptError {
@@ -43,6 +45,12 @@ impl core::fmt::Display for GptError {
             }
             GptError::InvalidLbaUsableRegions => {
                 write!(f, "`{{first/last}}_usable_lba` out of range")
+            }
+            GptError::GptEntriesUndefined => {
+                write!(f, "GPT entries have undefined size")
+            }
+            GptError::InvalidGptEntriesChecksum => {
+                write!(f, "GPT entries have invalid checksum")
             }
         }
     }
@@ -143,21 +151,33 @@ impl GptTable {
     const SIGNATURE: u64 = 0x5452415020494645;
     const SIGNATURE_STR: &[u8] = b"EFI PART";
     const MIN_HEADER_SIZE: u64 = 92;
+    const FIRST_LBA: u64 = 1;
 
-    fn check_header<IO: BlockIo>(&self, lba: u64, lssz: u64) -> Result<(), Error<IO::Error>> {
-        if u64::from(self.signature) != GptTable::SIGNATURE {
+    fn get_header<IO: BlockIo>(
+        reader: &mut Reader<IO>,
+        offset: u64,
+        lba: u64,
+        last_lba: u64,
+        lssz: u64,
+    ) -> Result<(GptTable, Vec<u8>), Error<IO::Error>> {
+        let buf = reader.read_vec_at(offset + lssz, lssz as usize)?;
+
+        let header: &GptTable =
+            GptTable::try_ref_from_bytes(&buf[..size_of::<GptTable>()]).expect("¯\\_(ツ)_/¯");
+
+        if u64::from(header.signature) != GptTable::SIGNATURE {
             return Err(GptError::InvalidSignature.into());
         }
 
-        let hsz = u64::from(self.header_size);
+        let hsz = u64::from(header.header_size);
 
-        if hsz < GptTable::MIN_HEADER_SIZE || hsz <= lssz {
+        if hsz < GptTable::MIN_HEADER_SIZE || hsz > lssz {
             return Err(GptError::InvalidHeaderSize.into());
         }
 
-        let stored_crc = u32::from(self.header_crc32);
+        let stored_crc = u32::from(header.header_crc32);
 
-        let mut hdr = self.as_bytes().to_vec();
+        let mut hdr = header.as_bytes().to_vec();
         hdr[offset_of!(GptTable, header_crc32)..offset_of!(GptTable, header_crc32) + 4].fill(0);
 
         #[cfg(feature = "std")]
@@ -169,14 +189,42 @@ impl GptTable {
             };
         }
 
-        if u64::from(self.my_lba) != lba {
+        if u64::from(header.my_lba) != lba {
             return Err(GptError::MismatchMyLBA.into());
         }
 
-        let fu = u64::from(self.first_usable_lba);
-        let lu = u64::from(self.last_usable_lba);
+        let fu = u64::from(header.first_usable_lba);
+        let lu = u64::from(header.last_usable_lba);
 
-        todo!()
+        if lu < fu || fu > last_lba || lu > last_lba {
+            return Err(GptError::InvalidLbaUsableRegions.into());
+        }
+
+        let entry_sz = u64::from(header.sizeof_partition_entry);
+        let entries_sz = u64::from(header.num_partition_entries) * entry_sz;
+
+        if entries_sz == 0
+            || entries_sz >= u32::MAX as u64
+            || entry_sz != size_of::<GptEntry>() as u64
+        {
+            return Err(GptError::GptEntriesUndefined.into());
+        }
+
+        let entries_buf = reader.read_vec_at(
+            offset + (u64::from(header.partition_entries_lba) * lssz),
+            entries_sz as usize,
+        )?;
+
+        #[cfg(feature = "std")]
+        {
+            let calc_crc = crc_fast::crc32_iso_hdlc(&entries_buf);
+
+            if calc_crc != u32::from(header.partition_entry_array_crc32) {
+                return Err(GptError::InvalidGptEntriesChecksum.into());
+            }
+        }
+
+        return Ok((*header, entries_buf));
     }
 }
 
@@ -185,42 +233,51 @@ pub fn probe_gpt<IO: BlockIo>(
     offset: u64,
     _: Magic,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
+    #[cfg(not(feature = "os_calls"))]
+    let (header, entries_buf) = {
+        // let buf: [u8; GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
+
+        // #[cfg(not(feature = "os_calls"))]
+        // let lssz = buf
+        //     .chunks_exact(GptTable::SIGNATURE_STR.len())
+        //     .enumerate()
+        //     .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GPT_DETECT_OFFSET)
+        //     .find_map(|(i, raw)| {
+        //         if raw == GptTable::SIGNATURE_STR {
+        //             Some(i * GptTable::SIGNATURE_STR.len())
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .ok_or(GptError::UnableToGetSectorSize)?;
+
+        // #[cfg(feature = "os_calls")]
+        // let lssz = reader.logical_sector_size()?;
+
+        // let sb: &GptTable =
+        //     GptTable::try_ref_from_bytes(&buf[lssz as usize..lssz as usize + size_of::<GptTable>()])
+        //         .expect("¯\\_(ツ)_/¯");
+
+        // let sz = (u64::from(sb.alternate_lba) + 1) * lssz;
+        (todo!(), todo!())
+    };
+
     #[cfg(feature = "os_calls")]
-    {
+    let (header, entries_buf) = {
         let lssz = reader.logical_sector_size()?;
+        let last_lba = (reader.device_size()? / lssz) - 1;
 
-        // LBA 1
-        let primary_buf = reader.read_vec_at(offset + lssz, lssz as usize)?;
+        let (header, entries_buf) =
+            match GptTable::get_header(reader, offset, GptTable::FIRST_LBA, last_lba, lssz) {
+                Ok((header, entries_buf)) => (header, entries_buf),
+                Err(_) => match GptTable::get_header(reader, offset, last_lba, last_lba, lssz) {
+                    Ok((header, entries_buf)) => (header, entries_buf),
+                    Err(e) => return Err(e),
+                },
+            };
 
-        let primary: &GptTable =
-            GptTable::try_ref_from_bytes(&primary_buf[..size_of::<GptTable>()])
-                .expect("¯\\_(ツ)_/¯");
-    }
-
-    // let buf: [u8; GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
-
-    // #[cfg(not(feature = "os_calls"))]
-    // let lssz = buf
-    //     .chunks_exact(GptTable::SIGNATURE_STR.len())
-    //     .enumerate()
-    //     .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GPT_DETECT_OFFSET)
-    //     .find_map(|(i, raw)| {
-    //         if raw == GptTable::SIGNATURE_STR {
-    //             Some(i * GptTable::SIGNATURE_STR.len())
-    //         } else {
-    //             None
-    //         }
-    //     })
-    //     .ok_or(GptError::UnableToGetSectorSize)?;
-
-    // #[cfg(feature = "os_calls")]
-    // let lssz = reader.logical_sector_size()?;
-
-    // let sb: &GptTable =
-    //     GptTable::try_ref_from_bytes(&buf[lssz as usize..lssz as usize + size_of::<GptTable>()])
-    //         .expect("¯\\_(ツ)_/¯");
-
-    // let sz = (u64::from(sb.alternate_lba) + 1) * lssz;
+        (header, entries_buf)
+    };
 
     todo!()
 }
