@@ -2,8 +2,9 @@ use fat_volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 
 use crate::{
+    PTType,
     error::Error,
-    filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo},
+    filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo, BlockType},
     io::{BlockIo, Reader},
     partition::{PT_DETECT_ORDER, PTFilter, PartTableInfo},
 };
@@ -20,6 +21,7 @@ pub enum Usage {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Id {
     Uuid(Uuid),
+    Mbr { disk: u32 },
     VolumeId32(VolumeId32),
     VolumeId64(VolumeId64),
 }
@@ -28,6 +30,13 @@ impl Id {
     pub fn as_uuid(&self) -> Option<Uuid> {
         match self {
             Id::Uuid(t) => Some(*t),
+            _ => None,
+        }
+    }
+
+    pub fn as_mbr(&self) -> Option<u32> {
+        match self {
+            Id::Mbr { disk } => Some(*disk),
             _ => None,
         }
     }
@@ -122,6 +131,24 @@ fn probe_block<IO: BlockIo>(
     return Err(Error::ProbesExhausted);
 }
 
+fn search_for_block<IO: BlockIo>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+    block: BlockType,
+) -> Result<BlockInfo, Error<IO::Error>> {
+    let handle = block.block_handler::<IO>();
+
+    let magic = match handle.magics {
+        Some(magics) => match reader.get_magic(magics)? {
+            Some(magic) => magic,
+            None => return Err(Error::UnableToLocateMagicSignature),
+        },
+        None => Magic::EMPTY_MAGIC,
+    };
+
+    (handle.probe)(reader, offset, magic)
+}
+
 fn probe_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
@@ -154,6 +181,24 @@ fn probe_part_table<IO: BlockIo>(
     return Err(Error::ProbesExhausted);
 }
 
+fn search_for_part_table<IO: BlockIo>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+    part_table: PTType,
+) -> Result<PartTableInfo, Error<IO::Error>> {
+    let handle = part_table.pt_handler::<IO>();
+
+    let magic = match handle.magics {
+        Some(magics) => match reader.get_magic(magics)? {
+            Some(magic) => magic,
+            None => return Err(Error::UnableToLocateMagicSignature),
+        },
+        None => Magic::EMPTY_MAGIC,
+    };
+
+    (handle.probe)(reader, offset, magic)
+}
+
 #[cfg(not(feature = "os_calls"))]
 #[derive(Debug)]
 pub struct Probe<IO: BlockIo> {
@@ -173,6 +218,32 @@ impl<IO: BlockIo> Probe<IO> {
     #[inline]
     pub fn probe_block(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
         probe_block(&mut self.reader, self.offset, filter)
+    }
+
+    #[inline]
+    pub fn search_for_block(
+        &mut self,
+        offset: u64,
+        block: BlockType,
+    ) -> Result<BlockInfo, Error<IO::Error>> {
+        search_for_block(&mut self.reader, offset, block)
+    }
+
+    #[inline]
+    pub fn probe_part_table(
+        &mut self,
+        filter: PTFilter,
+    ) -> Result<PartTableInfo, Error<IO::Error>> {
+        probe_part_table(&mut self.reader, self.offset, filter)
+    }
+
+    #[inline]
+    pub fn search_for_part_table(
+        &mut self,
+        offset: u64,
+        part_table: PTType,
+    ) -> Result<PartTableInfo, Error<IO::Error>> {
+        search_for_part_table(&mut self.reader, self.offset, part_table)
     }
 }
 
@@ -210,10 +281,26 @@ impl Probe {
     }
 
     #[inline]
+    pub fn search_for_block(
+        &mut self,
+        block: BlockType,
+    ) -> Result<BlockInfo, Error<crate::io::IoError>> {
+        search_for_block(&mut self.reader, self.offset, block)
+    }
+
+    #[inline]
     pub fn probe_part_table(
         &mut self,
         filter: PTFilter,
     ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
         probe_part_table(&mut self.reader, self.offset, filter)
+    }
+
+    #[inline]
+    pub fn search_for_part_table(
+        &mut self,
+        part_table: PTType,
+    ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
+        search_for_part_table(&mut self.reader, self.offset, part_table)
     }
 }

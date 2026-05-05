@@ -22,7 +22,10 @@ pub use crate::{
         luks::LuksError, vfat::VFatError,
     },
     io::BlockIo,
-    partition::{PTFilter, PTType, PartTableInfo, PartTableTag},
+    partition::{
+        PTFilter, PTType, PartAttributes, PartId, PartTableInfo, PartTableTag, PartType,
+        gpt::GptError,
+    },
     probe::{Endianness, Id, Probe, Usage},
 };
 
@@ -32,7 +35,7 @@ compile_error!("`std` and `no_std` are mutually exclusive");
 #[cfg(not(any(feature = "std", feature = "no_std")))]
 compile_error!("must enable either `std` or `no_std`");
 
-#[cfg(all(not(any(feature = "std", feature = "no_std")), feature = "os_calls"))]
+#[cfg(all(feature = "os_calls", not(any(feature = "std", feature = "no_std"))))]
 compile_error!("`os_calls` requires `std` or `no_std`");
 
 #[cfg(all(

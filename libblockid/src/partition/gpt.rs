@@ -7,14 +7,17 @@ use zerocopy::{
 };
 
 use crate::{
+    Endianness, Id, PTType, PartTableTag,
     error::Error,
     io::Reader,
-    partition::{BlockIo, PartTableInfo},
+    partition::{BlockIo, PartAttributes, PartId, PartTableInfo, PartType, Partition},
     probe::Magic,
+    util::decode_utf16_lossy_from,
 };
 
 #[derive(Debug)]
 pub enum GptError {
+    UnableToMapHeaderStruct,
     UnableToGetSectorSize,
     InvalidSignature,
     InvalidHeaderSize,
@@ -28,6 +31,9 @@ pub enum GptError {
 impl core::fmt::Display for GptError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            GptError::UnableToMapHeaderStruct => {
+                write!(f, "Unable to map bytes to `GptTable` struct")
+            }
             GptError::UnableToGetSectorSize => {
                 write!(f, "Unable to get sector size of partition table")
             }
@@ -153,6 +159,7 @@ impl GptTable {
     const MIN_HEADER_SIZE: u64 = 92;
     const FIRST_LBA: u64 = 1;
 
+    #[cfg(feature = "os_calls")]
     fn get_header<IO: BlockIo>(
         reader: &mut Reader<IO>,
         offset: u64,
@@ -160,10 +167,10 @@ impl GptTable {
         last_lba: u64,
         lssz: u64,
     ) -> Result<(GptTable, Vec<u8>), Error<IO::Error>> {
-        let buf = reader.read_vec_at(offset + lssz, lssz as usize)?;
+        let buf = reader.read_vec_at(offset + (lba * lssz), lssz as usize)?;
 
-        let header: &GptTable =
-            GptTable::try_ref_from_bytes(&buf[..size_of::<GptTable>()]).expect("¯\\_(ツ)_/¯");
+        let header: &GptTable = GptTable::try_ref_from_bytes(&buf[..size_of::<GptTable>()])
+            .map_err(|_| GptError::UnableToMapHeaderStruct)?;
 
         if u64::from(header.signature) != GptTable::SIGNATURE {
             return Err(GptError::InvalidSignature.into());
@@ -187,6 +194,20 @@ impl GptTable {
             if stored_crc != calc_crc {
                 return Err(GptError::InvalidHeaderChecksum.into());
             };
+        }
+
+        #[cfg(feature = "no_std")]
+        {
+            use crc::{CRC_32_ISO_HDLC, Crc};
+
+            let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+            let mut digest = crc.digest();
+
+            digest.update(&hdr);
+
+            if stored_crc != digest.finalize() {
+                return Err(GptError::InvalidGptEntriesChecksum.into());
+            }
         }
 
         if u64::from(header.my_lba) != lba {
@@ -224,46 +245,153 @@ impl GptTable {
             }
         }
 
+        #[cfg(feature = "no_std")]
+        {
+            use crc::{CRC_32_ISO_HDLC, Crc};
+
+            let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+            let mut digest = crc.digest();
+
+            digest.update(&entries_buf);
+
+            if u32::from(header.partition_entry_array_crc32) != digest.finalize() {
+                return Err(GptError::InvalidGptEntriesChecksum.into());
+            }
+        }
+
         return Ok((*header, entries_buf));
     }
 }
 
+/// When `os_calls` is unavailable only the primary header can detected and
+/// parsed for its infomation but in unlikely case that primary header is
+/// corrupted this implementation will not be able to detect the secondary
+/// headers locations and use its contents instead.
+///
+/// When `os_calls` is available then secondary header will parsed if an error
+/// is detected with the primary header, as additional infomation can be used
+/// from `os_calls` of device size to get the secondary header location on
+/// disk.
 pub fn probe_gpt<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     _: Magic,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
     #[cfg(not(feature = "os_calls"))]
-    let (header, entries_buf) = {
-        // let buf: [u8; GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
+    let (header, entries_buf, lssz) = {
+        let buf: [u8; GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
 
-        // #[cfg(not(feature = "os_calls"))]
-        // let lssz = buf
-        //     .chunks_exact(GptTable::SIGNATURE_STR.len())
-        //     .enumerate()
-        //     .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GPT_DETECT_OFFSET)
-        //     .find_map(|(i, raw)| {
-        //         if raw == GptTable::SIGNATURE_STR {
-        //             Some(i * GptTable::SIGNATURE_STR.len())
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .ok_or(GptError::UnableToGetSectorSize)?;
+        let lssz = buf
+            .chunks_exact(GptTable::SIGNATURE_STR.len())
+            .enumerate()
+            .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GPT_DETECT_OFFSET)
+            .find_map(|(i, raw)| {
+                if raw == GptTable::SIGNATURE_STR {
+                    Some(i * GptTable::SIGNATURE_STR.len())
+                } else {
+                    None
+                }
+            })
+            .ok_or(GptError::UnableToGetSectorSize)?;
 
-        // #[cfg(feature = "os_calls")]
-        // let lssz = reader.logical_sector_size()?;
+        let header: &GptTable =
+            GptTable::try_ref_from_bytes(&buf[lssz..(lssz + size_of::<GptTable>())])
+                .map_err(|_| GptError::UnableToMapHeaderStruct)?;
 
-        // let sb: &GptTable =
-        //     GptTable::try_ref_from_bytes(&buf[lssz as usize..lssz as usize + size_of::<GptTable>()])
-        //         .expect("¯\\_(ツ)_/¯");
+        if u64::from(header.signature) != GptTable::SIGNATURE {
+            return Err(GptError::InvalidSignature.into());
+        }
 
-        // let sz = (u64::from(sb.alternate_lba) + 1) * lssz;
-        (todo!(), todo!())
+        let hsz = u64::from(header.header_size);
+
+        if hsz < GptTable::MIN_HEADER_SIZE || hsz > lssz as u64 {
+            return Err(GptError::InvalidHeaderSize.into());
+        }
+
+        let stored_crc = u32::from(header.header_crc32);
+
+        let mut hdr = header.as_bytes().to_vec();
+        hdr[offset_of!(GptTable, header_crc32)..offset_of!(GptTable, header_crc32) + 4].fill(0);
+
+        #[cfg(feature = "std")]
+        {
+            let calc_crc = crc_fast::crc32_iso_hdlc(&hdr);
+
+            if stored_crc != calc_crc {
+                return Err(GptError::InvalidHeaderChecksum.into());
+            };
+        }
+
+        #[cfg(feature = "no_std")]
+        {
+            use crc::{CRC_32_ISO_HDLC, Crc};
+
+            let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+            let mut digest = crc.digest();
+
+            digest.update(&hdr);
+
+            if stored_crc != digest.finalize() {
+                return Err(GptError::InvalidGptEntriesChecksum.into());
+            }
+        }
+
+        if u64::from(header.my_lba) != GptTable::FIRST_LBA {
+            return Err(GptError::MismatchMyLBA.into());
+        }
+
+        let last_lba = u64::from(header.alternate_lba);
+
+        let fu = u64::from(header.first_usable_lba);
+        let lu = u64::from(header.last_usable_lba);
+
+        if lu < fu || fu > last_lba || lu > last_lba {
+            return Err(GptError::InvalidLbaUsableRegions.into());
+        }
+
+        let entry_sz = u64::from(header.sizeof_partition_entry);
+        let entries_sz = u64::from(header.num_partition_entries) * entry_sz;
+
+        if entries_sz == 0
+            || entries_sz >= u32::MAX as u64
+            || entry_sz != size_of::<GptEntry>() as u64
+        {
+            return Err(GptError::GptEntriesUndefined.into());
+        }
+
+        let entries_buf = reader.read_vec_at(
+            offset + (u64::from(header.partition_entries_lba) * lssz as u64),
+            entries_sz as usize,
+        )?;
+
+        #[cfg(feature = "std")]
+        {
+            let calc_crc = crc_fast::crc32_iso_hdlc(&entries_buf);
+
+            if calc_crc != u32::from(header.partition_entry_array_crc32) {
+                return Err(GptError::InvalidGptEntriesChecksum.into());
+            }
+        }
+
+        #[cfg(feature = "no_std")]
+        {
+            use crc::{CRC_32_ISO_HDLC, Crc};
+
+            let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+            let mut digest = crc.digest();
+
+            digest.update(&entries_buf);
+
+            if u32::from(header.partition_entry_array_crc32) != digest.finalize() {
+                return Err(GptError::InvalidGptEntriesChecksum.into());
+            }
+        }
+
+        (*header, entries_buf, lssz as u64)
     };
 
     #[cfg(feature = "os_calls")]
-    let (header, entries_buf) = {
+    let (header, entries_buf, lssz) = {
         let lssz = reader.logical_sector_size()?;
         let last_lba = (reader.device_size()? / lssz) - 1;
 
@@ -276,8 +404,64 @@ pub fn probe_gpt<IO: BlockIo>(
                 },
             };
 
-        (header, entries_buf)
+        (header, entries_buf, lssz)
     };
 
-    todo!()
+    let fu = u64::from(header.first_usable_lba);
+    let lu = u64::from(header.last_usable_lba);
+
+    let partions: Vec<Partition> = (0..u64::from(header.num_partition_entries))
+        .filter_map(|i| {
+            let partition = GptEntry::ref_from_bytes(
+                &entries_buf[i as usize * size_of::<GptEntry>()
+                    ..(i as usize * size_of::<GptEntry>()) + size_of::<GptEntry>()],
+            )
+            .ok()?;
+
+            if partition.unique_partition_guid == EfiGuid::ZERO {
+                return None;
+            }
+
+            let start = u64::from(partition.starting_lba);
+            let end = u64::from(partition.ending_lba);
+
+            if start < fu || end > lu {
+                return None;
+            }
+
+            let name = if partition.partition_name != [0u8; 72] {
+                Some(
+                    decode_utf16_lossy_from(&partition.partition_name, Endianness::Little)
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+
+            return Some(Partition {
+                start: start * lssz,
+                end: end * lssz,
+                partition_id: PartId::Uuid(partition.unique_partition_guid.into()),
+                partition_type: PartType::Uuid(partition.partition_type_guid.into()),
+                part_no: i + 1,
+                partition_name: name,
+                attributes: PartAttributes::Gpt(u64::from(partition.attributes)),
+            });
+        })
+        .collect();
+
+    let mut info = PartTableInfo::new();
+
+    info.set(PartTableTag::PtType(PTType::Gpt));
+    info.set(PartTableTag::PtId(Id::Uuid(header.disk_guid.into())));
+    info.set(PartTableTag::PtSize(
+        (u64::from(header.alternate_lba) + 1) * lssz,
+    ));
+    info.set(PartTableTag::Magic(GptTable::SIGNATURE_STR.to_vec()));
+    info.set(PartTableTag::MagicOffset(lssz));
+    if !partions.is_empty() {
+        info.set(PartTableTag::Partions(partions));
+    }
+
+    return Ok(info);
 }

@@ -53,40 +53,110 @@ impl PTType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartType {
     Hex(u8),
     Uuid(Uuid),
     String(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartId {
     Uuid(Uuid),
-    Mbr { disk: u32, partno: u8 },
+    Mbr { disk: u32, part_no: u8 },
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Partition {}
+pub enum PartAttributes {
+    Mbr(u8),
+    Gpt(u64),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Partition {
+    start: u64,
+    end: u64,
+    partition_id: PartId,
+    partition_type: PartType,
+    part_no: u64,
+    partition_name: Option<String>,
+    attributes: PartAttributes,
+}
 
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartTableTag {
     PtType(PTType),
     PtId(Id),
-    // EntryScheme(String),
-    PartName(String),
-    PartId(PartId),
-    PartType(PartType),
-    PartFlags(u64),
-    PartNumber(u64),
-    PartOffset(u64),
-    PartSize(u64),
+    PtSize(u64),
+    Magic(Vec<u8>),
+    MagicOffset(u64),
+    Partions(Vec<Partition>),
 }
 
 #[derive(Debug)]
 pub struct PartTableInfo {
     tags: Vec<PartTableTag>,
+}
+
+impl PartTableInfo {
+    pub(crate) fn new() -> PartTableInfo {
+        PartTableInfo { tags: Vec::new() }
+    }
+
+    pub fn inner(&self) -> &Vec<PartTableTag> {
+        &self.tags
+    }
+
+    pub fn into_inner(self) -> Vec<PartTableTag> {
+        self.tags
+    }
+
+    pub fn set(&mut self, tag: PartTableTag) {
+        self.tags.push(tag);
+    }
+
+    pub fn pt_type(&self) -> Option<PTType> {
+        self.tags.iter().find_map(|t| match t {
+            PartTableTag::PtType(t) => Some(*t),
+            _ => None,
+        })
+    }
+
+    pub fn id(&self) -> Option<Id> {
+        self.tags.iter().find_map(|t| match t {
+            PartTableTag::PtId(t) => Some(*t),
+            _ => None,
+        })
+    }
+
+    pub fn pt_size(&self) -> Option<u64> {
+        self.tags.iter().find_map(|t| match t {
+            PartTableTag::PtSize(t) => Some(*t),
+            _ => None,
+        })
+    }
+
+    pub fn magic(&self) -> Option<&Vec<u8>> {
+        self.tags.iter().find_map(|t| match t {
+            PartTableTag::Magic(t) => Some(t),
+            _ => None,
+        })
+    }
+
+    pub fn magic_offset(&self) -> Option<u64> {
+        self.tags.iter().find_map(|t| match t {
+            PartTableTag::MagicOffset(t) => Some(*t),
+            _ => None,
+        })
+    }
+
+    pub fn partitions(&self) -> Option<&Vec<Partition>> {
+        self.tags.iter().find_map(|t| match t {
+            PartTableTag::Partions(t) => Some(t),
+            _ => None,
+        })
+    }
 }
 
 bitflags! {

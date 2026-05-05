@@ -2,7 +2,7 @@
 name = "libblockid"
 version = "0.1.0"
 edition = "2024"
-description = "Core block device identification library"
+description = "Block device identification library"
 readme = "README.md"
 homepage = "https://github.com/rysndavjd/blockid"
 repository = "https://github.com/rysndavjd/blockid"
@@ -30,7 +30,6 @@ fat_volume_id = { version = "0.1.0", default-features = false, features = [
 embedded-io = { version = "0.7.1", default-features = false, features = [
     "alloc",
 ], optional = true }
-
 crc-fast = { version = "1.10.0", default-features = false, features = ["std"], optional = true }
 crc = { version = "3.4.0", default-features = false, optional = true }
 

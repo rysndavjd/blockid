@@ -18,6 +18,7 @@ pub enum Error<E: Debug> {
     VFat(VFatError),
     Mbr(MbrError),
     Gpt(GptError),
+    UnableToLocateMagicSignature,
     ProbesExhausted,
 }
 

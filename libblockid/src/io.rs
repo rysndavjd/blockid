@@ -1,7 +1,7 @@
 mod block;
 #[cfg(feature = "os_calls")]
 mod ioctl;
-#[cfg(all(feature = "os_calls", feature = "no_std", target_family = "unix"))]
+#[cfg(all(feature = "os_calls", feature = "no_std"))]
 mod no_std;
 #[cfg(feature = "no_std")]
 mod path;
@@ -11,7 +11,7 @@ mod std;
 #[cfg(feature = "no_std")]
 pub use embedded_io::SeekFrom;
 
-#[cfg(all(feature = "os_calls", feature = "no_std", target_family = "unix"))]
+#[cfg(all(feature = "os_calls", feature = "no_std"))]
 pub use crate::io::no_std::{Error as IoError, File};
 #[cfg(feature = "std")]
 pub use crate::io::std::{File, IoError, SeekFrom};
