@@ -9,8 +9,8 @@ use crate::{
     error::Error,
     io::{BlockIo, Reader},
     partition::{
-        gpt::probe_gpt,
-        mbr::{MBR_MAGICS, probe_mbr},
+        gpt::{GPT_MAGICS, GPT_MINSZ, probe_gpt},
+        mbr::{MBR_MAGICS, MBR_MINSZ, probe_mbr},
     },
     probe::{Id, Magic},
 };
@@ -39,13 +39,13 @@ impl PTType {
     pub(crate) fn pt_handler<IO: BlockIo>(&self) -> PtHandler<IO> {
         match self {
             PTType::Mbr => PtHandler {
-                minsz: None,
+                minsz: MBR_MINSZ,
                 magics: MBR_MAGICS,
                 probe: probe_mbr,
             },
             PTType::Gpt => PtHandler {
-                minsz: None,
-                magics: None,
+                minsz: GPT_MINSZ,
+                magics: GPT_MAGICS,
                 probe: probe_gpt,
             },
             _ => todo!(),

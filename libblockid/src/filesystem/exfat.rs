@@ -64,6 +64,7 @@ impl<E: core::fmt::Debug> From<ExFatError> for Error<E> {
     }
 }
 
+pub const EXFAT_MINSZ: Option<u64> = Some(4194304);
 pub const EXFAT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: b"EXFAT   ",
     len: 8,
@@ -180,8 +181,7 @@ fn verify_exfat_checksum<IO: BlockIo>(
     sb: &ExFatSuperBlock,
 ) -> Result<(), Error<IO::Error>> {
     let sector_size = sb.block_size();
-    let data = reader
-        .read_vec_at(offset, sector_size * 12)?;
+    let data = reader.read_vec_at(offset, sector_size * 12)?;
     let checksum = get_exfatcsum(&data, sector_size);
 
     for i in 0..(sector_size / 4) {
@@ -279,8 +279,7 @@ pub fn probe_is_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
 ) -> Result<(), Error<IO::Error>> {
-    let buf: [u8; size_of::<ExFatSuperBlock>()] =
-        reader.read_exact_at(offset)?;
+    let buf: [u8; size_of::<ExFatSuperBlock>()] = reader.read_exact_at(offset)?;
 
     let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 
@@ -346,8 +345,7 @@ pub fn probe_exfat<IO: BlockIo>(
     offset: u64,
     mag: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
-    let buf: [u8; size_of::<ExFatSuperBlock>()] =
-        reader.read_exact_at(offset)?;
+    let buf: [u8; size_of::<ExFatSuperBlock>()] = reader.read_exact_at(offset)?;
 
     let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 

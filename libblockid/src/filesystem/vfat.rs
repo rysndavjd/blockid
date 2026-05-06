@@ -61,6 +61,7 @@ impl<E: Debug> From<VFatError> for Error<E> {
     }
 }
 
+pub const VFAT_MINSZ: Option<u64> = Some(32768);
 pub const VFAT_MAGICS: Option<&'static [Magic]> = Some(&[
     Magic {
         magic: b"MSWIN",
@@ -91,23 +92,6 @@ pub const VFAT_MAGICS: Option<&'static [Magic]> = Some(&[
         magic: b"FAT     ",
         len: 8,
         b_offset: 0x36,
-    },
-    /* I dont know what this is, taken from libblkid so i am not messing with it now
-    BlockMagic {
-        magic: &[0xEB],
-        len: 1,
-        b_offset: None,
-    },
-    BlockMagic {
-        magic: &[0xE9],
-        len: 1,
-        b_offset: None,
-    },
-    */
-    Magic {
-        magic: &[0x55, 0xAA],
-        len: 2,
-        b_offset: 0x1fe,
     },
 ]);
 

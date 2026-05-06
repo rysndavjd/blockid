@@ -8,12 +8,13 @@ use bitflags::bitflags;
 use crate::{
     error::Error,
     filesystem::{
-        exfat::{EXFAT_MAGICS, probe_exfat},
-        ext::{EXT_MAGICS, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
+        exfat::{EXFAT_MAGICS, EXFAT_MINSZ, probe_exfat},
+        ext::{EXT_MAGICS, EXT_MINSZ, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
         luks::{
-            LUKS1_MAGICS, LUKS2_MAGICS, LUKSOPAL_MAGICS, probe_luks_opal, probe_luks1, probe_luks2,
+            LUKS1_MAGICS, LUKS1_MINSZ, LUKS2_MAGICS, LUKS2_MINSZ, LUKSOPAL_MAGICS, probe_luks_opal,
+            probe_luks1, probe_luks2,
         },
-        vfat::{VFAT_MAGICS, probe_vfat},
+        vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
     },
     io::{BlockIo, Reader},
     probe::{Endianness, Id, Magic, Usage},
@@ -72,49 +73,49 @@ impl BlockType {
     pub(crate) fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
         match self {
             BlockType::LUKS1 => BlockHandler {
-                minsz: None,
+                minsz: LUKS1_MINSZ,
                 magics: LUKS1_MAGICS,
                 probe: probe_luks1,
             },
 
             BlockType::LUKS2 => BlockHandler {
-                minsz: None,
+                minsz: LUKS2_MINSZ,
                 magics: LUKS2_MAGICS,
                 probe: probe_luks2,
             },
 
             BlockType::LUKSOpal => BlockHandler {
-                minsz: None,
+                minsz: LUKS2_MINSZ,
                 magics: LUKSOPAL_MAGICS,
                 probe: probe_luks_opal,
             },
             BlockType::Exfat => BlockHandler {
-                minsz: None,
+                minsz: EXFAT_MINSZ,
                 magics: EXFAT_MAGICS,
                 probe: probe_exfat,
             },
             BlockType::Jbd => BlockHandler {
-                minsz: None,
+                minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_jbd,
             },
             BlockType::Ext2 => BlockHandler {
-                minsz: None,
+                minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext2,
             },
             BlockType::Ext3 => BlockHandler {
-                minsz: None,
+                minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext3,
             },
             BlockType::Ext4 => BlockHandler {
-                minsz: None,
+                minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext4,
             },
             BlockType::Vfat => BlockHandler {
-                minsz: None,
+                minsz: VFAT_MINSZ,
                 magics: VFAT_MAGICS,
                 probe: probe_vfat,
             },

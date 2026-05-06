@@ -1,5 +1,3 @@
-use std::mem::offset_of;
-
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, TryFromBytes, U16, U32, U64,
@@ -12,6 +10,7 @@ use crate::{
     io::Reader,
     partition::{BlockIo, PartAttributes, PartId, PartTableInfo, PartType, Partition},
     probe::Magic,
+    std::mem::offset_of,
     util::decode_utf16_lossy_from,
 };
 
@@ -68,9 +67,8 @@ impl<E: core::fmt::Debug> From<GptError> for Error<E> {
     }
 }
 
+pub const GPT_MINSZ: Option<u64> = Some(32768);
 pub const GPT_MAGICS: Option<&'static [Magic]> = None;
-/// The offset used that is read off the disk to find the GPT header and its block size.
-pub const GPT_DETECT_OFFSET: usize = 16384;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, PartialEq)]
@@ -92,10 +90,6 @@ impl EfiGuid {
         clock_seq_low: 0,
         node: [0u8; 6],
     };
-
-    fn is_zero(&self) -> bool {
-        self == &EfiGuid::ZERO
-    }
 }
 
 impl From<EfiGuid> for Uuid {
@@ -154,6 +148,8 @@ pub struct GptEntry {
 }
 
 impl GptTable {
+    /// The offset used that is read off the disk to find the GPT header and its block size.
+    const GPT_DETECT_OFFSET: usize = 16384;
     const SIGNATURE: u64 = 0x5452415020494645;
     const SIGNATURE_STR: &[u8] = b"EFI PART";
     const MIN_HEADER_SIZE: u64 = 92;
@@ -279,12 +275,12 @@ pub fn probe_gpt<IO: BlockIo>(
 ) -> Result<PartTableInfo, Error<IO::Error>> {
     #[cfg(not(feature = "os_calls"))]
     let (header, entries_buf, lssz) = {
-        let buf: [u8; GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
+        let buf: [u8; GptTable::GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
 
         let lssz = buf
             .chunks_exact(GptTable::SIGNATURE_STR.len())
             .enumerate()
-            .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GPT_DETECT_OFFSET)
+            .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GptTable::GPT_DETECT_OFFSET)
             .find_map(|(i, raw)| {
                 if raw == GptTable::SIGNATURE_STR {
                     Some(i * GptTable::SIGNATURE_STR.len())

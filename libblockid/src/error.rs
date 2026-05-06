@@ -19,6 +19,7 @@ pub enum Error<E: Debug> {
     Mbr(MbrError),
     Gpt(GptError),
     UnableToLocateMagicSignature,
+    DeviceTooSmall,
     ProbesExhausted,
 }
 

@@ -57,6 +57,7 @@ impl<E: core::fmt::Debug> From<ExtError> for Error<E> {
     }
 }
 
+pub const EXT_MINSZ: Option<u64> = Some(1048576);
 pub const EXT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: &[0x53, 0xEF],
     len: 2,

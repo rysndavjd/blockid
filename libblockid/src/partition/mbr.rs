@@ -55,6 +55,7 @@ impl<E: Debug> From<MbrError> for Error<E> {
     }
 }
 
+pub const MBR_MINSZ: Option<u64> = Some(512);
 pub const MBR_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: b"\x55\xAA",
     len: 2,

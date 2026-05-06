@@ -12,7 +12,6 @@ use crate::{
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Usage {
     Filesystem,
-    PartitionTable,
     Raid,
     Crypto,
     Other(&'static str),
@@ -93,10 +92,6 @@ impl Magic {
         len: 0,
         b_offset: 0,
     };
-
-    // fn is_empty(&self) -> bool {
-    //     self == &Magic::EMPTY_MAGIC
-    // }
 }
 
 fn probe_block<IO: BlockIo>(
@@ -110,6 +105,13 @@ fn probe_block<IO: BlockIo>(
         }
 
         let handle = block.1.block_handler();
+
+        #[cfg(feature = "os_calls")]
+        if let Some(minsz) = handle.minsz
+            && reader.device_size()? < minsz
+        {
+            return Err(Error::DeviceTooSmall);
+        }
 
         let magic = match handle.magics {
             Some(magics) => match reader.get_magic(magics)? {
@@ -138,6 +140,13 @@ fn search_for_block<IO: BlockIo>(
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let handle = block.block_handler::<IO>();
 
+    #[cfg(feature = "os_calls")]
+    if let Some(minsz) = handle.minsz
+        && reader.device_size()? < minsz
+    {
+        return Err(Error::DeviceTooSmall);
+    }
+
     let magic = match handle.magics {
         Some(magics) => match reader.get_magic(magics)? {
             Some(magic) => magic,
@@ -160,6 +169,13 @@ fn probe_part_table<IO: BlockIo>(
         }
 
         let handle = block.1.pt_handler();
+
+        #[cfg(feature = "os_calls")]
+        if let Some(minsz) = handle.minsz
+            && reader.device_size()? < minsz
+        {
+            return Err(Error::DeviceTooSmall);
+        }
 
         let magic = match handle.magics {
             Some(magics) => match reader.get_magic(magics)? {
@@ -187,6 +203,13 @@ fn search_for_part_table<IO: BlockIo>(
     part_table: PTType,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
     let handle = part_table.pt_handler::<IO>();
+
+    #[cfg(feature = "os_calls")]
+    if let Some(minsz) = handle.minsz
+        && reader.device_size()? < minsz
+    {
+        return Err(Error::DeviceTooSmall);
+    }
 
     let magic = match handle.magics {
         Some(magics) => match reader.get_magic(magics)? {
@@ -221,12 +244,8 @@ impl<IO: BlockIo> Probe<IO> {
     }
 
     #[inline]
-    pub fn search_for_block(
-        &mut self,
-        offset: u64,
-        block: BlockType,
-    ) -> Result<BlockInfo, Error<IO::Error>> {
-        search_for_block(&mut self.reader, offset, block)
+    pub fn search_for_block(&mut self, block: BlockType) -> Result<BlockInfo, Error<IO::Error>> {
+        search_for_block(&mut self.reader, self.offset, block)
     }
 
     #[inline]
@@ -240,7 +259,6 @@ impl<IO: BlockIo> Probe<IO> {
     #[inline]
     pub fn search_for_part_table(
         &mut self,
-        offset: u64,
         part_table: PTType,
     ) -> Result<PartTableInfo, Error<IO::Error>> {
         search_for_part_table(&mut self.reader, self.offset, part_table)
