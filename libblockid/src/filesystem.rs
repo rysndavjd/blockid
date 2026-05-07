@@ -2,6 +2,7 @@ pub mod exfat;
 pub mod ext;
 pub mod luks;
 pub mod vfat;
+pub mod apfs;
 
 use bitflags::bitflags;
 
@@ -15,6 +16,7 @@ use crate::{
             probe_luks1, probe_luks2,
         },
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
+        apfs::{APFS_MAGICS, APFS_MINSZ, probe_apfs}
     },
     io::{BlockIo, Reader},
     probe::{Endianness, Id, Magic, Usage},
@@ -27,6 +29,7 @@ pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
     (BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
     (BlockFilter::SKIP_EXFAT, BlockType::Exfat),
     (BlockFilter::SKIP_JBD, BlockType::Jbd),
+    (BlockFilter::SKIP_APFS, BlockType::Apfs),
     (BlockFilter::SKIP_EXT2, BlockType::Ext2),
     (BlockFilter::SKIP_EXT3, BlockType::Ext3),
     (BlockFilter::SKIP_EXT4, BlockType::Ext4),
@@ -98,6 +101,11 @@ impl BlockType {
                 minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_jbd,
+            },
+            BlockType::Apfs => BlockHandler { 
+                minsz: APFS_MINSZ, 
+                magics: APFS_MAGICS, 
+                probe: probe_apfs
             },
             BlockType::Ext2 => BlockHandler {
                 minsz: EXT_MINSZ,

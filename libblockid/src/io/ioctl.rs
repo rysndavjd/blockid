@@ -45,7 +45,10 @@ impl Ioctl for File {
         }
 
         #[cfg(target_os = "macos")]
-        todo!();
+        {
+            let ds = crate::io::ioctl::macos::ioctl_dkiocgetblockcount(self)? * crate::io::ioctl::macos::ioctl_dkiocgetblocksize(self)? as u64; 
+            return Ok(ds);
+        }
     }
 
     fn logical_sector_size(&self) -> Result<u64, Error<Self::Error>> {

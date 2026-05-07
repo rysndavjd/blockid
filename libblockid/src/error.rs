@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    filesystem::{exfat::ExFatError, ext::ExtError, luks::LuksError, vfat::VFatError},
+    filesystem::{apfs::ApfsError, exfat::ExFatError, ext::ExtError, luks::LuksError, vfat::VFatError},
     partition::{gpt::GptError, mbr::MbrError},
 };
 
@@ -12,6 +12,7 @@ pub enum BuilderError {}
 #[derive(Debug)]
 pub enum Error<E: Debug> {
     Io(E),
+    Apfs(ApfsError),
     Luks(LuksError),
     ExFat(ExFatError),
     Ext(ExtError),

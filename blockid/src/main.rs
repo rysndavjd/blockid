@@ -26,11 +26,11 @@ fn main() {
         build::print_build_in();
     }
 
-    let file = File::open("/dev/sda").unwrap();
+    let file = File::open("/dev/disk5").unwrap();
 
-    let mut t = Probe::new(file.into(), 0).unwrap();
+    let mut t = Probe::new(file, 0);
 
-    let info = t.probe_part_table(PTFilter::empty()).unwrap();
+    let info = t.search_for_block(libblockid::BlockType::Apfs);
 
     println!("{:?}", info);
 }
