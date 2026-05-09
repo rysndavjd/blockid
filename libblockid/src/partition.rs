@@ -112,7 +112,7 @@ impl PartTableInfo {
         self.tags
     }
 
-    pub fn set(&mut self, tag: PartTableTag) {
+    pub(crate) fn set(&mut self, tag: PartTableTag) {
         self.tags.push(tag);
     }
 

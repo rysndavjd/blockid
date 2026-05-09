@@ -18,8 +18,8 @@ mod util;
 pub use crate::{
     error::Error,
     filesystem::{
-        BlockFilter, BlockInfo, BlockTag, BlockType, SubType, exfat::ExFatError, ext::ExtError,
-        luks::LuksError, vfat::VFatError,
+        BlockFilter, BlockInfo, BlockTag, BlockType, SubType, apfs::ApfsError, exfat::ExFatError,
+        ext::ExtError, luks::LuksError, ntfs::NtfsError, vfat::VFatError,
     },
     io::BlockIo,
     partition::{

@@ -278,21 +278,21 @@ fn valid_exfat<IO: BlockIo>(
 pub fn probe_is_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
-) -> Result<(), Error<IO::Error>> {
+) -> Result<bool, Error<IO::Error>> {
     let buf: [u8; size_of::<ExFatSuperBlock>()] = reader.read_exact_at(offset)?;
-
     let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 
     if reader
-        .get_magic(EXFAT_MAGICS.expect("EXFAT magics is not `None`"))
-        .is_ok()
+        .get_magic(EXFAT_MAGICS.expect("EXFAT magics is not `None`"))?
+        .is_none()
     {
-        return Err(ExFatError::ProbablyNotEXFAT.into());
+        return Ok(false);
     }
 
-    valid_exfat(reader, offset, sb)?;
-
-    return Ok(());
+    match valid_exfat(reader, offset, sb) {
+        Ok(_) => return Ok(true),
+        Err(_) => return Ok(false),
+    }
 }
 
 fn find_label<IO: BlockIo>(

@@ -26,11 +26,11 @@ fn main() {
         build::print_build_in();
     }
 
-    let file = File::open("/dev/disk5").unwrap();
+    let file = File::open("/dev/nvme0n1p5").unwrap();
 
     let mut t = Probe::new(file, 0);
 
-    let info = t.search_for_block(libblockid::BlockType::Apfs);
+    let info = t.search_for_block(libblockid::BlockType::Ntfs);
 
     println!("{:?}", info);
 }

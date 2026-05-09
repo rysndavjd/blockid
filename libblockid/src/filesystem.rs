@@ -1,22 +1,24 @@
+pub mod apfs;
 pub mod exfat;
 pub mod ext;
 pub mod luks;
+pub mod ntfs;
 pub mod vfat;
-pub mod apfs;
 
 use bitflags::bitflags;
 
 use crate::{
     error::Error,
     filesystem::{
+        apfs::{APFS_MAGICS, APFS_MINSZ, probe_apfs},
         exfat::{EXFAT_MAGICS, EXFAT_MINSZ, probe_exfat},
         ext::{EXT_MAGICS, EXT_MINSZ, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
         luks::{
             LUKS1_MAGICS, LUKS1_MINSZ, LUKS2_MAGICS, LUKS2_MINSZ, LUKSOPAL_MAGICS, probe_luks_opal,
             probe_luks1, probe_luks2,
         },
+        ntfs::{NTFS_MAGICS, NTFS_MINSZ, probe_ntfs},
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
-        apfs::{APFS_MAGICS, APFS_MINSZ, probe_apfs}
     },
     io::{BlockIo, Reader},
     probe::{Endianness, Id, Magic, Usage},
@@ -102,10 +104,10 @@ impl BlockType {
                 magics: EXT_MAGICS,
                 probe: probe_jbd,
             },
-            BlockType::Apfs => BlockHandler { 
-                minsz: APFS_MINSZ, 
-                magics: APFS_MAGICS, 
-                probe: probe_apfs
+            BlockType::Apfs => BlockHandler {
+                minsz: APFS_MINSZ,
+                magics: APFS_MAGICS,
+                probe: probe_apfs,
             },
             BlockType::Ext2 => BlockHandler {
                 minsz: EXT_MINSZ,
@@ -121,6 +123,11 @@ impl BlockType {
                 minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext4,
+            },
+            BlockType::Ntfs => BlockHandler {
+                minsz: NTFS_MINSZ,
+                magics: NTFS_MAGICS,
+                probe: probe_ntfs,
             },
             BlockType::Vfat => BlockHandler {
                 minsz: VFAT_MINSZ,
@@ -200,7 +207,7 @@ impl BlockInfo {
         self.tags
     }
 
-    pub fn set(&mut self, tag: BlockTag) {
+    pub(crate) fn set(&mut self, tag: BlockTag) {
         self.tags.push(tag);
     }
 
