@@ -9,12 +9,12 @@ use crate::{
     error::Error,
     io::Reader,
     partition::{BlockIo, PartAttributes, PartId, PartTableInfo, PartType, Partition},
-    probe::Magic,
+    probe::{Magic, ProbeFlags},
     std::mem::offset_of,
     util::decode_utf16_lossy_from,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GptError {
     UnableToMapHeaderStruct,
     UnableToGetSectorSize,
@@ -270,6 +270,7 @@ impl GptTable {
 /// disk.
 pub fn probe_gpt<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    _: ProbeFlags,
     offset: u64,
     _: Magic,
 ) -> Result<PartTableInfo, Error<IO::Error>> {

@@ -12,7 +12,7 @@ use crate::{
         gpt::{GPT_MAGICS, GPT_MINSZ, probe_gpt},
         mbr::{MBR_MAGICS, MBR_MINSZ, probe_mbr},
     },
-    probe::{Id, Magic},
+    probe::{Id, Magic, ProbeFlags},
 };
 
 #[rustfmt::skip]
@@ -25,7 +25,8 @@ pub struct PtHandler<IO: BlockIo> {
     pub minsz: Option<u64>,
     pub magics: Option<&'static [Magic]>,
     #[allow(clippy::type_complexity)]
-    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<PartTableInfo, Error<IO::Error>>,
+    pub probe:
+        fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PartTableInfo, Error<IO::Error>>,
 }
 
 #[non_exhaustive]

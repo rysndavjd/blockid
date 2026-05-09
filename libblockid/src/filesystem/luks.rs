@@ -10,9 +10,12 @@ use crate::{
     error::Error,
     filesystem::{BlockTag, BlockType},
     io::{BlockIo, Reader},
-    probe::{Magic, Usage},
-    std::{fmt, str::FromStr},
-    util::{UtfError, decode_utf8_from},
+    probe::{Magic, ProbeFlags, Usage},
+    std::{
+        fmt,
+        str::{FromStr, Utf8Error},
+    },
+    util::decode_utf8_from,
 };
 
 /*
@@ -21,10 +24,10 @@ use crate::{
  * https://gitlab.com/cryptsetup/LUKS2-docs
 */
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LuksError {
     UuidConversionError(uuid::Error),
-    UtfError(UtfError),
+    Utf8Error(Utf8Error),
     InvalidLuks1,
     InvalidLuks2,
     InvalidLuks2Opal,
@@ -34,7 +37,7 @@ impl fmt::Display for LuksError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LuksError::UuidConversionError(e) => write!(f, "UUID conversion faild: {e}"),
-            LuksError::UtfError(e) => write!(f, "UTF operation failed: {e}"),
+            LuksError::Utf8Error(e) => write!(f, "UTF8 operation failed: {e}"),
             LuksError::InvalidLuks1 => write!(f, "Invalid LUKS1 header"),
             LuksError::InvalidLuks2 => write!(f, "Invalid LUKS2 header"),
             LuksError::InvalidLuks2Opal => write!(f, "Invalid LUKS2 Opal header"),
@@ -45,12 +48,6 @@ impl fmt::Display for LuksError {
 impl From<uuid::Error> for LuksError {
     fn from(e: uuid::Error) -> Self {
         Self::UuidConversionError(e)
-    }
-}
-
-impl From<UtfError> for LuksError {
-    fn from(e: UtfError) -> Self {
-        Self::UtfError(e)
     }
 }
 
@@ -150,6 +147,7 @@ impl Luks2Header {
 
 pub fn probe_luks1<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    _: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -161,7 +159,7 @@ pub fn probe_luks1<IO: BlockIo>(
         return Err(LuksError::InvalidLuks1.into());
     }
 
-    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::UtfError)?;
+    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::Utf8Error)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
     let version = sb.version.to_string();
@@ -180,6 +178,7 @@ pub fn probe_luks1<IO: BlockIo>(
 
 pub fn probe_luks2<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    _: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -191,7 +190,7 @@ pub fn probe_luks2<IO: BlockIo>(
         return Err(LuksError::InvalidLuks2.into());
     }
 
-    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::UtfError)?;
+    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::Utf8Error)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
     let version = sb.version.to_string();
@@ -210,6 +209,7 @@ pub fn probe_luks2<IO: BlockIo>(
 
 pub fn probe_luks_opal<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    _: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -225,7 +225,7 @@ pub fn probe_luks_opal<IO: BlockIo>(
         return Err(LuksError::InvalidLuks2Opal.into());
     }
 
-    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::UtfError)?;
+    let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::Utf8Error)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
     let version = sb.version.to_string();

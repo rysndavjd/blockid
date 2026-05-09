@@ -21,7 +21,7 @@ use crate::{
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
     },
     io::{BlockIo, Reader},
-    probe::{Endianness, Id, Magic, Usage},
+    probe::{Endianness, Id, Magic, ProbeFlags, Usage},
 };
 
 #[rustfmt::skip]
@@ -43,7 +43,7 @@ pub struct BlockHandler<IO: BlockIo> {
     pub minsz: Option<u64>,
     pub magics: Option<&'static [Magic]>,
     #[allow(clippy::type_complexity)]
-    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<BlockInfo, Error<IO::Error>>,
+    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<BlockInfo, Error<IO::Error>>,
 }
 
 #[non_exhaustive]

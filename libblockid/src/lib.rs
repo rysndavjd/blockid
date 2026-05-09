@@ -26,7 +26,7 @@ pub use crate::{
         PTFilter, PTType, PartAttributes, PartId, PartTableInfo, PartTableTag, PartType,
         gpt::GptError,
     },
-    probe::{Endianness, Id, Probe, Usage},
+    probe::{Endianness, Id, Probe, ProbeFlags, Usage},
 };
 
 #[cfg(all(feature = "std", feature = "no_std"))]

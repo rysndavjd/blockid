@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use bitflags::bitflags;
 use fat_volume_id::VolumeId32;
 use zerocopy::{
@@ -11,13 +9,14 @@ use crate::{
     error::Error,
     filesystem::{BlockInfo, BlockTag, BlockType, SubType},
     io::{BlockIo, Reader},
-    probe::{Id, Magic, Usage},
-    std::fmt,
-    util::decode_utf8_lossy_from,
+    probe::{Id, Magic, ProbeFlags, Usage},
+    std::{fmt, str::Utf8Error},
+    util::{decode_utf8_from, decode_utf8_lossy_from},
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum VFatError {
+    Utf8Error(Utf8Error),
     InvalidVFat,
     InvalidFatSignature,
     ProbablyDOS,
@@ -36,6 +35,9 @@ pub enum VFatError {
 impl fmt::Display for VFatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            VFatError::Utf8Error(e) => {
+                write!(f, "Filesystem label contains invalid UTF-8: {e}")
+            }
             VFatError::InvalidVFat => write!(f, "Filesystem not FAT12/16 or FAT32"),
             VFatError::InvalidFatSignature => write!(f, "Invalid VFAT signature"),
             VFatError::ProbablyDOS => write!(f, "Filesystem looks like DOS/MBR"),
@@ -55,7 +57,7 @@ impl fmt::Display for VFatError {
     }
 }
 
-impl<E: Debug> From<VFatError> for Error<E> {
+impl<E: fmt::Debug> From<VFatError> for Error<E> {
     fn from(e: VFatError) -> Self {
         Error::VFat(e)
     }
@@ -335,6 +337,7 @@ pub fn probe_is_vfat<IO: BlockIo>(
 
 pub fn search_fat_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     root_start: u64,
     root_dir_entries: u64,
 ) -> Result<Option<String>, Error<IO::Error>> {
@@ -360,11 +363,18 @@ pub fn search_fat_label<IO: BlockIo>(
         }
 
         if attr.contains(FatAttr::FAT_ATTR_VOLUME_ID) && !attr.contains(FatAttr::FAT_ATTR_DIR) {
-            let mut label = entry.name;
-            if label[0] == 0x05 {
-                label[0] = 0xE5;
+            let mut label_bytes = entry.name;
+            if label_bytes[0] == 0x05 {
+                label_bytes[0] = 0xE5;
             }
-            return Ok(Some(decode_utf8_lossy_from(&label)));
+
+            let label = if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+                decode_utf8_from(&label_bytes).map_err(VFatError::Utf8Error)?
+            } else {
+                decode_utf8_lossy_from(&label_bytes)
+            };
+
+            return Ok(Some(label));
         }
     }
 
@@ -374,6 +384,7 @@ pub fn search_fat_label<IO: BlockIo>(
 // This fn works for both fat12 and fat16
 fn probe_fat16<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
@@ -382,7 +393,7 @@ fn probe_fat16<IO: BlockIo>(
 
     let root_start: u32 = (reserved + fat_size) * u32::from(ms.ms_sector_size);
 
-    let vol_label = search_fat_label(reader, root_start.into(), vs.vs_dir_entries.into())?;
+    let vol_label = search_fat_label(reader, flags, root_start.into(), vs.vs_dir_entries.into())?;
 
     let vol_serno = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
         VolumeId32::from_bytes(ms.ms_serno)
@@ -395,6 +406,7 @@ fn probe_fat16<IO: BlockIo>(
 
 fn probe_fat32<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
@@ -419,7 +431,7 @@ fn probe_fat32<IO: BlockIo>(
         let next_off: u64 = (start_data_sect as u64 + next_sect_off) * u64::from(ms.ms_sector_size);
         let count: u64 = buf_size / 32;
 
-        match search_fat_label(reader, next_off, count)? {
+        match search_fat_label(reader, flags, next_off, count)? {
             Some(label) => {
                 break Some(label);
             }
@@ -463,6 +475,7 @@ fn probe_fat32<IO: BlockIo>(
 
 pub fn probe_vfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -476,9 +489,9 @@ pub fn probe_vfat<IO: BlockIo>(
     let fat_size = get_fat_size(ms, vs);
 
     let (label, serno) = if ms.ms_fat_length != 0 {
-        probe_fat16(reader, ms, vs, fat_size)?
+        probe_fat16(reader, flags, ms, vs, fat_size)?
     } else if vs.vs_fat32_length != 0 {
-        probe_fat32(reader, ms, vs, fat_size)?
+        probe_fat32(reader, flags, ms, vs, fat_size)?
     } else {
         return Err(VFatError::InvalidVFat.into());
     };

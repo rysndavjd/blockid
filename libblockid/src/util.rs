@@ -1,38 +1,6 @@
 use widestring::{error::Utf16Error, utfstring::Utf16String};
 
-use crate::{
-    probe::Endianness,
-    std::{fmt, str::Utf8Error},
-};
-
-#[derive(Debug)]
-pub enum UtfError {
-    Utf8Error(Utf8Error),
-    Utf16Error(Utf16Error),
-}
-
-impl From<Utf8Error> for UtfError {
-    fn from(e: Utf8Error) -> Self {
-        UtfError::Utf8Error(e)
-    }
-}
-
-impl From<Utf16Error> for UtfError {
-    fn from(e: Utf16Error) -> Self {
-        UtfError::Utf16Error(e)
-    }
-}
-
-impl crate::std::error::Error for UtfError {}
-
-impl fmt::Display for UtfError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Utf8Error(e) => write!(f, "UTF-8 error occurred: {e}"),
-            Self::Utf16Error(e) => write!(f, "UTF-16 error occurred: {e}"),
-        }
-    }
-}
+use crate::{probe::Endianness, std::str::Utf8Error};
 
 pub fn decode_utf16_lossy_from(bytes: &[u8], endian: Endianness) -> Utf16String {
     let data: Vec<u16> = bytes
@@ -59,7 +27,7 @@ pub fn decode_utf8_lossy_from(bytes: &[u8]) -> String {
         .to_string();
 }
 
-pub fn decode_utf16_from(bytes: &[u8], endian: Endianness) -> Result<Utf16String, UtfError> {
+pub fn decode_utf16_from(bytes: &[u8], endian: Endianness) -> Result<Utf16String, Utf16Error> {
     let data: Vec<u16> = bytes
         .chunks(2)
         .filter_map(|chunk| {
@@ -78,7 +46,7 @@ pub fn decode_utf16_from(bytes: &[u8], endian: Endianness) -> Result<Utf16String
     return Ok(Utf16String::from_vec(data)?);
 }
 
-pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, UtfError> {
+pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, Utf8Error> {
     return Ok(String::from_utf8(bytes.to_vec())
         .map_err(|e| e.utf8_error())?
         .trim_end_matches('\0')

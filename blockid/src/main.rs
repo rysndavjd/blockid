@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::{ArgAction, Parser};
-use libblockid::{BlockFilter, PTFilter, Probe};
+use libblockid::{BlockFilter, PTFilter, Probe, ProbeFlags};
 use rustix::fd::{FromRawFd, OwnedFd};
 use shadow_rs::{Format, shadow};
 
@@ -28,7 +28,7 @@ fn main() {
 
     let file = File::open("/dev/nvme0n1p5").unwrap();
 
-    let mut t = Probe::new(file, 0);
+    let mut t = Probe::new(file, ProbeFlags::empty(), 0).unwrap();
 
     let info = t.search_for_block(libblockid::BlockType::Ntfs);
 

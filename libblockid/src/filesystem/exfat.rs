@@ -1,4 +1,5 @@
 use fat_volume_id::VolumeId32;
+use widestring::error::Utf16Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64, transmute_ref,
@@ -8,13 +9,14 @@ use crate::{
     error::Error,
     filesystem::{BlockInfo, BlockTag, BlockType},
     io::{BlockIo, Reader},
-    probe::{Endianness, Id, Magic, Usage},
+    probe::{Endianness, Id, Magic, ProbeFlags, Usage},
     std::fmt,
-    util::decode_utf16_lossy_from,
+    util::{decode_utf16_from, decode_utf16_lossy_from},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExFatError {
+    Utf16Error(Utf16Error),
     HeaderChecksumInvalid,
     ProbablyDOS,
     ProbablyNotEXFAT,
@@ -33,6 +35,7 @@ pub enum ExFatError {
 impl fmt::Display for ExFatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ExFatError::Utf16Error(e) => write!(f, "Filesystem label contains invalid UTF-16: {e}"),
             ExFatError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
             ExFatError::ProbablyDOS => write!(f, "Filesystem looks like DOS/MBR"),
             ExFatError::ProbablyNotEXFAT => write!(f, "Filesystem does not look like EXFAT"),
@@ -297,6 +300,7 @@ pub fn probe_is_exfat<IO: BlockIo>(
 
 fn find_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     sb: &ExFatSuperBlock,
 ) -> Result<Option<String>, Error<IO::Error>> {
     let mut cluster = u32::from(sb.first_clustor_of_root);
@@ -318,8 +322,16 @@ fn find_label<IO: BlockIo>(
             if entry.name == [0u8; 22] {
                 return Ok(None);
             }
-            let label = decode_utf16_lossy_from(&entry.name, Endianness::Little);
-            return Ok(Some(label.to_string()));
+
+            let label = if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+                decode_utf16_from(&entry.name, Endianness::Little)
+                    .map_err(ExFatError::Utf16Error)?
+                    .to_string()
+            } else {
+                decode_utf16_lossy_from(&entry.name, Endianness::Little).to_string()
+            };
+
+            return Ok(Some(label));
         }
 
         offset += EXFAT_ENTRY_SIZE as u64;
@@ -342,6 +354,7 @@ fn find_label<IO: BlockIo>(
 
 pub fn probe_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     mag: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -351,7 +364,7 @@ pub fn probe_exfat<IO: BlockIo>(
 
     valid_exfat(reader, offset, sb)?;
 
-    let label = find_label(reader, sb)?;
+    let label = find_label(reader, flags, sb)?;
 
     let version = sb.vermaj.to_string() + "." + &sb.vermin.to_string();
 

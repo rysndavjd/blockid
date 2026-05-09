@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use fat_volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 
@@ -94,8 +95,16 @@ impl Magic {
     };
 }
 
+bitflags! {
+    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct ProbeFlags: u64 {
+        const FailOnInvaildUTF = 1 << 0;
+    }
+}
+
 fn probe_block<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     filter: BlockFilter,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -121,7 +130,7 @@ fn probe_block<IO: BlockIo>(
             None => Magic::EMPTY_MAGIC,
         };
 
-        match (handle.probe)(reader, offset, magic) {
+        match (handle.probe)(reader, flags, offset, magic) {
             Ok(t) => return Ok(t),
             Err(e) => {
                 if let Error::Io(_) = e {
@@ -135,6 +144,7 @@ fn probe_block<IO: BlockIo>(
 
 fn search_for_block<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     block: BlockType,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -155,11 +165,12 @@ fn search_for_block<IO: BlockIo>(
         None => Magic::EMPTY_MAGIC,
     };
 
-    (handle.probe)(reader, offset, magic)
+    (handle.probe)(reader, flags, offset, magic)
 }
 
 fn probe_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     filter: PTFilter,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
@@ -185,7 +196,7 @@ fn probe_part_table<IO: BlockIo>(
             None => Magic::EMPTY_MAGIC,
         };
 
-        match (handle.probe)(reader, offset, magic) {
+        match (handle.probe)(reader, flags, offset, magic) {
             Ok(t) => return Ok(t),
             Err(e) => {
                 if let Error::Io(_) = e {
@@ -199,6 +210,7 @@ fn probe_part_table<IO: BlockIo>(
 
 fn search_for_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     part_table: PTType,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
@@ -219,33 +231,35 @@ fn search_for_part_table<IO: BlockIo>(
         None => Magic::EMPTY_MAGIC,
     };
 
-    (handle.probe)(reader, offset, magic)
+    (handle.probe)(reader, flags, offset, magic)
 }
 
 #[cfg(not(feature = "os_calls"))]
 #[derive(Debug)]
 pub struct Probe<IO: BlockIo> {
     reader: Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
 }
 
 #[cfg(not(feature = "os_calls"))]
 impl<IO: BlockIo> Probe<IO> {
-    pub fn new(reader: IO, offset: u64) -> Probe<IO> {
+    pub fn new(reader: IO, flags: ProbeFlags, offset: u64) -> Probe<IO> {
         Probe {
             reader: Reader::new(reader),
+            flags,
             offset,
         }
     }
 
     #[inline]
     pub fn probe_block(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
-        probe_block(&mut self.reader, self.offset, filter)
+        probe_block(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
     pub fn search_for_block(&mut self, block: BlockType) -> Result<BlockInfo, Error<IO::Error>> {
-        search_for_block(&mut self.reader, self.offset, block)
+        search_for_block(&mut self.reader, self.flags, self.offset, block)
     }
 
     #[inline]
@@ -253,7 +267,7 @@ impl<IO: BlockIo> Probe<IO> {
         &mut self,
         filter: PTFilter,
     ) -> Result<PartTableInfo, Error<IO::Error>> {
-        probe_part_table(&mut self.reader, self.offset, filter)
+        probe_part_table(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
@@ -261,7 +275,7 @@ impl<IO: BlockIo> Probe<IO> {
         &mut self,
         part_table: PTType,
     ) -> Result<PartTableInfo, Error<IO::Error>> {
-        search_for_part_table(&mut self.reader, self.offset, part_table)
+        search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
     }
 }
 
@@ -269,15 +283,21 @@ impl<IO: BlockIo> Probe<IO> {
 #[derive(Debug)]
 pub struct Probe {
     reader: Reader<crate::io::File>,
+    flags: ProbeFlags,
     offset: u64,
 }
 
 #[cfg(feature = "os_calls")]
 impl Probe {
     #[cfg(feature = "std")]
-    pub fn new(file: crate::io::File, offset: u64) -> Result<Probe, Error<crate::io::IoError>> {
+    pub fn new(
+        file: crate::io::File,
+        flags: ProbeFlags,
+        offset: u64,
+    ) -> Result<Probe, Error<crate::io::IoError>> {
         Ok(Self {
             reader: Reader::new(file),
+            flags,
             offset,
         })
     }
@@ -295,7 +315,7 @@ impl Probe {
         &mut self,
         filter: BlockFilter,
     ) -> Result<BlockInfo, Error<crate::io::IoError>> {
-        probe_block(&mut self.reader, self.offset, filter)
+        probe_block(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
@@ -303,7 +323,7 @@ impl Probe {
         &mut self,
         block: BlockType,
     ) -> Result<BlockInfo, Error<crate::io::IoError>> {
-        search_for_block(&mut self.reader, self.offset, block)
+        search_for_block(&mut self.reader, self.flags, self.offset, block)
     }
 
     #[inline]
@@ -311,7 +331,7 @@ impl Probe {
         &mut self,
         filter: PTFilter,
     ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
-        probe_part_table(&mut self.reader, self.offset, filter)
+        probe_part_table(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
@@ -319,6 +339,6 @@ impl Probe {
         &mut self,
         part_table: PTType,
     ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
-        search_for_part_table(&mut self.reader, self.offset, part_table)
+        search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
     }
 }

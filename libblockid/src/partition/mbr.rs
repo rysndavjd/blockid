@@ -12,11 +12,11 @@ use crate::{
     filesystem::{exfat::probe_is_exfat, vfat::probe_is_vfat},
     io::{BlockIo, Reader},
     partition::{PartTableInfo, aix::AIX_MAGIC},
-    probe::Magic,
+    probe::{Magic, ProbeFlags},
     std::fmt,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MbrError {
     ProbablyAix,
     ProbablyGPT,
@@ -269,6 +269,7 @@ fn is_valid_mbr<IO: BlockIo>(
 
 pub fn probe_mbr<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     mag: Magic,
 ) -> Result<PartTableInfo, Error<IO::Error>> {

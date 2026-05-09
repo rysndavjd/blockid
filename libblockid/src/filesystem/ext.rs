@@ -6,21 +6,23 @@ use zerocopy::{
     byteorder::U32, byteorder::U64,
 };
 
-use crate::util::decode_utf8_lossy_from;
+use crate::util::decode_utf8_from;
 use crate::{
     error::Error,
     filesystem::{BlockInfo, BlockTag, BlockType},
     io::{BlockIo, Reader},
-    probe::{Id, Magic, Usage},
-    std::{fmt, mem::offset_of},
+    probe::{Id, Magic, ProbeFlags, Usage},
+    std::{fmt, mem::offset_of, str::Utf8Error},
+    util::decode_utf8_lossy_from,
 };
 
 /*
 https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 */
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ExtError {
+    Utf8Error(Utf8Error),
     ProbablyLegacyExt,
     ProbablyExt4Dev,
     HeaderChecksumInvalid,
@@ -32,9 +34,11 @@ pub enum ExtError {
     InvalidExt4Features,
     Ext4DetectedAsJbd,
 }
+
 impl fmt::Display for ExtError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ExtError::Utf8Error(e) => write!(f, "Filesystem label contains invalid UTF-8: {e}"),
             ExtError::ProbablyLegacyExt => write!(f, "Filesystem detected as legacy EXT"),
             ExtError::ProbablyExt4Dev => write!(f, "Filesystem detected as EXT4dev"),
             ExtError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
@@ -51,7 +55,7 @@ impl fmt::Display for ExtError {
     }
 }
 
-impl<E: core::fmt::Debug> From<ExtError> for Error<E> {
+impl<E: fmt::Debug> From<ExtError> for Error<E> {
     fn from(e: ExtError) -> Self {
         Error::Ext(e)
     }
@@ -406,6 +410,7 @@ fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
 
 #[allow(clippy::type_complexity)]
 fn ext_get_info(
+    flags: ProbeFlags,
     es: &Ext2SuperBlock,
 ) -> Result<
     (
@@ -423,7 +428,11 @@ fn ext_get_info(
     let fc = es.feature_compat();
 
     let label: Option<String> = if es.s_volume_name[0] != 0 {
-        Some(decode_utf8_lossy_from(&es.s_volume_name))
+        if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+            Some(decode_utf8_from(&es.s_volume_name).map_err(ExtError::Utf8Error)?)
+        } else {
+            Some(decode_utf8_lossy_from(&es.s_volume_name))
+        }
     } else {
         None
     };
@@ -469,6 +478,7 @@ fn ext_get_info(
 
 pub fn probe_jbd<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -484,7 +494,7 @@ pub fn probe_jbd<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        ext_get_info(flags, es)?;
 
     let mut info = BlockInfo::new();
 
@@ -511,6 +521,7 @@ pub fn probe_jbd<IO: BlockIo>(
 
 pub fn probe_ext2<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -536,7 +547,7 @@ pub fn probe_ext2<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        ext_get_info(flags, es)?;
 
     let mut info = BlockInfo::new();
 
@@ -563,6 +574,7 @@ pub fn probe_ext2<IO: BlockIo>(
 
 pub fn probe_ext3<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -588,7 +600,7 @@ pub fn probe_ext3<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        ext_get_info(flags, es)?;
 
     let mut info = BlockInfo::new();
 
@@ -615,6 +627,7 @@ pub fn probe_ext3<IO: BlockIo>(
 
 pub fn probe_ext4<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
@@ -627,7 +640,7 @@ pub fn probe_ext4<IO: BlockIo>(
 
     let fi = es.feature_incompat();
     let frc = es.feature_rocompat();
-    let flags = es.ext_flags();
+    let ext_flags = es.ext_flags();
 
     if fi.contains(ExtFeatureIncompat::JOURNAL_DEV) {
         return Err(ExtError::Ext4DetectedAsJbd.into());
@@ -639,12 +652,12 @@ pub fn probe_ext4<IO: BlockIo>(
         return Err(ExtError::InvalidExt4Features.into());
     }
 
-    if flags.contains(ExtFlags::EXT2_FLAGS_TEST_FILESYS) {
+    if ext_flags.contains(ExtFlags::EXT2_FLAGS_TEST_FILESYS) {
         return Err(ExtError::ProbablyExt4Dev.into());
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        ext_get_info(flags, es)?;
 
     let mut info = BlockInfo::new();
 

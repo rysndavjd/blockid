@@ -10,7 +10,7 @@ use crate::{
 pub enum BuilderError {}
 
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error<E: crate::std::fmt::Debug> {
     Io(E),
     Apfs(ApfsError),

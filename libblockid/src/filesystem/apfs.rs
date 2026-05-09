@@ -1,12 +1,20 @@
-use std::mem::offset_of;
-
 use uuid::Uuid;
 use zerocopy::{
-    FromBytes, Immutable, IntoBytes, Unaligned, byteorder::{LittleEndian, U16, U32, U64}, transmute_ref,
+    FromBytes, Immutable, IntoBytes, Unaligned,
+    byteorder::{LittleEndian, U16, U32, U64},
+    transmute_ref,
 };
-use crate::{error::Error, io::{BlockIo, Reader}, probe::{Magic, Id, Usage}, std::fmt, filesystem::{BlockInfo, BlockTag, BlockType}, util::fletcher64};
 
-#[derive(Debug)]
+use crate::{
+    error::Error,
+    filesystem::{BlockInfo, BlockTag, BlockType},
+    io::{BlockIo, Reader},
+    probe::{Id, Magic, ProbeFlags, Usage},
+    std::{fmt, mem::offset_of},
+    util::fletcher64,
+};
+
+#[derive(Debug, Clone)]
 pub enum ApfsError {
     HeaderChecksumInvalid,
     InvalidSuperblockType,
@@ -21,7 +29,9 @@ impl fmt::Display for ApfsError {
         match self {
             ApfsError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
             ApfsError::InvalidSuperblockType => write!(f, "Invalid APFS container superblock type"),
-            ApfsError::InvalidSuperblockSubType => write!(f, "Invalid APFS container superblock subtype"),
+            ApfsError::InvalidSuperblockSubType => {
+                write!(f, "Invalid APFS container superblock subtype")
+            }
             ApfsError::PaddingNotZero => write!(f, "Padding not zero"),
             ApfsError::InvalidBlockSize => write!(f, "Invalid standard block size"),
             ApfsError::UuidEmpty => write!(f, "UUID entry is empty"),
@@ -70,11 +80,11 @@ impl ApfsSuperBlock {
     const CONTAINER_SUPERBLOCK_TYPE: u16 = 1;
     const CONTAINER_SUPERBLOCK_SUBTYPE: u16 = 0;
     const STANDARD_BLOCK_SIZE: u32 = 4096;
-
 }
 
 pub fn probe_apfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
+    _: ProbeFlags,
     offset: u64,
     _: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
