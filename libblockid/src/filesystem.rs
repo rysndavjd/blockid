@@ -4,6 +4,7 @@ pub mod ext;
 pub mod luks;
 pub mod ntfs;
 pub mod vfat;
+pub mod xfs;
 
 use bitflags::bitflags;
 
@@ -19,6 +20,7 @@ use crate::{
         },
         ntfs::{NTFS_MAGICS, NTFS_MINSZ, probe_ntfs},
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
+        xfs::{XFS_MAGICS, XFS_MINSZ, probe_xfs},
     },
     io::{BlockIo, Reader},
     probe::{Endianness, Id, Magic, ProbeFlags, Usage},
@@ -133,6 +135,11 @@ impl BlockType {
                 minsz: VFAT_MINSZ,
                 magics: VFAT_MAGICS,
                 probe: probe_vfat,
+            },
+            BlockType::Xfs => BlockHandler {
+                minsz: XFS_MINSZ,
+                magics: XFS_MAGICS,
+                probe: probe_xfs,
             },
             _ => todo!(),
         }

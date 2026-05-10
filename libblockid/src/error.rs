@@ -1,7 +1,7 @@
 use crate::{
     filesystem::{
         apfs::ApfsError, exfat::ExFatError, ext::ExtError, luks::LuksError, ntfs::NtfsError,
-        vfat::VFatError,
+        vfat::VFatError, xfs::XfsError,
     },
     partition::{gpt::GptError, mbr::MbrError},
 };
@@ -19,6 +19,7 @@ pub enum Error<E: crate::std::fmt::Debug> {
     Ext(ExtError),
     Ntfs(NtfsError),
     VFat(VFatError),
+    Xfs(XfsError),
     Mbr(MbrError),
     Gpt(GptError),
     UnableToLocateMagicSignature,
