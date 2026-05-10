@@ -1,4 +1,5 @@
 use uuid::Uuid;
+use widestring::error::Utf16Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, TryFromBytes, U16, U32, U64,
     Unaligned,
@@ -11,12 +12,14 @@ use crate::{
     partition::{BlockIo, PartAttributes, PartId, PartTableInfo, PartType, Partition},
     probe::{Magic, ProbeFlags},
     std::mem::offset_of,
-    util::decode_utf16_lossy_from,
+    util::{decode_utf16_from, decode_utf16_lossy_from},
 };
 
 #[derive(Debug, Clone)]
 pub enum GptError {
+    Utf16Error { error: Utf16Error, part_no: u64 },
     UnableToMapHeaderStruct,
+    UnableToMapPartitionStruct { part_no: u64 },
     UnableToGetSectorSize,
     InvalidSignature,
     InvalidHeaderSize,
@@ -30,8 +33,20 @@ pub enum GptError {
 impl core::fmt::Display for GptError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            GptError::Utf16Error { error, part_no } => {
+                write!(
+                    f,
+                    "Partition {part_no} label contains invalid UTF-16: {error}"
+                )
+            }
             GptError::UnableToMapHeaderStruct => {
                 write!(f, "Unable to map bytes to `GptTable` struct")
+            }
+            GptError::UnableToMapPartitionStruct { part_no } => {
+                write!(
+                    f,
+                    "Unable to map partition {part_no} bytes to `GptEntry` struct"
+                )
             }
             GptError::UnableToGetSectorSize => {
                 write!(f, "Unable to get sector size of partition table")
@@ -270,7 +285,7 @@ impl GptTable {
 /// disk.
 pub fn probe_gpt<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    _: ProbeFlags,
+    flags: ProbeFlags,
     offset: u64,
     _: Magic,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
@@ -407,45 +422,59 @@ pub fn probe_gpt<IO: BlockIo>(
     let fu = u64::from(header.first_usable_lba);
     let lu = u64::from(header.last_usable_lba);
 
-    let partions: Vec<Partition> = (0..u64::from(header.num_partition_entries))
-        .filter_map(|i| {
-            let partition = GptEntry::ref_from_bytes(
-                &entries_buf[i as usize * size_of::<GptEntry>()
-                    ..(i as usize * size_of::<GptEntry>()) + size_of::<GptEntry>()],
-            )
-            .ok()?;
+    let mut partitions: Vec<Partition> = Vec::new();
+    for i in 0..u64::from(header.num_partition_entries) {
+        let partition = match GptEntry::ref_from_bytes(
+            &entries_buf[i as usize * size_of::<GptEntry>()
+                ..(i as usize * size_of::<GptEntry>()) + size_of::<GptEntry>()],
+        ) {
+            Ok(p) => p,
+            Err(_) => return Err(GptError::UnableToMapPartitionStruct { part_no: i + 1 }.into()),
+        };
 
-            if partition.unique_partition_guid == EfiGuid::ZERO {
-                return None;
-            }
+        if partition.unique_partition_guid == EfiGuid::ZERO {
+            continue;
+        }
 
-            let start = u64::from(partition.starting_lba);
-            let end = u64::from(partition.ending_lba);
+        let start = u64::from(partition.starting_lba);
+        let end = u64::from(partition.ending_lba);
 
-            if start < fu || end > lu {
-                return None;
-            }
+        if start < fu || end > lu {
+            continue;
+        }
 
-            let name = if partition.partition_name != [0u8; 72] {
+        let name = if partition.partition_name != [0u8; 72] {
+            if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+                match decode_utf16_from(&partition.partition_name, Endianness::Little) {
+                    Ok(t) => Some(t.to_string()),
+                    Err(e) => {
+                        return Err(GptError::Utf16Error {
+                            error: e,
+                            part_no: i + 1,
+                        }
+                        .into());
+                    }
+                }
+            } else {
                 Some(
                     decode_utf16_lossy_from(&partition.partition_name, Endianness::Little)
                         .to_string(),
                 )
-            } else {
-                None
-            };
+            }
+        } else {
+            None
+        };
 
-            return Some(Partition {
-                start: start * lssz,
-                end: end * lssz,
-                partition_id: PartId::Uuid(partition.unique_partition_guid.into()),
-                partition_type: PartType::Uuid(partition.partition_type_guid.into()),
-                part_no: i + 1,
-                partition_name: name,
-                attributes: PartAttributes::Gpt(u64::from(partition.attributes)),
-            });
-        })
-        .collect();
+        partitions.push(Partition {
+            start: start * lssz,
+            end: end * lssz,
+            partition_id: PartId::Uuid(partition.unique_partition_guid.into()),
+            partition_type: PartType::Uuid(partition.partition_type_guid.into()),
+            part_no: i + 1,
+            partition_name: name,
+            attributes: PartAttributes::Gpt(u64::from(partition.attributes)),
+        });
+    }
 
     let mut info = PartTableInfo::new();
 
@@ -456,8 +485,8 @@ pub fn probe_gpt<IO: BlockIo>(
     ));
     info.set(PartTableTag::Magic(GptTable::SIGNATURE_STR.to_vec()));
     info.set(PartTableTag::MagicOffset(lssz));
-    if !partions.is_empty() {
-        info.set(PartTableTag::Partions(partions));
+    if !partitions.is_empty() {
+        info.set(PartTableTag::Partions(partitions));
     }
 
     return Ok(info);

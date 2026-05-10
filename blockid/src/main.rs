@@ -26,11 +26,11 @@ fn main() {
         build::print_build_in();
     }
 
-    let file = File::open("/dev/sdb5").unwrap();
+    let file = File::open("/dev/sdb").unwrap();
 
     let mut t = Probe::new(file, ProbeFlags::empty(), 0).unwrap();
 
-    let info = t.search_for_block(libblockid::BlockType::Xfs);
+    let info = t.search_for_part_table(libblockid::PTType::Gpt);
 
     println!("{:?}", info);
 }
