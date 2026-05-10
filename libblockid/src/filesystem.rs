@@ -28,16 +28,18 @@ use crate::{
 
 #[rustfmt::skip]
 pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
-    (BlockFilter::SKIP_LUKS1, BlockType::LUKS1),
-    (BlockFilter::SKIP_LUKS2, BlockType::LUKS2),
-    (BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
+    (BlockFilter::SKIP_APFS, BlockType::Apfs),
     (BlockFilter::SKIP_EXFAT, BlockType::Exfat),
     (BlockFilter::SKIP_JBD, BlockType::Jbd),
-    (BlockFilter::SKIP_APFS, BlockType::Apfs),
     (BlockFilter::SKIP_EXT2, BlockType::Ext2),
     (BlockFilter::SKIP_EXT3, BlockType::Ext3),
     (BlockFilter::SKIP_EXT4, BlockType::Ext4),
+    (BlockFilter::SKIP_LUKS1, BlockType::LUKS1),
+    (BlockFilter::SKIP_LUKS2, BlockType::LUKS2),
+    (BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
+    (BlockFilter::SKIP_NTFS, BlockType::Ntfs),
     (BlockFilter::SKIP_VFAT, BlockType::Vfat),
+    (BlockFilter::SKIP_XFS, BlockType::Xfs),
 ];
 
 #[derive(Debug, Copy, Clone, Hash)]
@@ -51,29 +53,18 @@ pub struct BlockHandler<IO: BlockIo> {
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockType {
-    LUKS1,
-    LUKS2,
-    LUKSOpal,
+    Apfs,
     Exfat,
     Jbd,
-    Apfs,
     Ext2,
     Ext3,
     Ext4,
-    LinuxSwapV0,
-    LinuxSwapV1,
-    SwapSuspend,
+    LUKS1,
+    LUKS2,
+    LUKSOpal,
     Ntfs,
     Vfat,
     Xfs,
-    Squashfs,
-    Squashfs3,
-    ZoneFs,
-    Lvm2Member,
-    Lvm1Member,
-    LvmSnapcow,
-    LvmVerityHash,
-    LvmIntegrity,
 }
 
 impl BlockType {
@@ -341,24 +332,17 @@ impl BlockInfo {
 bitflags! {
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct BlockFilter: u64 {
-        const SKIP_LUKS1 = 1 << 3;
-        const SKIP_LUKS2 = 1 << 4;
-        const SKIP_LUKS_OPAL = 1 << 5;
-        const SKIP_DOS = 1 << 6;
-        const SKIP_GPT = 1 << 7;
-        const SKIP_EXFAT = 1 << 8;
-        const SKIP_JBD = 1 << 9;
-        const SKIP_EXT2 = 1 << 10;
-        const SKIP_EXT3 = 1 << 11;
-        const SKIP_EXT4 = 1 << 12;
-        const SKIP_LINUX_SWAP_V0 = 1 << 13;
-        const SKIP_LINUX_SWAP_V1 = 1 << 14;
-        const SKIP_SWSUSPEND = 1 << 15;
-        const SKIP_NTFS = 1 << 16;
-        const SKIP_VFAT = 1 << 17;
-        const SKIP_XFS = 1 << 18;
-        const SKIP_APFS = 1 << 19;
-        const SKIP_SQUASHFS3 = 1 << 20;
-        const SKIP_SQUASHFS = 1 << 21;
+        const SKIP_APFS = 1 << 0;
+        const SKIP_EXFAT = 1 << 1;
+        const SKIP_JBD = 1 << 2;
+        const SKIP_EXT2 = 1 << 3;
+        const SKIP_EXT3 = 1 << 4;
+        const SKIP_EXT4 = 1 << 5;
+        const SKIP_LUKS1 = 1 << 6;
+        const SKIP_LUKS2 = 1 << 7;
+        const SKIP_LUKS_OPAL = 1 << 8;
+        const SKIP_NTFS = 1 << 9;
+        const SKIP_VFAT = 1 << 10;
+        const SKIP_XFS = 1 << 11;
     }
 }
