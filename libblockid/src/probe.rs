@@ -311,6 +311,41 @@ impl Probe {
     }
 
     #[inline]
+    pub fn device_size(&self) -> Result<u64, Error<crate::io::IoError>> {
+        self.reader.device_size()
+    }
+
+    #[inline]
+    pub fn logical_sector_size(&self) -> Result<u64, Error<crate::io::IoError>> {
+        self.reader.logical_sector_size()
+    }
+
+    #[inline]
+    pub fn physical_sector_size(&self) -> Result<u64, Error<crate::io::IoError>> {
+        self.reader.physical_sector_size()
+    }
+
+    #[inline]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    pub fn minimum_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
+        self.reader.minimum_io_size()
+    }
+
+    #[inline]
+    #[cfg(target_os = "linux")]
+    pub fn optimal_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
+        self.reader.optimal_io_size()
+    }
+
+    #[inline]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    pub fn alignment_offset(
+        &self,
+    ) -> Result<crate::io::ioctl::AlignmentOffset, Error<crate::io::IoError>> {
+        self.reader.alignment_offset()
+    }
+
+    #[inline]
     pub fn probe_block(
         &mut self,
         filter: BlockFilter,

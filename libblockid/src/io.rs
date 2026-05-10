@@ -1,6 +1,6 @@
 mod block;
 #[cfg(feature = "os_calls")]
-mod ioctl;
+pub mod ioctl;
 #[cfg(all(feature = "os_calls", feature = "no_std"))]
 mod no_std;
 #[cfg(feature = "no_std")]

@@ -46,7 +46,8 @@ impl Ioctl for File {
 
         #[cfg(target_os = "macos")]
         {
-            let ds = crate::io::ioctl::macos::ioctl_dkiocgetblockcount(self)? * crate::io::ioctl::macos::ioctl_dkiocgetblocksize(self)? as u64; 
+            let ds = crate::io::ioctl::macos::ioctl_dkiocgetblockcount(self)?
+                * crate::io::ioctl::macos::ioctl_dkiocgetblocksize(self)? as u64;
             return Ok(ds);
         }
     }
@@ -95,9 +96,6 @@ impl Ioctl for File {
             let mios = linux::ioctl_blkiomin(self)?;
             Ok(mios.into())
         }
-
-        #[cfg(target_os = "macos")]
-        todo!();
     }
 
     #[cfg(target_os = "linux")]
@@ -120,8 +118,5 @@ impl Ioctl for File {
                 AlignmentOffset::Misaligned
             })
         }
-
-        #[cfg(target_os = "macos")]
-        todo!();
     }
 }

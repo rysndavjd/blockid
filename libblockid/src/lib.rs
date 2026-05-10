@@ -15,11 +15,13 @@ mod partition;
 mod probe;
 mod util;
 
+#[cfg(feature = "os_calls")]
+pub use crate::io::ioctl::AlignmentOffset;
 pub use crate::{
     error::Error,
     filesystem::{
         BlockFilter, BlockInfo, BlockTag, BlockType, SubType, apfs::ApfsError, exfat::ExFatError,
-        ext::ExtError, luks::LuksError, ntfs::NtfsError, vfat::VFatError,
+        ext::ExtError, luks::LuksError, ntfs::NtfsError, vfat::VFatError, xfs::XfsError,
     },
     io::BlockIo,
     partition::{
