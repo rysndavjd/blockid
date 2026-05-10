@@ -40,7 +40,7 @@ features = ["stdio", "fs", "alloc"]
 optional = true
 
 [features]
-default = ["std", "os_calls"]
+default = ["no_std", "os_calls"]
 std = [
     "zerocopy/std",
     "bitflags/std",

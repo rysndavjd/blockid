@@ -379,7 +379,7 @@ fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
 
         #[cfg(not(feature = "std"))]
         {
-            use crc::Algorithm;
+            use crc::{Algorithm, Crc};
 
             const EXT_CRC: Algorithm<u32> = Algorithm {
                 width: 32,
@@ -392,12 +392,10 @@ fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
                 residue: 0xb798b438,
             };
 
-            let crc = crc::Crc::<u32>::new(&EXT_CRC);
-            let mut digest = crc.digest();
+            let crc = Crc::<u32>::new(&EXT_CRC);
+            let calc_sum = crc.checksum(&es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
 
-            digest.update(&es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
-
-            if es.s_checksum.get() != digest.finalize() {
+            if es.s_checksum.get() != calc_sum {
                 return Err(ExtError::HeaderChecksumInvalid);
             }
         }

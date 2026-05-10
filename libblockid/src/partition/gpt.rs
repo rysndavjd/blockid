@@ -212,11 +212,9 @@ impl GptTable {
             use crc::{CRC_32_ISO_HDLC, Crc};
 
             let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
-            let mut digest = crc.digest();
+            let calc_sum = crc.checksum(&hdr);
 
-            digest.update(&hdr);
-
-            if stored_crc != digest.finalize() {
+            if stored_crc != calc_sum {
                 return Err(GptError::InvalidGptEntriesChecksum.into());
             }
         }
@@ -261,11 +259,9 @@ impl GptTable {
             use crc::{CRC_32_ISO_HDLC, Crc};
 
             let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
-            let mut digest = crc.digest();
+            let calc_sum = crc.checksum(&entries_buf);
 
-            digest.update(&entries_buf);
-
-            if u32::from(header.partition_entry_array_crc32) != digest.finalize() {
+            if u32::from(header.partition_entry_array_crc32) != calc_sum {
                 return Err(GptError::InvalidGptEntriesChecksum.into());
             }
         }

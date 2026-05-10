@@ -119,7 +119,7 @@ fn probe_block<IO: BlockIo>(
         if let Some(minsz) = handle.minsz
             && reader.device_size()? < minsz
         {
-            return Err(Error::DeviceTooSmall);
+            continue;
         }
 
         let magic = match handle.magics {
@@ -185,7 +185,7 @@ fn probe_part_table<IO: BlockIo>(
         if let Some(minsz) = handle.minsz
             && reader.device_size()? < minsz
         {
-            return Err(Error::DeviceTooSmall);
+            continue;
         }
 
         let magic = match handle.magics {
@@ -303,9 +303,14 @@ impl Probe {
     }
 
     #[cfg(all(feature = "no_std", target_family = "unix"))]
-    pub fn new(fd: rustix::fd::OwnedFd, offset: u64) -> Result<Probe, Error<crate::io::IoError>> {
+    pub fn new(
+        fd: rustix::fd::OwnedFd,
+        flags: ProbeFlags,
+        offset: u64,
+    ) -> Result<Probe, Error<crate::io::IoError>> {
         Ok(Self {
             reader: Reader::new(crate::io::File::from(fd)),
+            flags,
             offset,
         })
     }

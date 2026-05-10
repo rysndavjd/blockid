@@ -193,6 +193,21 @@ impl XfsSuperBlock {
                     return Err(XfsError::HeaderChecksumInvalid);
                 }
             }
+
+            #[cfg(feature = "no_std")]
+            {
+                use crc::{CRC_32_ISCSI, Crc};
+
+                crc_area[offset_of!(XfsSuperBlock, crc)..offset_of!(XfsSuperBlock, spino_align)]
+                    .fill(0);
+
+                let crc = Crc::<u32>::new(&CRC_32_ISCSI);
+                let calc_sum = crc.checksum(crc_area);
+
+                if self.crc.get() != calc_sum {
+                    return Err(XfsError::HeaderChecksumInvalid);
+                }
+            }
         }
         return Ok(());
     }
