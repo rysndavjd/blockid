@@ -21,7 +21,8 @@ pub use crate::{
     error::Error,
     filesystem::{
         BlockFilter, BlockInfo, BlockTag, BlockType, SubType, apfs::ApfsError, exfat::ExFatError,
-        ext::ExtError, luks::LuksError, ntfs::NtfsError, vfat::VFatError, xfs::XfsError,
+        ext::ExtError, luks::LuksError, ntfs::NtfsError, vfat::VFatError, vxfs::VxfsError,
+        xfs::XfsError,
     },
     io::BlockIo,
     partition::{

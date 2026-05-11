@@ -1,19 +1,17 @@
 use bitflags::bitflags;
 use uuid::Uuid;
-use zerocopy::transmute_ref;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
-    byteorder::U32, byteorder::U64,
+    byteorder::U32, byteorder::U64, transmute_ref,
 };
 
-use crate::util::decode_utf8_from;
 use crate::{
     error::Error,
     filesystem::{BlockInfo, BlockTag, BlockType},
     io::{BlockIo, Reader},
     probe::{Id, Magic, ProbeFlags, Usage},
     std::{fmt, mem::offset_of, str::Utf8Error},
-    util::decode_utf8_lossy_from,
+    util::{decode_utf8_from, decode_utf8_lossy_from},
 };
 
 /*
@@ -447,8 +445,11 @@ fn ext_get_info(
         None
     };
 
-    let version =
-        u32::from(es.s_rev_level).to_string() + "." + &u32::from(es.s_minor_rev_level).to_string();
+    let version = format!(
+        "{}.{}",
+        u32::from(es.s_rev_level),
+        u16::from(es.s_minor_rev_level)
+    );
 
     let log_block_size = u32::from(es.s_log_block_size);
 

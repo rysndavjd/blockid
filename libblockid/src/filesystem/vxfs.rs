@@ -1,5 +1,3 @@
-use alloc::format;
-
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, transmute_ref};
 
 use crate::{

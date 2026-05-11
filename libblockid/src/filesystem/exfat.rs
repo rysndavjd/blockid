@@ -366,7 +366,7 @@ pub fn probe_exfat<IO: BlockIo>(
 
     let label = find_label(reader, flags, sb)?;
 
-    let version = sb.vermaj.to_string() + "." + &sb.vermin.to_string();
+    let version = format!("{}.{}", sb.vermaj, sb.vermin);
 
     let mut info = BlockInfo::new();
 
