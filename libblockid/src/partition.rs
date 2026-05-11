@@ -15,24 +15,34 @@ use crate::{
     probe::{Id, Magic, ProbeFlags},
 };
 
+/// Order used to detect partition tables in [`probe_part_table`]
+/// 
+/// [`probe_part_table`]: crate::probe::Probe::probe_part_table
 #[rustfmt::skip]
 pub const PT_DETECT_ORDER: &[(PTFilter, PTType)] = &[
     (PTFilter::SKIP_GPT, PTType::Gpt),
 ];
 
+/// A generic handler for probing a partition table type.
 #[derive(Debug, Copy, Clone, Hash)]
 pub struct PtHandler<IO: BlockIo> {
+    /// Minimum disk size in bytes required for partition table, if any.
     pub minsz: Option<u64>,
+    /// Minimum disk size in bytes required for this partition table, if any.
     pub magics: Option<&'static [Magic]>,
+    /// Probes the partition table, returning its info on success.
     #[allow(clippy::type_complexity)]
     pub probe:
         fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PartTableInfo, Error<IO::Error>>,
 }
 
+/// The type of partition tables supported.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PTType {
+    /// [Master boot record partition table](https://en.wikipedia.org/wiki/Master_boot_record).
     Mbr,
+    /// [GUID Partition Table](https://en.wikipedia.org/wiki/GUID_Partition_Table).
     Gpt,
 }
 
@@ -54,33 +64,51 @@ impl PTType {
     }
 }
 
+/// The partition type of a specified partition table.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartType {
+    /// [Partition types](https://en.wikipedia.org/wiki/Partition_type) used in MBR partition table.
     Hex(u8),
+    /// [Partition types GUIDs](https://en.wikipedia.org/wiki/GUID_Partition_Table#Partition_type_GUIDs) used in GPT partition table.
     Uuid(Uuid),
+    /// Used for MAC partition table.
     String(String),
 }
 
+/// The partition identifier of a specified partition table.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartId {
+    /// Used for GPT and MAC partition tables.
     Uuid(Uuid),
+    /// A pseudo partition identifier used for MBR partition table.
     Mbr { disk: u32, part_no: u8 },
 }
 
+/// The partition attributes of a specified partition table.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartAttributes {
+    /// Used in MBR partition tables for if partition is active or inactive.
     Mbr(u8),
+    /// Used in GPT partition tables.
     Gpt(u64),
 }
 
+/// Parsed partition infomation.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Partition {
+    /// Start of partition in bytes.
     start: u64,
+    /// End of partition in bytes.
     end: u64,
+    /// The partition identifier of a specified partition table.
     partition_id: PartId,
+    /// The partition type of a specified partition table.
     partition_type: PartType,
+    /// Partition number
     part_no: u64,
+    /// Partition label
     partition_name: Option<String>,
+    /// The partition attributes of a specified partition table.
     attributes: PartAttributes,
 }
 

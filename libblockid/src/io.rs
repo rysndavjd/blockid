@@ -17,12 +17,15 @@ pub use crate::io::no_std::{Error as IoError, File};
 pub use crate::io::std::{File, IoError, SeekFrom};
 use crate::{error::Error, probe::Magic};
 
+/// Trait used to get access to underlying device.
 #[cfg(not(feature = "os_calls"))]
 pub trait BlockIo: crate::io::block::Io {}
 
+/// Trait used to get access to underlying device with exposed ioctl calls.
 #[cfg(feature = "os_calls")]
 pub trait BlockIo: crate::io::ioctl::Ioctl {}
 
+/// Reader type used to expose functions provided by [`BlockIo`]
 #[derive(Debug)]
 pub struct Reader<IO: BlockIo>(IO);
 
@@ -66,6 +69,8 @@ impl<IO: BlockIo> Reader<IO> {
         Ok(buf)
     }
 
+    /// Searches through list of provided magics checking if they exist,
+    /// returning the found magic.
     pub fn get_magic(
         &mut self,
         magics: &'static [Magic],

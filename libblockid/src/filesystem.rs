@@ -28,6 +28,9 @@ use crate::{
     probe::{Endianness, Id, Magic, ProbeFlags, Usage},
 };
 
+/// Order used to detect partition tables in [`probe_block`]
+/// 
+/// [`probe_block`]: crate::probe::Probe::probe_block
 #[rustfmt::skip]
 pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
     (BlockFilter::SKIP_APFS, BlockType::Apfs),
@@ -45,14 +48,19 @@ pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
     (BlockFilter::SKIP_XFS, BlockType::Xfs),
 ];
 
+/// A generic handler for probing a filesystem type.
 #[derive(Debug, Copy, Clone, Hash)]
 pub struct BlockHandler<IO: BlockIo> {
+    /// Minimum disk size in bytes required for filesystem, if any.
     pub minsz: Option<u64>,
+    /// Minimum disk size in bytes required for this filesystem, if any.
     pub magics: Option<&'static [Magic]>,
+    /// Probes the filesystem, returning its info on success.
     #[allow(clippy::type_complexity)]
     pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<BlockInfo, Error<IO::Error>>,
 }
 
+/// The type of filesystem supported.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockType {
@@ -146,6 +154,7 @@ impl BlockType {
     }
 }
 
+/// The subtype of filesystems.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SubType {
     Fat12,

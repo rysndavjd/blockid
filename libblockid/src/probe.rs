@@ -10,19 +10,28 @@ use crate::{
     partition::{PT_DETECT_ORDER, PTFilter, PartTableInfo},
 };
 
+/// Describes the intended usage of a superblock.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Usage {
+    /// Stores files and directories in a structured filesystem.
     Filesystem,
+    /// Spans or mirrors data across multiple physical disks (RAID).
     Raid,
+    /// Manages an encrypted volume or backing store.
     Crypto,
     Other(&'static str),
 }
 
+/// Identifier used by a filesystem or partition table.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Id {
+    /// A 128-bit universally unique identifier.
     Uuid(Uuid),
+    /// A 32-bit MBR disk signature.
     Mbr { disk: u32 },
+    /// A 32-bit volume serial number.
     VolumeId32(VolumeId32),
+    /// A 64-bit volume serial number.
     VolumeId64(VolumeId64),
 }
 
@@ -74,9 +83,12 @@ impl From<VolumeId64> for Id {
     }
 }
 
+/// The byte order used to represent multi-byte values.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Endianness {
+    /// Least significant byte stored first.
     Little,
+    /// Most significant byte stored first.
     Big,
 }
 
@@ -96,8 +108,10 @@ impl Magic {
 }
 
 bitflags! {
+    /// Flags that control the behaviour of the probing process.
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ProbeFlags: u64 {
+        /// Return an error if a UTF string encountered during probing is invalid.
         const FailOnInvaildUTF = 1 << 0;
     }
 }
