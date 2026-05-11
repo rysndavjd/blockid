@@ -4,6 +4,7 @@ pub mod ext;
 pub mod luks;
 pub mod ntfs;
 pub mod vfat;
+pub mod vxfs;
 pub mod xfs;
 
 use bitflags::bitflags;
@@ -20,6 +21,7 @@ use crate::{
         },
         ntfs::{NTFS_MAGICS, NTFS_MINSZ, probe_ntfs},
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
+        vxfs::{VXFS_MAGICS, VXFS_MINSZ, probe_vxfs},
         xfs::{XFS_MAGICS, XFS_MINSZ, probe_xfs},
     },
     io::{BlockIo, Reader},
@@ -39,6 +41,7 @@ pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
     (BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
     (BlockFilter::SKIP_NTFS, BlockType::Ntfs),
     (BlockFilter::SKIP_VFAT, BlockType::Vfat),
+    (BlockFilter::SKIP_VXFS, BlockType::Vxfs),
     (BlockFilter::SKIP_XFS, BlockType::Xfs),
 ];
 
@@ -64,6 +67,7 @@ pub enum BlockType {
     LUKSOpal,
     Ntfs,
     Vfat,
+    Vxfs,
     Xfs,
 }
 
@@ -126,6 +130,11 @@ impl BlockType {
                 minsz: VFAT_MINSZ,
                 magics: VFAT_MAGICS,
                 probe: probe_vfat,
+            },
+            BlockType::Vxfs => BlockHandler {
+                minsz: VXFS_MINSZ,
+                magics: VXFS_MAGICS,
+                probe: probe_vxfs,
             },
             BlockType::Xfs => BlockHandler {
                 minsz: XFS_MINSZ,
@@ -343,6 +352,7 @@ bitflags! {
         const SKIP_LUKS_OPAL = 1 << 8;
         const SKIP_NTFS = 1 << 9;
         const SKIP_VFAT = 1 << 10;
-        const SKIP_XFS = 1 << 11;
+        const SKIP_VXFS = 1 << 11;
+        const SKIP_XFS = 1 << 12;
     }
 }
