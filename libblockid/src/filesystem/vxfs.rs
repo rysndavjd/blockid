@@ -1,9 +1,8 @@
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, transmute_ref};
 
 use crate::{
-    BlockTag,
     error::Error,
-    filesystem::BlockInfo,
+    filesystem::{BlockInfo, BlockTag},
     io::{BlockIo, Reader},
     probe::{Endianness, Magic, ProbeFlags},
     std::fmt,

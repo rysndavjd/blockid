@@ -8,29 +8,16 @@ extern crate core as std;
 
 extern crate alloc;
 
-mod error;
-mod filesystem;
+pub mod error;
+pub mod filesystem;
 mod io;
-mod partition;
+pub mod partition;
 mod probe;
 mod util;
 
 #[cfg(feature = "os_calls")]
 pub use crate::io::ioctl::AlignmentOffset;
-pub use crate::{
-    error::Error,
-    filesystem::{
-        BlockFilter, BlockInfo, BlockTag, BlockType, SubType, apfs::ApfsError, exfat::ExFatError,
-        ext::ExtError, luks::LuksError, ntfs::NtfsError, vfat::VFatError, vxfs::VxfsError,
-        xfs::XfsError,
-    },
-    io::BlockIo,
-    partition::{
-        PTFilter, PTType, PartAttributes, PartId, PartTableInfo, PartTableTag, PartType,
-        gpt::GptError,
-    },
-    probe::{Endianness, Id, Probe, ProbeFlags, Usage},
-};
+pub use crate::probe::{Endianness, Id, Probe, ProbeFlags, Usage};
 
 #[cfg(all(feature = "std", feature = "no_std"))]
 compile_error!("`std` and `no_std` are mutually exclusive");

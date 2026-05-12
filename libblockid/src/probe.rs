@@ -3,11 +3,10 @@ use fat_volume_id::{VolumeId32, VolumeId64};
 use uuid::Uuid;
 
 use crate::{
-    PTType,
     error::Error,
     filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo, BlockType},
     io::{BlockIo, Reader},
-    partition::{PT_DETECT_ORDER, PTFilter, PartTableInfo},
+    partition::{PT_DETECT_ORDER, PTFilter, PTType, PartTableInfo},
 };
 
 /// Describes the intended usage of a superblock.
@@ -316,7 +315,22 @@ impl Probe {
         })
     }
 
-    #[cfg(all(feature = "no_std", target_family = "unix"))]
+    #[cfg(feature = "std")]
+    pub fn open<P: AsRef<std::path::Path>>(
+        path: P,
+        flags: ProbeFlags,
+        offset: u64,
+    ) -> Result<Probe, Error<crate::io::IoError>> {
+        let file = std::fs::File::open(path)?;
+
+        return Ok(Self {
+            reader: Reader::new(file),
+            flags,
+            offset,
+        });
+    }
+
+    #[cfg(feature = "no_std")]
     pub fn new(
         fd: rustix::fd::OwnedFd,
         flags: ProbeFlags,
@@ -327,6 +341,21 @@ impl Probe {
             flags,
             offset,
         })
+    }
+
+    #[cfg(feature = "no_std")]
+    pub fn open<P: rustix::path::Arg>(
+        path: P,
+        flags: ProbeFlags,
+        offset: u64,
+    ) -> Result<Probe, Error<crate::io::IoError>> {
+        let fd = rustix::fs::open(path, rustix::fs::OFlags::RDONLY, rustix::fs::Mode::empty())?;
+
+        return Ok(Self {
+            reader: Reader::new(crate::io::File::from(fd)),
+            flags,
+            offset,
+        });
     }
 
     #[inline]

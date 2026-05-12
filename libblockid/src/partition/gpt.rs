@@ -6,11 +6,12 @@ use zerocopy::{
 };
 
 use crate::{
-    Endianness, Id, PTType, PartTableTag,
     error::Error,
     io::Reader,
-    partition::{BlockIo, PartAttributes, PartId, PartTableInfo, PartType, Partition},
-    probe::{Magic, ProbeFlags},
+    partition::{
+        BlockIo, PTType, PartAttributes, PartId, PartTableInfo, PartTableTag, PartType, Partition,
+    },
+    probe::{Endianness, Id, Magic, ProbeFlags},
     std::mem::offset_of,
     util::{decode_utf16_from, decode_utf16_lossy_from},
 };
@@ -482,7 +483,7 @@ pub fn probe_gpt<IO: BlockIo>(
     info.set(PartTableTag::Magic(GptTable::SIGNATURE_STR.to_vec()));
     info.set(PartTableTag::MagicOffset(lssz));
     if !partitions.is_empty() {
-        info.set(PartTableTag::Partions(partitions));
+        info.set(PartTableTag::Partitions(partitions));
     }
 
     return Ok(info);

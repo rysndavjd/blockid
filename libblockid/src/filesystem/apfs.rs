@@ -11,7 +11,6 @@ use crate::{
     io::{BlockIo, Reader},
     probe::{Id, Magic, ProbeFlags, Usage},
     std::{fmt, mem::offset_of},
-    util::fletcher64,
 };
 
 #[derive(Debug, Clone)]
@@ -80,6 +79,28 @@ impl ApfsSuperBlock {
     const CONTAINER_SUPERBLOCK_TYPE: u16 = 1;
     const CONTAINER_SUPERBLOCK_SUBTYPE: u16 = 0;
     const STANDARD_BLOCK_SIZE: u32 = 4096;
+}
+
+fn fletcher64(buf: &[u8]) -> u64 {
+    let mut lo32: u64 = 0;
+    let mut hi32: u64 = 0;
+
+    for i in 0..(buf.len() / 4) {
+        let offset = i * 4;
+        let word = u32::from_le_bytes([
+            buf[offset],
+            buf[offset + 1],
+            buf[offset + 2],
+            buf[offset + 3],
+        ]) as u64;
+        lo32 = lo32.wrapping_add(word);
+        hi32 = hi32.wrapping_add(lo32);
+    }
+
+    let csum_lo = !((lo32.wrapping_add(hi32)) % 0xFFFFFFFF) as u32;
+    let csum_hi = !((lo32.wrapping_add(csum_lo as u64)) % 0xFFFFFFFF) as u32;
+
+    return ((csum_hi as u64) << 32) | (csum_lo as u64);
 }
 
 pub fn probe_apfs<IO: BlockIo>(

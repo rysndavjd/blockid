@@ -6,9 +6,9 @@ use zerocopy::{
 };
 
 use crate::{
-    BlockTag, BlockType, Id, ProbeFlags, Usage,
+    Id, ProbeFlags, Usage,
     error::Error,
-    filesystem::BlockInfo,
+    filesystem::{BlockInfo, BlockTag, BlockType},
     io::{BlockIo, Reader},
     probe::Magic,
     std::{fmt, mem::offset_of, str::Utf8Error},

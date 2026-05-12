@@ -21,6 +21,7 @@ mod unix_path {
     use core::ops::Deref;
 
     #[repr(transparent)]
+    #[derive(Debug)]
     pub struct Path {
         inner: [u8],
     }
@@ -71,6 +72,7 @@ mod unix_path {
         }
     }
 
+    #[derive(Debug)]
     pub struct PathBuf {
         inner: Vec<u8>,
     }

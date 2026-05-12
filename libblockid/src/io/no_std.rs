@@ -2,11 +2,11 @@ pub use embedded_io::SeekFrom;
 use embedded_io::{Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek};
 use rustix::{
     fd::{AsFd, BorrowedFd, OwnedFd},
-    fs::{Mode, OFlags, SeekFrom as RustixSeekFrom, open, seek},
+    fs::{SeekFrom as RustixSeekFrom, seek},
     io::{Errno, read},
 };
 
-use crate::io::{BlockIo, block::Io, path::SysPath};
+use crate::io::BlockIo;
 
 #[derive(Debug)]
 pub struct Error(Errno);
@@ -94,14 +94,6 @@ impl EmbeddedError for Error {
 #[derive(Debug)]
 pub struct File {
     inner: OwnedFd,
-}
-
-impl File {
-    pub fn open<P: SysPath>(path: P) -> Result<File, Error> {
-        let fd = open(path.as_ref().as_bytes(), OFlags::RDONLY, Mode::empty())?;
-
-        Ok(Self { inner: fd })
-    }
 }
 
 impl EmbeddedErrorType for File {

@@ -6,6 +6,7 @@ pub use embedded_io::SeekFrom;
 
 use crate::error::Error;
 
+/// Internal trait used for reading block devices.
 pub trait Io: crate::std::fmt::Debug {
     type Error: crate::std::fmt::Debug;
 

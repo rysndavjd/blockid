@@ -1,6 +1,6 @@
-pub mod aix;
-pub mod gpt;
-pub mod mbr;
+pub(crate) mod aix;
+pub(crate) mod gpt;
+pub(crate) mod mbr;
 
 use bitflags::bitflags;
 use uuid::Uuid;
@@ -25,7 +25,7 @@ pub const PT_DETECT_ORDER: &[(PTFilter, PTType)] = &[
 
 /// A generic handler for probing a partition table type.
 #[derive(Debug, Copy, Clone, Hash)]
-pub struct PtHandler<IO: BlockIo> {
+pub(crate) struct PtHandler<IO: BlockIo> {
     /// Minimum disk size in bytes required for partition table, if any.
     pub minsz: Option<u64>,
     /// Minimum disk size in bytes required for this partition table, if any.
@@ -120,7 +120,7 @@ pub enum PartTableTag {
     PtSize(u64),
     Magic(Vec<u8>),
     MagicOffset(u64),
-    Partions(Vec<Partition>),
+    Partitions(Vec<Partition>),
 }
 
 #[derive(Debug)]
@@ -133,8 +133,8 @@ impl PartTableInfo {
         PartTableInfo { tags: Vec::new() }
     }
 
-    pub fn inner(&self) -> &Vec<PartTableTag> {
-        &self.tags
+    pub fn inner(&self) -> &[PartTableTag] {
+        self.tags.as_slice()
     }
 
     pub fn into_inner(self) -> Vec<PartTableTag> {
@@ -166,9 +166,9 @@ impl PartTableInfo {
         })
     }
 
-    pub fn magic(&self) -> Option<&Vec<u8>> {
+    pub fn magic(&self) -> Option<&[u8]> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::Magic(t) => Some(t),
+            PartTableTag::Magic(t) => Some(t.as_slice()),
             _ => None,
         })
     }
@@ -180,9 +180,9 @@ impl PartTableInfo {
         })
     }
 
-    pub fn partitions(&self) -> Option<&Vec<Partition>> {
+    pub fn partitions(&self) -> Option<&[Partition]> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::Partions(t) => Some(t),
+            PartTableTag::Partitions(t) => Some(t.as_slice()),
             _ => None,
         })
     }

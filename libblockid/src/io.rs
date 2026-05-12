@@ -8,13 +8,18 @@ mod path;
 #[cfg(feature = "std")]
 mod std;
 
-#[cfg(feature = "no_std")]
+#[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
 pub use embedded_io::SeekFrom;
 
-#[cfg(all(feature = "os_calls", feature = "no_std"))]
-pub use crate::io::no_std::{Error as IoError, File};
-#[cfg(feature = "std")]
+#[cfg(all(not(feature = "os_calls"), feature = "std"))]
+pub use crate::io::std::SeekFrom;
+#[cfg(all(feature = "os_calls", feature = "std"))]
 pub use crate::io::std::{File, IoError, SeekFrom};
+#[cfg(all(feature = "os_calls", feature = "no_std"))]
+pub use crate::io::{
+    no_std::{Error as IoError, File, SeekFrom},
+    path::{PathBuf, SysPath},
+};
 use crate::{error::Error, probe::Magic};
 
 /// Trait used to get access to underlying device.
@@ -29,11 +34,13 @@ pub trait BlockIo: crate::io::ioctl::Ioctl {}
 #[derive(Debug)]
 pub struct Reader<IO: BlockIo>(IO);
 
+#[allow(dead_code)]
 impl<IO: BlockIo> Reader<IO> {
     pub fn new(reader: IO) -> Self {
         Self(reader)
     }
 
+    #[inline]
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error<IO::Error>> {
         self.0.read(buf)
     }
@@ -44,10 +51,12 @@ impl<IO: BlockIo> Reader<IO> {
         Ok(())
     }
 
+    #[inline]
     pub fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error<IO::Error>> {
         self.0.read_exact(buf)
     }
 
+    #[inline]
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64, Error<IO::Error>> {
         self.0.seek(pos)
     }
@@ -94,31 +103,37 @@ impl<IO: BlockIo> Reader<IO> {
     }
 
     #[cfg(feature = "os_calls")]
+    #[inline]
     pub fn device_size(&self) -> Result<u64, Error<IO::Error>> {
         self.0.device_size()
     }
 
     #[cfg(feature = "os_calls")]
+    #[inline]
     pub fn logical_sector_size(&self) -> Result<u64, Error<IO::Error>> {
         self.0.logical_sector_size()
     }
 
     #[cfg(feature = "os_calls")]
+    #[inline]
     pub fn physical_sector_size(&self) -> Result<u64, Error<IO::Error>> {
         self.0.physical_sector_size()
     }
 
     #[cfg(all(feature = "os_calls", any(target_os = "linux", target_os = "freebsd")))]
+    #[inline]
     pub fn minimum_io_size(&self) -> Result<u64, Error<IO::Error>> {
         self.0.minimum_io_size()
     }
 
     #[cfg(all(feature = "os_calls", target_os = "linux"))]
+    #[inline]
     pub fn optimal_io_size(&self) -> Result<u64, Error<IO::Error>> {
         self.0.optimal_io_size()
     }
 
     #[cfg(all(feature = "os_calls", any(target_os = "linux", target_os = "freebsd")))]
+    #[inline]
     pub fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<IO::Error>> {
         self.0.alignment_offset()
     }

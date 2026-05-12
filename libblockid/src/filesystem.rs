@@ -1,11 +1,11 @@
-pub mod apfs;
-pub mod exfat;
-pub mod ext;
-pub mod luks;
-pub mod ntfs;
-pub mod vfat;
-pub mod vxfs;
-pub mod xfs;
+pub(crate) mod apfs;
+pub(crate) mod exfat;
+pub(crate) mod ext;
+pub(crate) mod luks;
+pub(crate) mod ntfs;
+pub(crate) mod vfat;
+pub(crate) mod vxfs;
+pub(crate) mod xfs;
 
 use bitflags::bitflags;
 
@@ -50,7 +50,7 @@ pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
 
 /// A generic handler for probing a filesystem type.
 #[derive(Debug, Copy, Clone, Hash)]
-pub struct BlockHandler<IO: BlockIo> {
+pub(crate) struct BlockHandler<IO: BlockIo> {
     /// Minimum disk size in bytes required for filesystem, if any.
     pub minsz: Option<u64>,
     /// Minimum disk size in bytes required for this filesystem, if any.
@@ -215,7 +215,7 @@ impl BlockInfo {
         BlockInfo { tags: Vec::new() }
     }
 
-    pub fn inner(&self) -> &Vec<BlockTag> {
+    pub fn inner(&self) -> &[BlockTag] {
         &self.tags
     }
 
@@ -290,9 +290,9 @@ impl BlockInfo {
         })
     }
 
-    pub fn magic(&self) -> Option<&Vec<u8>> {
+    pub fn magic(&self) -> Option<&[u8]> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Magic(t) => Some(t),
+            BlockTag::Magic(t) => Some(t.as_slice()),
             _ => None,
         })
     }

@@ -10,25 +10,35 @@ use crate::{
     io::{File, block::Io},
 };
 
+/// Block devices IO alignment.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum AlignmentOffset {
+    /// The device is misaligned.
     Misaligned,
+    /// The alignment offset in bytes.
     Offset(u64),
 }
 
+/// Trait used to get topology infomation.
 pub trait Ioctl: Io {
+    /// Devices size in bytes.
     fn device_size(&self) -> Result<u64, Error<Self::Error>>;
 
+    /// Logical sector size in bytes.
     fn logical_sector_size(&self) -> Result<u64, Error<Self::Error>>;
 
+    /// Physical sector size in bytes.
     fn physical_sector_size(&self) -> Result<u64, Error<Self::Error>>;
 
+    /// Minimum IO size in bytes.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn minimum_io_size(&self) -> Result<u64, Error<Self::Error>>;
 
+    /// Optimal IO size in bytes.
     #[cfg(target_os = "linux")]
     fn optimal_io_size(&self) -> Result<u64, Error<Self::Error>>;
 
+    /// Alignment offset in bytes.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>>;
 }
