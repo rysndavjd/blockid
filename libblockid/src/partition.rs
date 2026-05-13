@@ -59,7 +59,6 @@ impl PTType {
                 magics: GPT_MAGICS,
                 probe: probe_gpt,
             },
-            _ => todo!(),
         }
     }
 }

@@ -164,6 +164,7 @@ pub struct GptEntry {
 }
 
 impl GptTable {
+    #[allow(dead_code)]
     /// The offset used that is read off the disk to find the GPT header and its block size.
     const GPT_DETECT_OFFSET: usize = 16384;
     const SIGNATURE: u64 = 0x5452415020494645;

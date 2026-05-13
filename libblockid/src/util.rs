@@ -53,9 +53,12 @@ pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, Utf8Error> {
         .to_string());
 }
 
+#[cfg(feature = "os_calls")]
 pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, Error<crate::io::IoError>> {
     #[cfg(target_os = "linux")]
-    {}
+    {
+        todo!()
+    }
 
     #[cfg(target_os = "macos")]
     {
@@ -73,5 +76,10 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, Error<crate:
         return Ok(PathBuf::from(decode_utf8_lossy_from(&buf)));
         #[cfg(feature = "no_std")]
         return Ok(PathBuf::from(buf.as_slice()));
+    }
+
+    #[cfg(target_os = "freebsd")]
+    {
+        todo!()
     }
 }

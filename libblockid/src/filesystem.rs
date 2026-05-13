@@ -149,7 +149,6 @@ impl BlockType {
                 magics: XFS_MAGICS,
                 probe: probe_xfs,
             },
-            _ => todo!(),
         }
     }
 }

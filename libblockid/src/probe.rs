@@ -129,10 +129,23 @@ fn probe_block<IO: BlockIo>(
         let handle = block.1.block_handler();
 
         #[cfg(feature = "os_calls")]
-        if let Some(minsz) = handle.minsz
-            && reader.device_size()? < minsz
         {
-            continue;
+            if let Some(minsz) = handle.minsz
+                && reader.device_size()? < minsz
+            {
+                continue;
+            }
+        }
+
+        #[cfg(not(feature = "os_calls"))]
+        {
+            use crate::io::SeekFrom;
+
+            if let Some(minsz) = handle.minsz
+                && reader.seek(SeekFrom::End(0))? < minsz
+            {
+                continue;
+            }
         }
 
         let magic = match handle.magics {
@@ -164,10 +177,23 @@ fn search_for_block<IO: BlockIo>(
     let handle = block.block_handler::<IO>();
 
     #[cfg(feature = "os_calls")]
-    if let Some(minsz) = handle.minsz
-        && reader.device_size()? < minsz
     {
-        return Err(Error::DeviceTooSmall);
+        if let Some(minsz) = handle.minsz
+            && reader.device_size()? < minsz
+        {
+            return Err(Error::DeviceTooSmall);
+        }
+    }
+
+    #[cfg(not(feature = "os_calls"))]
+    {
+        use crate::io::SeekFrom;
+
+        if let Some(minsz) = handle.minsz
+            && reader.seek(SeekFrom::End(0))? < minsz
+        {
+            return Err(Error::DeviceTooSmall);
+        }
     }
 
     let magic = match handle.magics {
@@ -195,10 +221,23 @@ fn probe_part_table<IO: BlockIo>(
         let handle = block.1.pt_handler();
 
         #[cfg(feature = "os_calls")]
-        if let Some(minsz) = handle.minsz
-            && reader.device_size()? < minsz
         {
-            continue;
+            if let Some(minsz) = handle.minsz
+                && reader.device_size()? < minsz
+            {
+                continue;
+            }
+        }
+
+        #[cfg(not(feature = "os_calls"))]
+        {
+            use crate::io::SeekFrom;
+
+            if let Some(minsz) = handle.minsz
+                && reader.seek(SeekFrom::End(0))? < minsz
+            {
+                continue;
+            }
         }
 
         let magic = match handle.magics {
@@ -230,10 +269,23 @@ fn search_for_part_table<IO: BlockIo>(
     let handle = part_table.pt_handler::<IO>();
 
     #[cfg(feature = "os_calls")]
-    if let Some(minsz) = handle.minsz
-        && reader.device_size()? < minsz
     {
-        return Err(Error::DeviceTooSmall);
+        if let Some(minsz) = handle.minsz
+            && reader.device_size()? < minsz
+        {
+            return Err(Error::DeviceTooSmall);
+        }
+    }
+
+    #[cfg(not(feature = "os_calls"))]
+    {
+        use crate::io::SeekFrom;
+
+        if let Some(minsz) = handle.minsz
+            && reader.seek(SeekFrom::End(0))? < minsz
+        {
+            return Err(Error::DeviceTooSmall);
+        }
     }
 
     let magic = match handle.magics {
