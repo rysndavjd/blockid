@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::{ArgAction, Parser};
-use libblockid::{Probe, ProbeFlags, fd_to_path, filesystem::BlockFilter, partition::PTFilter};
+use libblockid::{Probe, ProbeFlags, filesystem::BlockFilter, partition::PTFilter};
 use rustix::fd::{FromRawFd, OwnedFd};
 use shadow_rs::{Format, shadow};
 
@@ -28,13 +28,13 @@ fn main() {
 
     let file = File::open("/dev/disk0").unwrap();
 
-    let p = fd_to_path(file.as_fd());
+    // let p = fd_to_path(file.as_fd());
 
-    println!("{:?}", p);
+    // println!("{:?}", p);
 
-    let mut t = Probe::new(file.into(), ProbeFlags::empty(), 0).unwrap();
+    let mut t = Probe::new(file, ProbeFlags::empty(), 0);
 
-    let info = t.probe_part_table(PTFilter::empty());
+    let info = t.search_for_part_table(libblockid::partition::PTType::Gpt);
 
     println!("{:?}", info);
 }

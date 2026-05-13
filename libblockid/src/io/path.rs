@@ -1,17 +1,6 @@
-// #[cfg(feature = "std")]
-// pub trait SysPath: AsRef<std::path::Path> {}
-
-// #[cfg(feature = "std")]
-// impl<T: AsRef<std::path::Path>> SysPath for T {}
-
 #[cfg(feature = "std")]
 pub use std::path::{Path, PathBuf};
 
-// #[cfg(feature = "no_std")]
-// pub trait SysPath: AsRef<Path> {}
-
-// #[cfg(feature = "no_std")]
-// impl<T: AsRef<Path>> SysPath for T {}
 #[cfg(feature = "no_std")]
 pub use no_std::{Path, PathBuf};
 
@@ -20,8 +9,12 @@ mod no_std {
     use alloc::borrow::Borrow;
     use core::ops::Deref;
 
-    #[repr(transparent)]
+    /// A slice of a path, similar to [`str`] but for `no_std`.
+    ///
+    /// Unlike [`std::path::Path`], this type treats paths as raw byte,
+    /// allowing arbitrary bytes as found in UNIX paths.
     #[derive(Debug)]
+    #[repr(transparent)]
     pub struct Path {
         inner: [u8],
     }
@@ -31,14 +24,17 @@ mod no_std {
             unsafe { &*(s.as_ref() as *const [u8] as *const Path) }
         }
 
+        /// Returns the path as a raw byte slice.
         pub fn as_bytes(&self) -> &[u8] {
             &self.inner
         }
 
+        /// Returns the path as a mutable raw byte slice.
         pub fn as_mut_bytes(&mut self) -> &mut [u8] {
             &mut self.inner
         }
 
+        /// Converts this [`Path`] to an owned [`PathBuf`].
         pub fn to_path_buf(&self) -> PathBuf {
             PathBuf::from(self.inner.to_vec())
         }
@@ -72,26 +68,41 @@ mod no_std {
         }
     }
 
+    /// An owned, heap allocated path, similar to [`String`] but for raw byte paths.
+    ///
+    /// [`PathBuf`] is the owned counterpart to [`Path`]. It stores the path as a
+    /// [`Vec<u8>`] and can be dereferenced to a `&Path`.
     #[derive(Debug)]
+    #[repr(transparent)]
     pub struct PathBuf {
         inner: Vec<u8>,
     }
 
     impl PathBuf {
+        /// Creates an empty `PathBuf`.
         pub fn new() -> PathBuf {
             PathBuf { inner: Vec::new() }
         }
 
+        /// Consumes the [`PathBuf`] and returns the underlying [`Vec<u8>`].
         pub fn into_inner(self) -> Vec<u8> {
             self.inner
         }
 
+        /// Returns the path as a raw byte slice.
         pub fn as_bytes(&self) -> &[u8] {
             &self.inner
         }
 
+        /// Returns the path as a mutable raw byte slice.
         pub fn as_mut_bytes(&mut self) -> &mut [u8] {
             &mut self.inner
+        }
+    }
+
+    impl Default for PathBuf {
+        fn default() -> Self {
+            Self::new()
         }
     }
 

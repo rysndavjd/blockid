@@ -1,6 +1,6 @@
 use widestring::{error::Utf16Error, utfstring::Utf16String};
 
-use crate::{error::Error, io::PathBuf, probe::Endianness, std::str::Utf8Error};
+use crate::{probe::Endianness, std::str::Utf8Error};
 
 pub fn decode_utf16_lossy_from(bytes: &[u8], endian: Endianness) -> Utf16String {
     let data: Vec<u16> = bytes
@@ -53,8 +53,11 @@ pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, Utf8Error> {
         .to_string());
 }
 
+/// Gets the path of a file descriptor returning a [`PathBuf`]
 #[cfg(feature = "os_calls")]
-pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, Error<crate::io::IoError>> {
+pub fn fd_to_path<F: rustix::fd::AsRawFd>(
+    fd: F,
+) -> Result<crate::io::PathBuf, crate::error::Error<crate::io::IoError>> {
     #[cfg(target_os = "linux")]
     {
         todo!()
@@ -73,9 +76,9 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, Error<crate:
         }
 
         #[cfg(feature = "std")]
-        return Ok(PathBuf::from(decode_utf8_lossy_from(&buf)));
+        return Ok(crate::io::PathBuf::from(decode_utf8_lossy_from(&buf)));
         #[cfg(feature = "no_std")]
-        return Ok(PathBuf::from(buf.as_slice()));
+        return Ok(crate::io::PathBuf::from(buf.as_slice()));
     }
 
     #[cfg(target_os = "freebsd")]

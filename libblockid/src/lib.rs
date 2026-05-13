@@ -15,12 +15,11 @@ pub mod partition;
 mod probe;
 mod util;
 
+#[cfg(feature = "no_std")]
+pub use crate::io::path::{Path, PathBuf};
+pub use crate::probe::{Endianness, Id, Probe, ProbeFlags, Usage};
 #[cfg(feature = "os_calls")]
-pub use crate::io::ioctl::AlignmentOffset;
-pub use crate::{
-    probe::{Endianness, Id, Probe, ProbeFlags, Usage},
-    util::fd_to_path,
-};
+pub use crate::{io::ioctl::AlignmentOffset, util::fd_to_path};
 
 #[cfg(all(feature = "std", feature = "no_std"))]
 compile_error!("`std` and `no_std` are mutually exclusive");

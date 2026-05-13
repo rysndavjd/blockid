@@ -4,7 +4,7 @@ pub mod ioctl;
 #[cfg(all(feature = "os_calls", feature = "no_std"))]
 mod no_std;
 #[cfg(feature = "no_std")]
-mod path;
+pub mod path;
 #[cfg(feature = "std")]
 mod std;
 

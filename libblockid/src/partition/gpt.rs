@@ -289,32 +289,15 @@ pub fn probe_gpt<IO: BlockIo>(
             return Err(GptError::InvalidHeaderSize.into());
         }
 
-        let stored_crc = u32::from(header.header_crc32);
+        let header_crc = u32::from(header.header_crc32);
 
         let mut hdr = header.as_bytes().to_vec();
         hdr[offset_of!(GptTable, header_crc32)..offset_of!(GptTable, header_crc32) + 4].fill(0);
 
-        #[cfg(feature = "std")]
-        {
-            let calc_crc = crc_fast::crc32_iso_hdlc(&hdr);
+        let header_calc_crc = Crc::<u32>::new(&CRC_32_ISO_HDLC).checksum(&hdr);
 
-            if stored_crc != calc_crc {
-                return Err(GptError::InvalidHeaderChecksum.into());
-            };
-        }
-
-        #[cfg(feature = "no_std")]
-        {
-            use crc::{CRC_32_ISO_HDLC, Crc};
-
-            let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
-            let mut digest = crc.digest();
-
-            digest.update(&hdr);
-
-            if stored_crc != digest.finalize() {
-                return Err(GptError::InvalidGptEntriesChecksum.into());
-            }
+        if header_crc != header_calc_crc {
+            return Err(GptError::InvalidHeaderChecksum.into());
         }
 
         if u64::from(header.my_lba) != GptTable::FIRST_LBA {
@@ -345,27 +328,10 @@ pub fn probe_gpt<IO: BlockIo>(
             entries_sz as usize,
         )?;
 
-        #[cfg(feature = "std")]
-        {
-            let calc_crc = crc_fast::crc32_iso_hdlc(&entries_buf);
+        let entries_calc_crc = Crc::<u32>::new(&CRC_32_ISO_HDLC).checksum(&entries_buf);
 
-            if calc_crc != u32::from(header.partition_entry_array_crc32) {
-                return Err(GptError::InvalidGptEntriesChecksum.into());
-            }
-        }
-
-        #[cfg(feature = "no_std")]
-        {
-            use crc::{CRC_32_ISO_HDLC, Crc};
-
-            let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
-            let mut digest = crc.digest();
-
-            digest.update(&entries_buf);
-
-            if u32::from(header.partition_entry_array_crc32) != digest.finalize() {
-                return Err(GptError::InvalidGptEntriesChecksum.into());
-            }
+        if u32::from(header.partition_entry_array_crc32) != entries_calc_crc {
+            return Err(GptError::InvalidGptEntriesChecksum.into());
         }
 
         (*header, entries_buf, lssz as u64)
