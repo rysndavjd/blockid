@@ -1,4 +1,5 @@
 #![allow(clippy::needless_return)]
+#![feature(doc_cfg)]
 
 #[cfg(any(feature = "std", test))]
 extern crate std;
@@ -16,9 +17,11 @@ mod probe;
 mod util;
 
 #[cfg(feature = "no_std")]
+#[doc(cfg(feature = "no_std"))]
 pub use crate::io::path::{Path, PathBuf};
 pub use crate::probe::{Endianness, Id, Probe, ProbeFlags, Usage};
 #[cfg(feature = "os_calls")]
+#[doc(cfg(feature = "os_calls"))]
 pub use crate::{io::ioctl::AlignmentOffset, util::fd_to_path};
 
 #[cfg(all(feature = "std", feature = "no_std"))]

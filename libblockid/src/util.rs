@@ -53,20 +53,51 @@ pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, Utf8Error> {
         .to_string());
 }
 
-/// Gets the path of a file descriptor returning a [`PathBuf`]
+/// Gets the path of a file descriptor, returning a [`PathBuf`](crate::io::PathBuf).
+///
+/// # Platform-specific behavior
+///
+/// ## Linux
+/// Uses the `/proc` filesystem via `/proc/self/fd/<fd>`, reading the symlink target.
+///
+/// ## macOS
+/// Uses [`fcntl`] with `F_GETPATH` to retrieve the path.
+///
+/// ## FreeBSD
+/// TODO!.
+///
+/// # `std`
+/// The path bytes are decoded into a UTF-8 [`String`] lossily before assembling the
+/// standard library [`PathBuf`](https://doc.rust-lang.org/std/path/struct.PathBuf.html).
+///
+/// # `no_std`
+/// The raw bytes are used as is to assemble the crate wrapper type `PathBuf`.
+///
+/// [`fcntl`]: https://docs.rs/libc/latest/libc/fn.fcntl.html
 #[cfg(feature = "os_calls")]
 pub fn fd_to_path<F: rustix::fd::AsRawFd>(
     fd: F,
 ) -> Result<crate::io::PathBuf, crate::error::Error<crate::io::IoError>> {
     #[cfg(target_os = "linux")]
     {
-        todo!()
+        use rustix::fs::readlink;
+
+        use crate::io::PathBuf;
+
+        let link = readlink(format!("/proc/self/fd/{}", fd.as_raw_fd()), Vec::new())?;
+
+        #[cfg(feature = "std")]
+        return Ok(PathBuf::from(link.to_string_lossy().to_string()));
+        #[cfg(feature = "no_std")]
+        return Ok(PathBuf::from(link.as_bytes()));
     }
 
     #[cfg(target_os = "macos")]
     {
         use libc::{__error, F_GETPATH, PATH_MAX, fcntl};
         use rustix::io::Errno;
+
+        use crate::io::PathBuf;
 
         let mut buf = [0u8; PATH_MAX as usize];
         let ret = unsafe { fcntl(fd.as_raw_fd(), F_GETPATH, buf.as_mut_ptr()) };
@@ -76,9 +107,9 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(
         }
 
         #[cfg(feature = "std")]
-        return Ok(crate::io::PathBuf::from(decode_utf8_lossy_from(&buf)));
+        return Ok(PathBuf::from(decode_utf8_lossy_from(&buf)));
         #[cfg(feature = "no_std")]
-        return Ok(crate::io::PathBuf::from(buf.as_slice()));
+        return Ok(PathBuf::from(buf.as_slice()));
     }
 
     #[cfg(target_os = "freebsd")]

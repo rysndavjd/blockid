@@ -256,6 +256,7 @@ fn search_for_part_table<IO: BlockIo>(
 }
 
 #[cfg(not(feature = "os_calls"))]
+#[doc(cfg(not(feature = "os_calls")))]
 #[derive(Debug)]
 pub struct Probe<IO: BlockIo> {
     reader: Reader<IO>,
@@ -264,6 +265,7 @@ pub struct Probe<IO: BlockIo> {
 }
 
 #[cfg(not(feature = "os_calls"))]
+#[doc(cfg(not(feature = "os_calls")))]
 impl<IO: BlockIo> Probe<IO> {
     pub fn new(reader: IO, flags: ProbeFlags, offset: u64) -> Probe<IO> {
         Probe {
@@ -301,6 +303,7 @@ impl<IO: BlockIo> Probe<IO> {
 }
 
 #[cfg(feature = "os_calls")]
+#[doc(cfg(feature = "os_calls"))]
 #[derive(Debug)]
 pub struct Probe {
     reader: Reader<crate::io::File>,
@@ -309,8 +312,10 @@ pub struct Probe {
 }
 
 #[cfg(feature = "os_calls")]
+#[doc(cfg(feature = "os_calls"))]
 impl Probe {
     #[cfg(feature = "std")]
+    #[doc(cfg(feature = "std"))]
     pub fn new(
         file: crate::io::File,
         flags: ProbeFlags,
@@ -324,6 +329,7 @@ impl Probe {
     }
 
     #[cfg(feature = "std")]
+    #[doc(cfg(feature = "std"))]
     pub fn open<P: AsRef<std::path::Path>>(
         path: P,
         flags: ProbeFlags,
@@ -339,6 +345,7 @@ impl Probe {
     }
 
     #[cfg(feature = "no_std")]
+    #[doc(cfg(feature = "no_std"))]
     pub fn new(
         fd: rustix::fd::OwnedFd,
         flags: ProbeFlags,
@@ -352,6 +359,7 @@ impl Probe {
     }
 
     #[cfg(feature = "no_std")]
+    #[doc(cfg(feature = "no_std"))]
     pub fn open<P: rustix::path::Arg>(
         path: P,
         flags: ProbeFlags,
@@ -383,18 +391,21 @@ impl Probe {
 
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[doc(cfg(any(target_os = "linux", target_os = "freebsd")))]
     pub fn minimum_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
         self.reader.minimum_io_size()
     }
 
     #[inline]
     #[cfg(target_os = "linux")]
+    #[doc(cfg(target_os = "linux"))]
     pub fn optimal_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
         self.reader.optimal_io_size()
     }
 
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[doc(cfg(any(target_os = "linux", target_os = "freebsd")))]
     pub fn alignment_offset(
         &self,
     ) -> Result<crate::io::ioctl::AlignmentOffset, Error<crate::io::IoError>> {

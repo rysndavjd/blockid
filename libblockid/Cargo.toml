@@ -43,7 +43,7 @@ rustix = { version = "1.1.4", default-features = false, features = [
 libc = { version = "0.2.186", default-features = false }
 
 [features]
-default = ["std"]
+default = ["std", "os_calls"]
 std = [
     "zerocopy/std",
     "bitflags/std",

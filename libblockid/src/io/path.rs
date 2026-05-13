@@ -5,14 +5,17 @@ pub use std::path::{Path, PathBuf};
 pub use no_std::{Path, PathBuf};
 
 #[cfg(feature = "no_std")]
-mod no_std {
+pub mod no_std {
     use alloc::borrow::Borrow;
     use core::ops::Deref;
 
-    /// A slice of a path, similar to [`str`] but for `no_std`.
+    /// A slice of a path, similar to [`Path`] but for `no_std`.
     ///
-    /// Unlike [`std::path::Path`], this type treats paths as raw byte,
+    /// This is used as a wrapper for `no_std` environments as
+    /// unlike [`Path`], this type treats paths as raw bytes,
     /// allowing arbitrary bytes as found in UNIX paths.
+    ///
+    /// [`Path`]: https://doc.rust-lang.org/std/path/struct.Path.html
     #[derive(Debug)]
     #[repr(transparent)]
     pub struct Path {
@@ -70,8 +73,7 @@ mod no_std {
 
     /// An owned, heap allocated path, similar to [`String`] but for raw byte paths.
     ///
-    /// [`PathBuf`] is the owned counterpart to [`Path`]. It stores the path as a
-    /// [`Vec<u8>`] and can be dereferenced to a `&Path`.
+    /// [`PathBuf`] is the owned counterpart to [`Path`].
     #[derive(Debug)]
     #[repr(transparent)]
     pub struct PathBuf {

@@ -9,7 +9,7 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{exfat::probe_is_exfat, vfat::probe_is_vfat},
+    filesystem::{exfat::probe_is_exfat, ntfs::probe_is_ntfs, vfat::probe_is_vfat},
     io::{BlockIo, Reader},
     partition::{PartTableInfo, aix::AIX_MAGIC},
     probe::{Magic, ProbeFlags},
@@ -254,13 +254,13 @@ fn is_valid_mbr<IO: BlockIo>(
         return Err(MbrError::ProbablyVFAT.into());
     }
 
-    if probe_is_exfat(reader, offset).is_ok() {
+    if probe_is_exfat(reader, offset)? {
         return Err(MbrError::ProbablyEXFAT.into());
     }
 
-    // if probe_is_ntfs(probe).is_ok() {
-    //     return Err(MbrError::ProbablyNTFS);
-    // }
+    if probe_is_ntfs(reader, offset)? {
+        return Err(MbrError::ProbablyNTFS.into());
+    }
 
     // TODO - is_lvm(pr) && is_empty_mbr(data)
 
