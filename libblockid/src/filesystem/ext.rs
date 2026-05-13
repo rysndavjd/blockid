@@ -1,4 +1,5 @@
 use bitflags::bitflags;
+use crc::{Algorithm, Crc};
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
@@ -358,44 +359,22 @@ fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
     let ro_compat = es.feature_rocompat();
 
     if ro_compat.contains(ExtFeatureRoCompat::METADATA_CSUM) {
-        #[cfg(feature = "std")]
-        {
-            use crc_fast::{CrcParams, checksum_with_params};
+        const EXT_CRC: Algorithm<u32> = Algorithm {
+            width: 32,
+            poly: 0x1edc6f41,
+            init: 0xffffffff,
+            refin: true,
+            refout: true,
+            xorout: 0,
+            check: 0xe3069283,
+            residue: 0xb798b438,
+        };
 
-            let crc32c = CrcParams::new("EXT_CRC", 32, 0x1EDC6F41, 0xffffffff, true, 0, 0xe3069283);
+        let calc_sum = Crc::<u32>::new(&EXT_CRC)
+            .checksum(&es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
 
-            let calc_sum = checksum_with_params(
-                crc32c,
-                &es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)],
-            );
-            let sum = u64::from(es.s_checksum);
-
-            if sum != calc_sum {
-                return Err(ExtError::HeaderChecksumInvalid);
-            };
-        }
-
-        #[cfg(not(feature = "std"))]
-        {
-            use crc::{Algorithm, Crc};
-
-            const EXT_CRC: Algorithm<u32> = Algorithm {
-                width: 32,
-                poly: 0x1edc6f41,
-                init: 0xffffffff,
-                refin: true,
-                refout: true,
-                xorout: 0,
-                check: 0xe3069283,
-                residue: 0xb798b438,
-            };
-
-            let crc = Crc::<u32>::new(&EXT_CRC);
-            let calc_sum = crc.checksum(&es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
-
-            if es.s_checksum.get() != calc_sum {
-                return Err(ExtError::HeaderChecksumInvalid);
-            }
+        if es.s_checksum.get() != calc_sum {
+            return Err(ExtError::HeaderChecksumInvalid);
         }
     } else if u32::from(es.s_log_block_size) >= 256 {
         return Err(ExtError::ProbablyLegacyExt);

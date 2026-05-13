@@ -1,3 +1,4 @@
+use crc::{CRC_32_ISCSI, Crc};
 use uuid::Uuid;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, Unaligned,
@@ -180,33 +181,13 @@ impl XfsSuperBlock {
                 return Err(XfsError::InvalidHeaderFeatures);
             };
 
-            #[cfg(feature = "std")]
-            {
-                use crc_fast::crc32_iscsi;
+            crc_area[offset_of!(XfsSuperBlock, crc)..offset_of!(XfsSuperBlock, spino_align)]
+                .fill(0);
 
-                crc_area[offset_of!(XfsSuperBlock, crc)..offset_of!(XfsSuperBlock, spino_align)]
-                    .fill(0);
+            let calc_sum = Crc::<u32>::new(&CRC_32_ISCSI).checksum(crc_area);
 
-                let calc_sum = crc32_iscsi(crc_area);
-
-                if self.crc.get() != calc_sum {
-                    return Err(XfsError::HeaderChecksumInvalid);
-                }
-            }
-
-            #[cfg(feature = "no_std")]
-            {
-                use crc::{CRC_32_ISCSI, Crc};
-
-                crc_area[offset_of!(XfsSuperBlock, crc)..offset_of!(XfsSuperBlock, spino_align)]
-                    .fill(0);
-
-                let crc = Crc::<u32>::new(&CRC_32_ISCSI);
-                let calc_sum = crc.checksum(crc_area);
-
-                if self.crc.get() != calc_sum {
-                    return Err(XfsError::HeaderChecksumInvalid);
-                }
+            if self.crc.get() != calc_sum {
+                return Err(XfsError::HeaderChecksumInvalid);
             }
         }
         return Ok(());
