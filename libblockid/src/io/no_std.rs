@@ -1,7 +1,7 @@
 pub use embedded_io::SeekFrom;
 use embedded_io::{Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek};
 use rustix::{
-    fd::{AsFd, BorrowedFd, OwnedFd},
+    fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd},
     fs::{SeekFrom as RustixSeekFrom, seek},
     io::{Errno, read},
 };
@@ -123,6 +123,12 @@ impl Seek for File {
 impl AsFd for File {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.inner.as_fd()
+    }
+}
+
+impl AsRawFd for File {
+    fn as_raw_fd(&self) -> RawFd {
+        self.inner.as_raw_fd()
     }
 }
 

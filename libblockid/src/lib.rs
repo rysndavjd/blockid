@@ -17,7 +17,10 @@ mod util;
 
 #[cfg(feature = "os_calls")]
 pub use crate::io::ioctl::AlignmentOffset;
-pub use crate::probe::{Endianness, Id, Probe, ProbeFlags, Usage};
+pub use crate::{
+    probe::{Endianness, Id, Probe, ProbeFlags, Usage},
+    util::fd_to_path,
+};
 
 #[cfg(all(feature = "std", feature = "no_std"))]
 compile_error!("`std` and `no_std` are mutually exclusive");

@@ -1,10 +1,12 @@
 pub use std::{
     fs::File,
-    io::{Error as IoError, SeekFrom, ErrorKind},
+    io::{Error as IoError, ErrorKind, SeekFrom},
+    path::PathBuf,
 };
+
 use rustix::io::Errno;
 
-use crate::{io::BlockIo, error::Error};
+use crate::{error::Error, io::BlockIo};
 
 impl BlockIo for File {}
 
@@ -27,8 +29,12 @@ impl From<Errno> for Error<IoError> {
             Errno::ADDRNOTAVAIL => IoError::from(ErrorKind::AddrNotAvailable).into(),
             Errno::PIPE | Errno::NOLINK => IoError::from(ErrorKind::BrokenPipe).into(),
             Errno::EXIST => IoError::from(ErrorKind::AlreadyExists).into(),
-            Errno::INVAL | Errno::BADF | Errno::FAULT => IoError::from(ErrorKind::InvalidInput).into(),
-            Errno::ILSEQ | Errno::BADMSG | Errno::PROTO => IoError::from(ErrorKind::InvalidData).into(),
+            Errno::INVAL | Errno::BADF | Errno::FAULT => {
+                IoError::from(ErrorKind::InvalidInput).into()
+            }
+            Errno::ILSEQ | Errno::BADMSG | Errno::PROTO => {
+                IoError::from(ErrorKind::InvalidData).into()
+            }
             Errno::TIMEDOUT => IoError::from(ErrorKind::TimedOut).into(),
             Errno::INTR => IoError::from(ErrorKind::Interrupted).into(),
             Errno::NOSYS | Errno::NOTSUP => IoError::from(ErrorKind::Unsupported).into(),

@@ -14,7 +14,7 @@ pub use embedded_io::SeekFrom;
 #[cfg(all(not(feature = "os_calls"), feature = "std"))]
 pub use crate::io::std::SeekFrom;
 #[cfg(all(feature = "os_calls", feature = "std"))]
-pub use crate::io::std::{File, IoError, SeekFrom};
+pub use crate::io::std::{File, IoError, SeekFrom, PathBuf};
 #[cfg(all(feature = "os_calls", feature = "no_std"))]
 pub use crate::io::{
     no_std::{Error as IoError, File, SeekFrom},

@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::{ArgAction, Parser};
-use libblockid::{Probe, ProbeFlags, filesystem::BlockFilter, partition::PTFilter};
+use libblockid::{Probe, ProbeFlags, fd_to_path, filesystem::BlockFilter, partition::PTFilter};
 use rustix::fd::{FromRawFd, OwnedFd};
 use shadow_rs::{Format, shadow};
 
@@ -26,11 +26,15 @@ fn main() {
         build::print_build_in();
     }
 
-    // let file = File::open("/dev/sdb1").unwrap();
+    let file = File::open("/dev/disk0").unwrap();
 
-    let mut t = Probe::open("/dev/sdb1", ProbeFlags::empty(), 0).unwrap();
+    let p = fd_to_path(file.as_fd());
 
-    let info = t.probe_block(BlockFilter::empty());
+    println!("{:?}", p);
+
+    let mut t = Probe::new(file.into(), ProbeFlags::empty(), 0).unwrap();
+
+    let info = t.probe_part_table(PTFilter::empty());
 
     println!("{:?}", info);
 }

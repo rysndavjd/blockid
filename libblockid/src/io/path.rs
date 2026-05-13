@@ -1,23 +1,23 @@
-#[cfg(feature = "std")]
-pub trait SysPath: AsRef<std::path::Path> {}
+// #[cfg(feature = "std")]
+// pub trait SysPath: AsRef<std::path::Path> {}
 
-#[cfg(feature = "std")]
-impl<T: AsRef<std::path::Path>> SysPath for T {}
+// #[cfg(feature = "std")]
+// impl<T: AsRef<std::path::Path>> SysPath for T {}
 
 #[cfg(feature = "std")]
 pub use std::path::{Path, PathBuf};
 
-#[cfg(all(feature = "no_std", target_family = "unix"))]
-pub trait SysPath: AsRef<Path> {}
+// #[cfg(feature = "no_std")]
+// pub trait SysPath: AsRef<Path> {}
 
-#[cfg(all(feature = "no_std", target_family = "unix"))]
-impl<T: AsRef<Path>> SysPath for T {}
+// #[cfg(feature = "no_std")]
+// impl<T: AsRef<Path>> SysPath for T {}
+#[cfg(feature = "no_std")]
+pub use no_std::{Path, PathBuf};
 
-#[cfg(all(feature = "no_std", target_family = "unix"))]
-pub use unix_path::{Path, PathBuf};
-
-#[cfg(all(feature = "no_std", target_family = "unix"))]
-mod unix_path {
+#[cfg(feature = "no_std")]
+mod no_std {
+    use alloc::borrow::Borrow;
     use core::ops::Deref;
 
     #[repr(transparent)]
@@ -78,6 +78,14 @@ mod unix_path {
     }
 
     impl PathBuf {
+        pub fn new() -> PathBuf {
+            PathBuf { inner: Vec::new() }
+        }
+
+        pub fn into_inner(self) -> Vec<u8> {
+            self.inner
+        }
+
         pub fn as_bytes(&self) -> &[u8] {
             &self.inner
         }
@@ -101,14 +109,24 @@ mod unix_path {
         }
     }
 
-    impl alloc::borrow::Borrow<Path> for PathBuf {
+    impl From<&[u8]> for PathBuf {
+        fn from(buf: &[u8]) -> Self {
+            let null = buf.iter().position(|b| b == &0).unwrap_or(buf.len());
+
+            return PathBuf {
+                inner: buf[..null].to_vec(),
+            };
+        }
+    }
+
+    impl Borrow<Path> for PathBuf {
         #[inline]
         fn borrow(&self) -> &Path {
             self.deref()
         }
     }
 
-    impl core::ops::Deref for PathBuf {
+    impl Deref for PathBuf {
         type Target = Path;
         #[inline]
         fn deref(&self) -> &Path {

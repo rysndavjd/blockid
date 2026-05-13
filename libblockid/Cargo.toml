@@ -30,9 +30,20 @@ fat_volume_id = { version = "0.1.0", default-features = false, features = [
 embedded-io = { version = "0.7.1", default-features = false, features = [
     "alloc",
 ], optional = true }
-crc-fast = { version = "1.10.0", default-features = false, features = ["std"], optional = true }
+crc-fast = { version = "1.10.0", default-features = false, features = [
+    "std",
+], optional = true }
 crc = { version = "3.4.0", default-features = false, optional = true }
-rustix = { version = "1.1.4", default-features = false, features = ["stdio", "fs", "alloc"], optional = true }
+rustix = { version = "1.1.4", default-features = false, features = [
+    "stdio",
+    "fs",
+    "alloc",
+], optional = true }
+
+# For getting path from FD we use fcntl on macOS and FreeBSD and for Linux
+# we use `/proc/self/fd/<fd>`
+[target.'cfg(any(target_os = "macos", target_os = "freebsd"))'.dependencies]
+libc = { version = "0.2.186", default-features = false }
 
 [features]
 default = ["std", "os_calls"]
@@ -44,6 +55,7 @@ std = [
     "uuid/std",
     "dep:crc-fast",
     "rustix/std",
+    "libc/std",
 ]
 no_std = ["dep:embedded-io", "dep:crc"]
 os_calls = ["dep:rustix"]

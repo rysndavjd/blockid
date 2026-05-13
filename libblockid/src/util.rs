@@ -1,6 +1,6 @@
 use widestring::{error::Utf16Error, utfstring::Utf16String};
 
-use crate::{io::File, probe::Endianness, std::str::Utf8Error};
+use crate::{error::Error, io::PathBuf, probe::Endianness, std::str::Utf8Error};
 
 pub fn decode_utf16_lossy_from(bytes: &[u8], endian: Endianness) -> Utf16String {
     let data: Vec<u16> = bytes
@@ -53,6 +53,25 @@ pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, Utf8Error> {
         .to_string());
 }
 
-pub fn fd_to_path(file: File) {
-    todo!()
+pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, Error<crate::io::IoError>> {
+    #[cfg(target_os = "linux")]
+    {}
+
+    #[cfg(target_os = "macos")]
+    {
+        use libc::{__error, F_GETPATH, PATH_MAX, fcntl};
+        use rustix::io::Errno;
+
+        let mut buf = [0u8; PATH_MAX as usize];
+        let ret = unsafe { fcntl(fd.as_raw_fd(), F_GETPATH, buf.as_mut_ptr()) };
+
+        if ret == -1 {
+            return Err(Errno::from_raw_os_error(unsafe { *__error() }).into());
+        }
+
+        #[cfg(feature = "std")]
+        return Ok(PathBuf::from(decode_utf8_lossy_from(&buf)));
+        #[cfg(feature = "no_std")]
+        return Ok(PathBuf::from(buf.as_slice()));
+    }
 }
