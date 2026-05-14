@@ -1,5 +1,5 @@
 #![allow(clippy::needless_return)]
-#![feature(doc_cfg)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(any(feature = "std", test))]
 extern crate std;
@@ -17,12 +17,17 @@ mod probe;
 mod util;
 
 #[cfg(feature = "no_std")]
-#[doc(cfg(feature = "no_std"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
 pub use crate::io::path::{Path, PathBuf};
-pub use crate::probe::{Endianness, Id, Probe, ProbeFlags, Usage};
+pub use crate::probe::{Endianness, Id, ProbeFlags, Usage};
 #[cfg(feature = "os_calls")]
-#[doc(cfg(feature = "os_calls"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "os_calls")))]
 pub use crate::{io::ioctl::AlignmentOffset, util::fd_to_path};
+
+#[cfg(feature = "os_calls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "os_calls")))]
+pub type Probe = RawProbe<crate::io::File>;
+pub use crate::probe::RawProbe;
 
 #[cfg(all(feature = "std", feature = "no_std"))]
 compile_error!("`std` and `no_std` are mutually exclusive");

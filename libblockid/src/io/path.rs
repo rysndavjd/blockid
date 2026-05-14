@@ -71,7 +71,7 @@ pub mod no_std {
         }
     }
 
-    /// An owned, heap allocated path, similar to [`String`] but for raw byte paths.
+    /// An owned, heap allocated path.
     ///
     /// [`PathBuf`] is the owned counterpart to [`Path`].
     #[derive(Debug)]

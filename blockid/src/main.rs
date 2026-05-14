@@ -32,9 +32,9 @@ fn main() {
 
     println!("{:?}", p);
 
-    // let mut t = Probe::new(file.into(), ProbeFlags::empty(), 0).unwrap();
+    let mut t = Probe::from_file(file, ProbeFlags::empty(), 0).unwrap();
 
-    // let info = t.search_for_part_table(libblockid::partition::PTType::Gpt);
+    let info = t.search_for_part_table(libblockid::partition::PTType::Gpt);
 
-    // println!("{:?}", info);
+    println!("{:?}", info);
 }

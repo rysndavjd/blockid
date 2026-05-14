@@ -115,212 +115,214 @@ bitflags! {
     }
 }
 
-fn probe_block<IO: BlockIo>(
-    reader: &mut Reader<IO>,
-    flags: ProbeFlags,
-    offset: u64,
-    filter: BlockFilter,
-) -> Result<BlockInfo, Error<IO::Error>> {
-    for block in BLOCK_DETECT_ORDER {
-        if filter.contains(block.0) {
-            continue;
-        }
-
-        let handle = block.1.block_handler();
-
-        #[cfg(feature = "os_calls")]
-        {
-            if let Some(minsz) = handle.minsz
-                && reader.device_size()? < minsz
-            {
-                continue;
-            }
-        }
-
-        let magic = match handle.magics {
-            Some(magics) => match reader.get_magic(magics)? {
-                Some(magic) => magic,
-                None => continue,
-            },
-            None => Magic::EMPTY_MAGIC,
-        };
-
-        match (handle.probe)(reader, flags, offset, magic) {
-            Ok(t) => return Ok(t),
-            Err(e) => {
-                if let Error::Io(_) = e {
-                    return Err(e);
-                }
-            }
-        };
-    }
-    return Err(Error::ProbesExhausted);
-}
-
-fn search_for_block<IO: BlockIo>(
-    reader: &mut Reader<IO>,
-    flags: ProbeFlags,
-    offset: u64,
-    block: BlockType,
-) -> Result<BlockInfo, Error<IO::Error>> {
-    let handle = block.block_handler::<IO>();
-
-    #[cfg(feature = "os_calls")]
-    {
-        if let Some(minsz) = handle.minsz
-            && reader.device_size()? < minsz
-        {
-            return Err(Error::DeviceTooSmall);
-        }
-    }
-
-    let magic = match handle.magics {
-        Some(magics) => match reader.get_magic(magics)? {
-            Some(magic) => magic,
-            None => return Err(Error::UnableToLocateMagicSignature),
-        },
-        None => Magic::EMPTY_MAGIC,
-    };
-
-    (handle.probe)(reader, flags, offset, magic)
-}
-
-fn probe_part_table<IO: BlockIo>(
-    reader: &mut Reader<IO>,
-    flags: ProbeFlags,
-    offset: u64,
-    filter: PTFilter,
-) -> Result<PartTableInfo, Error<IO::Error>> {
-    for block in PT_DETECT_ORDER {
-        if filter.contains(block.0) {
-            continue;
-        }
-
-        let handle = block.1.pt_handler();
-
-        #[cfg(feature = "os_calls")]
-        {
-            if let Some(minsz) = handle.minsz
-                && reader.device_size()? < minsz
-            {
-                continue;
-            }
-        }
-
-        let magic = match handle.magics {
-            Some(magics) => match reader.get_magic(magics)? {
-                Some(magic) => magic,
-                None => continue,
-            },
-            None => Magic::EMPTY_MAGIC,
-        };
-
-        match (handle.probe)(reader, flags, offset, magic) {
-            Ok(t) => return Ok(t),
-            Err(e) => {
-                if let Error::Io(_) = e {
-                    return Err(e);
-                }
-            }
-        };
-    }
-    return Err(Error::ProbesExhausted);
-}
-
-fn search_for_part_table<IO: BlockIo>(
-    reader: &mut Reader<IO>,
-    flags: ProbeFlags,
-    offset: u64,
-    part_table: PTType,
-) -> Result<PartTableInfo, Error<IO::Error>> {
-    let handle = part_table.pt_handler::<IO>();
-
-    #[cfg(feature = "os_calls")]
-    {
-        if let Some(minsz) = handle.minsz
-            && reader.device_size()? < minsz
-        {
-            return Err(Error::DeviceTooSmall);
-        }
-    }
-
-    let magic = match handle.magics {
-        Some(magics) => match reader.get_magic(magics)? {
-            Some(magic) => magic,
-            None => return Err(Error::UnableToLocateMagicSignature),
-        },
-        None => Magic::EMPTY_MAGIC,
-    };
-
-    (handle.probe)(reader, flags, offset, magic)
-}
-
-#[cfg(not(feature = "os_calls"))]
-#[doc(cfg(not(feature = "os_calls")))]
+/// Probe for detecting filesystems and partition tables on a block device.
+///
+/// # Type Parameters
+///
+/// - `IO`: A concrete type that implements:
+///   - [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) +
+///     [`Seek`](https://doc.rust-lang.org/std/io/trait.Seek.html) from the
+///     [standard library](https://doc.rust-lang.org/std/index.html), or
+///   - [`Read`](https://docs.rs/embedded-io/latest/embedded_io/trait.Read.html) +
+///     [`Seek`](https://docs.rs/embedded-io/latest/embedded_io/trait.Seek.html) from
+///     [embedded-io](https://docs.rs/embedded-io/latest/embedded_io/index.html),
+///     depending on which feature is enabled.
 #[derive(Debug)]
-pub struct Probe<IO: BlockIo> {
+pub struct RawProbe<IO: BlockIo> {
     reader: Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
 }
 
-#[cfg(not(feature = "os_calls"))]
-#[doc(cfg(not(feature = "os_calls")))]
-impl<IO: BlockIo> Probe<IO> {
-    pub fn new(reader: IO, flags: ProbeFlags, offset: u64) -> Probe<IO> {
-        Probe {
+impl<IO: BlockIo> RawProbe<IO> {
+    /// Creates a new [`RawProbe`] for the given block device reader.
+    ///
+    /// # Parameters
+    ///
+    /// - `reader`: The underlying `IO` source to probe.
+    /// - `flags`: Changes the behavior of the probe. See [`ProbeFlags`].
+    /// - `offset`: Byte offset into the device at which probing begins.
+    ///
+    pub fn new(reader: IO, flags: ProbeFlags, offset: u64) -> RawProbe<IO> {
+        RawProbe {
             reader: Reader::new(reader),
             flags,
             offset,
         }
     }
 
-    #[inline]
     pub fn probe_block(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
-        probe_block(&mut self.reader, self.flags, self.offset, filter)
+        for block in BLOCK_DETECT_ORDER {
+            if filter.contains(block.0) {
+                continue;
+            }
+
+            let handle = block.1.block_handler();
+
+            #[cfg(feature = "os_calls")]
+            {
+                if let Some(minsz) = handle.minsz
+                    && self.reader.device_size()? < minsz
+                {
+                    continue;
+                }
+            }
+
+            #[cfg(not(feature = "os_calls"))]
+            {
+                if let Some(minsz) = handle.minsz
+                    && self.reader.seek(crate::io::SeekFrom::End(0))? < minsz
+                {
+                    continue;
+                }
+            }
+
+            let magic = match handle.magics {
+                Some(magics) => match self.reader.get_magic(magics)? {
+                    Some(magic) => magic,
+                    None => continue,
+                },
+                None => Magic::EMPTY_MAGIC,
+            };
+
+            match (handle.probe)(&mut self.reader, self.flags, self.offset, magic) {
+                Ok(t) => return Ok(t),
+                Err(e) => {
+                    if let Error::Io(_) = e {
+                        return Err(e);
+                    }
+                }
+            };
+        }
+        return Err(Error::ProbesExhausted);
     }
 
-    #[inline]
     pub fn search_for_block(&mut self, block: BlockType) -> Result<BlockInfo, Error<IO::Error>> {
-        search_for_block(&mut self.reader, self.flags, self.offset, block)
+        let handle = block.block_handler::<IO>();
+
+        #[cfg(feature = "os_calls")]
+        {
+            if let Some(minsz) = handle.minsz
+                && self.reader.device_size()? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        }
+
+        #[cfg(not(feature = "os_calls"))]
+        {
+            if let Some(minsz) = handle.minsz
+                && self.reader.seek(crate::io::SeekFrom::End(0))? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        }
+
+        let magic = match handle.magics {
+            Some(magics) => match self.reader.get_magic(magics)? {
+                Some(magic) => magic,
+                None => return Err(Error::UnableToLocateMagicSignature),
+            },
+            None => Magic::EMPTY_MAGIC,
+        };
+
+        (handle.probe)(&mut self.reader, self.flags, self.offset, magic)
     }
 
-    #[inline]
     pub fn probe_part_table(
         &mut self,
         filter: PTFilter,
     ) -> Result<PartTableInfo, Error<IO::Error>> {
-        probe_part_table(&mut self.reader, self.flags, self.offset, filter)
+        for block in PT_DETECT_ORDER {
+            if filter.contains(block.0) {
+                continue;
+            }
+
+            let handle = block.1.pt_handler();
+
+            #[cfg(feature = "os_calls")]
+            {
+                if let Some(minsz) = handle.minsz
+                    && self.reader.device_size()? < minsz
+                {
+                    continue;
+                }
+            }
+
+            #[cfg(not(feature = "os_calls"))]
+            {
+                if let Some(minsz) = handle.minsz
+                    && self.reader.seek(crate::io::SeekFrom::End(0))? < minsz
+                {
+                    continue;
+                }
+            }
+
+            let magic = match handle.magics {
+                Some(magics) => match self.reader.get_magic(magics)? {
+                    Some(magic) => magic,
+                    None => continue,
+                },
+                None => Magic::EMPTY_MAGIC,
+            };
+
+            match (handle.probe)(&mut self.reader, self.flags, self.offset, magic) {
+                Ok(t) => return Ok(t),
+                Err(e) => {
+                    if let Error::Io(_) = e {
+                        return Err(e);
+                    }
+                }
+            };
+        }
+        return Err(Error::ProbesExhausted);
     }
 
-    #[inline]
     pub fn search_for_part_table(
         &mut self,
         part_table: PTType,
     ) -> Result<PartTableInfo, Error<IO::Error>> {
-        search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
+        let handle = part_table.pt_handler::<IO>();
+
+        #[cfg(feature = "os_calls")]
+        {
+            if let Some(minsz) = handle.minsz
+                && self.reader.device_size()? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        }
+
+        #[cfg(not(feature = "os_calls"))]
+        {
+            if let Some(minsz) = handle.minsz
+                && self.reader.seek(crate::io::SeekFrom::End(0))? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        }
+
+        let magic = match handle.magics {
+            Some(magics) => match self.reader.get_magic(magics)? {
+                Some(magic) => magic,
+                None => return Err(Error::UnableToLocateMagicSignature),
+            },
+            None => Magic::EMPTY_MAGIC,
+        };
+
+        (handle.probe)(&mut self.reader, self.flags, self.offset, magic)
     }
 }
 
 #[cfg(feature = "os_calls")]
-#[doc(cfg(feature = "os_calls"))]
-#[derive(Debug)]
-pub struct Probe {
-    reader: Reader<crate::io::File>,
-    flags: ProbeFlags,
-    offset: u64,
-}
-
-#[cfg(feature = "os_calls")]
-#[doc(cfg(feature = "os_calls"))]
-impl Probe {
+impl RawProbe<crate::io::File> {
     #[cfg(feature = "std")]
-    #[doc(cfg(feature = "std"))]
-    pub fn new(
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    pub fn from_file(
         file: crate::io::File,
         flags: ProbeFlags,
         offset: u64,
-    ) -> Result<Probe, Error<crate::io::IoError>> {
+    ) -> Result<RawProbe<crate::io::File>, Error<crate::io::IoError>> {
         Ok(Self {
             reader: Reader::new(file),
             flags,
@@ -329,12 +331,12 @@ impl Probe {
     }
 
     #[cfg(feature = "std")]
-    #[doc(cfg(feature = "std"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn open<P: AsRef<std::path::Path>>(
         path: P,
         flags: ProbeFlags,
         offset: u64,
-    ) -> Result<Probe, Error<crate::io::IoError>> {
+    ) -> Result<RawProbe<crate::io::File>, Error<crate::io::IoError>> {
         let file = std::fs::File::open(path)?;
 
         return Ok(Self {
@@ -345,12 +347,12 @@ impl Probe {
     }
 
     #[cfg(feature = "no_std")]
-    #[doc(cfg(feature = "no_std"))]
-    pub fn new(
+    #[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
+    pub fn from_fd(
         fd: rustix::fd::OwnedFd,
         flags: ProbeFlags,
         offset: u64,
-    ) -> Result<Probe, Error<crate::io::IoError>> {
+    ) -> Result<RawProbe<crate::io::File>, Error<crate::io::IoError>> {
         Ok(Self {
             reader: Reader::new(crate::io::File::from(fd)),
             flags,
@@ -359,12 +361,12 @@ impl Probe {
     }
 
     #[cfg(feature = "no_std")]
-    #[doc(cfg(feature = "no_std"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
     pub fn open<P: rustix::path::Arg>(
         path: P,
         flags: ProbeFlags,
         offset: u64,
-    ) -> Result<Probe, Error<crate::io::IoError>> {
+    ) -> Result<RawProbe<crate::io::File>, Error<crate::io::IoError>> {
         let fd = rustix::fs::open(path, rustix::fs::OFlags::RDONLY, rustix::fs::Mode::empty())?;
 
         return Ok(Self {
@@ -391,56 +393,24 @@ impl Probe {
 
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    #[doc(cfg(any(target_os = "linux", target_os = "freebsd")))]
+    #[cfg_attr(docsrs, doc(cfg(any(target_os = "linux", target_os = "freebsd"))))]
     pub fn minimum_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
         self.reader.minimum_io_size()
     }
 
     #[inline]
     #[cfg(target_os = "linux")]
-    #[doc(cfg(target_os = "linux"))]
+    #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
     pub fn optimal_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
         self.reader.optimal_io_size()
     }
 
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    #[doc(cfg(any(target_os = "linux", target_os = "freebsd")))]
+    #[cfg_attr(docsrs, doc(cfg(any(target_os = "linux", target_os = "freebsd"))))]
     pub fn alignment_offset(
         &self,
     ) -> Result<crate::io::ioctl::AlignmentOffset, Error<crate::io::IoError>> {
         self.reader.alignment_offset()
-    }
-
-    #[inline]
-    pub fn probe_block(
-        &mut self,
-        filter: BlockFilter,
-    ) -> Result<BlockInfo, Error<crate::io::IoError>> {
-        probe_block(&mut self.reader, self.flags, self.offset, filter)
-    }
-
-    #[inline]
-    pub fn search_for_block(
-        &mut self,
-        block: BlockType,
-    ) -> Result<BlockInfo, Error<crate::io::IoError>> {
-        search_for_block(&mut self.reader, self.flags, self.offset, block)
-    }
-
-    #[inline]
-    pub fn probe_part_table(
-        &mut self,
-        filter: PTFilter,
-    ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
-        probe_part_table(&mut self.reader, self.flags, self.offset, filter)
-    }
-
-    #[inline]
-    pub fn search_for_part_table(
-        &mut self,
-        part_table: PTType,
-    ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
-        search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
     }
 }

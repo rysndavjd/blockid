@@ -111,7 +111,7 @@ impl Seek for File {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
         let new_pos = match pos {
             SeekFrom::Start(pos) => RustixSeekFrom::Start(pos),
-            SeekFrom::End(pos) => RustixSeekFrom::Current(pos),
+            SeekFrom::End(pos) => RustixSeekFrom::End(pos),
             SeekFrom::Current(pos) => RustixSeekFrom::Current(pos),
         };
 

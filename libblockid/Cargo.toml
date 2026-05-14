@@ -10,6 +10,10 @@ keywords = ["partition", "filesystem", "superblock", "no_std"]
 categories = ["filesystem", "no-std", "parsing"]
 license = "MIT OR Apache-2.0"
 
+[package.metadata.docs.rs]
+all-features = false
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 bitflags = { version = "2.11.0", default-features = false }
 zerocopy = { version = "0.8.48", default-features = false, features = [
