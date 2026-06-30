@@ -8,9 +8,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType},
+    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
     io::{BlockIo, Reader},
-    probe::{Id, Magic, ProbeFlags, Usage},
+    probe::{Magic, ProbeFlags, Usage},
     std::{fmt, mem::offset_of, str::Utf8Error},
     util::{decode_utf8_from, decode_utf8_lossy_from},
 };
@@ -310,8 +310,8 @@ bitflags! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct ExtCreator(U32<LittleEndian>);
 
-impl std::fmt::Display for ExtCreator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ExtCreator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match u32::from(self.0) {
             0 => write!(f, "Linux"),
             1 => write!(f, "Hurd"),
@@ -390,8 +390,8 @@ fn ext_get_info(
 ) -> Result<
     (
         Option<String>,
-        Id,
-        Option<Id>,
+        FilesystemId,
+        Option<Uuid>,
         String,
         u64,
         u64,
@@ -403,7 +403,7 @@ fn ext_get_info(
     let fc = es.feature_compat();
 
     let label: Option<String> = if es.s_volume_name[0] != 0 {
-        if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+        if flags.contains(ProbeFlags::FailOnInvalidUTF) {
             Some(decode_utf8_from(&es.s_volume_name).map_err(ExtError::Utf8Error)?)
         } else {
             Some(decode_utf8_lossy_from(&es.s_volume_name))
@@ -412,13 +412,13 @@ fn ext_get_info(
         None
     };
 
-    let uuid = Id::Uuid(Uuid::from_bytes(es.s_uuid));
+    let uuid = FilesystemId::Uuid(Uuid::from_bytes(es.s_uuid));
 
-    let journal_uuid: Option<Id> = if fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
+    let journal_uuid: Option<Uuid> = if fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
         if es.s_journal_uuid == [0; 16] {
             None //Journal is internal to the filesystem   
         } else {
-            Some(Id::Uuid(Uuid::from_bytes(es.s_journal_uuid)))
+            Some(Uuid::from_bytes(es.s_journal_uuid))
         }
     } else {
         None
@@ -433,7 +433,7 @@ fn ext_get_info(
     let log_block_size = u32::from(es.s_log_block_size);
 
     let block_size: u64 = if log_block_size < 32 {
-        u64::from(1024u32 << log_block_size)
+        1024u64 << log_block_size
     } else {
         0
     };
@@ -480,7 +480,7 @@ pub fn probe_jbd<IO: BlockIo>(
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
-    info.set(BlockTag::Id(uuid));
+    info.set(BlockTag::FilesystemId(uuid));
     if let Some(id) = journal_uuid {
         info.set(BlockTag::ExtJournalId(id));
     }
@@ -533,7 +533,7 @@ pub fn probe_ext2<IO: BlockIo>(
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
-    info.set(BlockTag::Id(uuid));
+    info.set(BlockTag::FilesystemId(uuid));
     if let Some(id) = journal_uuid {
         info.set(BlockTag::ExtJournalId(id));
     }
@@ -586,7 +586,7 @@ pub fn probe_ext3<IO: BlockIo>(
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
-    info.set(BlockTag::Id(uuid));
+    info.set(BlockTag::FilesystemId(uuid));
     if let Some(id) = journal_uuid {
         info.set(BlockTag::ExtJournalId(id));
     }
@@ -643,7 +643,7 @@ pub fn probe_ext4<IO: BlockIo>(
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
-    info.set(BlockTag::Id(uuid));
+    info.set(BlockTag::FilesystemId(uuid));
     if let Some(id) = journal_uuid {
         info.set(BlockTag::ExtJournalId(id));
     }

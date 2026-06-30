@@ -10,9 +10,10 @@ use crate::{
     error::Error,
     io::Reader,
     partition::{
-        BlockIo, PTType, PartAttributes, PartId, PartTableInfo, PartTableTag, PartType, Partition,
+        BlockIo, PartAttributes, PartTableId, PartTableInfo, PartTableTag, PartTableType,
+        Partition, PartitionId, PartitionType,
     },
-    probe::{Endianness, Id, Magic, ProbeFlags},
+    probe::{Endianness, Magic, ProbeFlags},
     std::mem::offset_of,
     util::{decode_utf16_from, decode_utf16_lossy_from},
 };
@@ -379,7 +380,7 @@ pub fn probe_gpt<IO: BlockIo>(
         }
 
         let name = if partition.partition_name != [0u8; 72] {
-            if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+            if flags.contains(ProbeFlags::FailOnInvalidUTF) {
                 match decode_utf16_from(&partition.partition_name, Endianness::Little) {
                     Ok(t) => Some(t.to_string()),
                     Err(e) => {
@@ -403,8 +404,8 @@ pub fn probe_gpt<IO: BlockIo>(
         partitions.push(Partition {
             start: start * lssz,
             end: end * lssz,
-            partition_id: PartId::Uuid(partition.unique_partition_guid.into()),
-            partition_type: PartType::Uuid(partition.partition_type_guid.into()),
+            partition_id: PartitionId::Uuid(partition.unique_partition_guid.into()),
+            partition_type: PartitionType::Uuid(partition.partition_type_guid.into()),
             part_no: i + 1,
             partition_name: name,
             attributes: PartAttributes::Gpt(u64::from(partition.attributes)),
@@ -413,9 +414,11 @@ pub fn probe_gpt<IO: BlockIo>(
 
     let mut info = PartTableInfo::new();
 
-    info.set(PartTableTag::PtType(PTType::Gpt));
-    info.set(PartTableTag::PtId(Id::Uuid(header.disk_guid.into())));
-    info.set(PartTableTag::PtSize(
+    info.set(PartTableTag::PartTableType(PartTableType::Gpt));
+    info.set(PartTableTag::PartTableId(PartTableId::Uuid(
+        header.disk_guid.into(),
+    )));
+    info.set(PartTableTag::PartTableSize(
         (u64::from(header.alternate_lba) + 1) * lssz,
     ));
     info.set(PartTableTag::Magic(GptTable::SIGNATURE_STR.to_vec()));

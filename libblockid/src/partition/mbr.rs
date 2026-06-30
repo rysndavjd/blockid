@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use bitflags::bitflags;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
@@ -49,7 +47,7 @@ impl fmt::Display for MbrError {
     }
 }
 
-impl<E: Debug> From<MbrError> for Error<E> {
+impl<E: fmt::Debug> From<MbrError> for Error<E> {
     fn from(e: MbrError) -> Self {
         Error::Mbr(e)
     }

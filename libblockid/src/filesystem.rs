@@ -8,6 +8,8 @@ pub(crate) mod vxfs;
 pub(crate) mod xfs;
 
 use bitflags::bitflags;
+use fat_volume_id::{id32::VolumeId32, id64::VolumeId64};
+use uuid::Uuid;
 
 use crate::{
     error::Error,
@@ -25,12 +27,11 @@ use crate::{
         xfs::{XFS_MAGICS, XFS_MINSZ, probe_xfs},
     },
     io::{BlockIo, Reader},
-    probe::{Endianness, Id, Magic, ProbeFlags, Usage},
+    probe::{Endianness, Magic, ProbeFlags, Usage},
+    std::fmt,
 };
 
-/// Order used to detect partition tables in [`probe_block`]
-/// 
-/// [`probe_block`]: crate::probe::Probe::probe_block
+/// Order used to detect partition tables
 #[rustfmt::skip]
 pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
     (BlockFilter::SKIP_APFS, BlockType::Apfs),
@@ -49,7 +50,7 @@ pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
 ];
 
 /// A generic handler for probing a filesystem type.
-#[derive(Debug, Copy, Clone, Hash)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct BlockHandler<IO: BlockIo> {
     /// Minimum disk size in bytes required for filesystem, if any.
     pub minsz: Option<u64>,
@@ -62,6 +63,7 @@ pub(crate) struct BlockHandler<IO: BlockIo> {
 
 /// The type of filesystem supported.
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockType {
     Apfs,
@@ -79,8 +81,28 @@ pub enum BlockType {
     Xfs,
 }
 
+impl fmt::Display for BlockType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BlockType::Apfs => write!(f, "apfs"),
+            BlockType::Exfat => write!(f, "exfat"),
+            BlockType::Jbd => write!(f, "jbd"),
+            BlockType::Ext2 => write!(f, "ext2"),
+            BlockType::Ext3 => write!(f, "ext3"),
+            BlockType::Ext4 => write!(f, "ext4"),
+            BlockType::LUKS1 => write!(f, "luks1"),
+            BlockType::LUKS2 => write!(f, "luks2"),
+            BlockType::LUKSOpal => write!(f, "luks_opal"),
+            BlockType::Ntfs => write!(f, "ntfs"),
+            BlockType::Vfat => write!(f, "vfat"),
+            BlockType::Vxfs => write!(f, "vxfs"),
+            BlockType::Xfs => write!(f, "xfs"),
+        }
+    }
+}
+
 impl BlockType {
-    pub(crate) fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
+    pub(crate) const fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
         match self {
             BlockType::LUKS1 => BlockHandler {
                 minsz: LUKS1_MINSZ,
@@ -153,7 +175,60 @@ impl BlockType {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum FilesystemId {
+    /// A 128-bit universally unique identifier.
+    Uuid(Uuid),
+    /// A 32-bit volume serial number.
+    VolumeId32(VolumeId32),
+    /// A 64-bit volume serial number.
+    VolumeId64(VolumeId64),
+}
+
+impl FilesystemId {
+    pub fn as_uuid(&self) -> Option<Uuid> {
+        match self {
+            FilesystemId::Uuid(t) => Some(*t),
+            _ => None,
+        }
+    }
+
+    pub fn as_volumeid32(&self) -> Option<VolumeId32> {
+        match self {
+            FilesystemId::VolumeId32(t) => Some(*t),
+            _ => None,
+        }
+    }
+
+    pub fn as_volumeid64(&self) -> Option<VolumeId64> {
+        match self {
+            FilesystemId::VolumeId64(t) => Some(*t),
+            _ => None,
+        }
+    }
+}
+
+impl From<Uuid> for FilesystemId {
+    fn from(value: Uuid) -> Self {
+        FilesystemId::Uuid(value)
+    }
+}
+
+impl From<VolumeId32> for FilesystemId {
+    fn from(value: VolumeId32) -> Self {
+        FilesystemId::VolumeId32(value)
+    }
+}
+
+impl From<VolumeId64> for FilesystemId {
+    fn from(value: VolumeId64) -> Self {
+        FilesystemId::VolumeId64(value)
+    }
+}
+
 /// The subtype of filesystems.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SubType {
     Fat12,
@@ -162,6 +237,7 @@ pub enum SubType {
 }
 
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockTag {
     /// Block type, Eg: EXT4.
@@ -170,18 +246,18 @@ pub enum BlockTag {
     SubType(SubType),
     /// Filesystem label, Eg: `LABEL`.
     Label(String),
-    /// Filesystem identifier in lower case hex.
+    /// Filesystem identifier.
     /// Eg:
     ///     UUID: `67e55044-10b1-426f-9247-bb680e5fe0c8`
     ///     VolumeId32: `2a9d-b913`
     ///     VolumeId64: `17acf19235bcde78`
-    Id(Id),
-    /// Sub member identifier in lower case hex.
-    SubMemberId(Id),
-    /// External log identifier in lower case hex.
-    ExtLogId(Id),
-    /// External journal identifier in lower case hex.
-    ExtJournalId(Id),
+    FilesystemId(FilesystemId),
+    /// Sub member identifier.
+    SubMemberId(Uuid),
+    /// External log identifier.
+    ExtLogId(Uuid),
+    /// External journal identifier.
+    ExtJournalId(Uuid),
     /// Usage string, Eg: `raid`, `filesystem`.
     Usage(Usage),
     /// Filesystem version.
@@ -247,28 +323,28 @@ impl BlockInfo {
         })
     }
 
-    pub fn id(&self) -> Option<Id> {
+    pub fn filesystem_id(&self) -> Option<FilesystemId> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Id(t) => Some(*t),
+            BlockTag::FilesystemId(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn sub_member_id(&self) -> Option<Id> {
+    pub fn sub_member_id(&self) -> Option<Uuid> {
         self.tags.iter().find_map(|t| match t {
             BlockTag::SubMemberId(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn ext_log_id(&self) -> Option<Id> {
+    pub fn ext_log_id(&self) -> Option<Uuid> {
         self.tags.iter().find_map(|t| match t {
             BlockTag::ExtLogId(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn ext_journal_id(&self) -> Option<Id> {
+    pub fn ext_journal_id(&self) -> Option<Uuid> {
         self.tags.iter().find_map(|t| match t {
             BlockTag::ExtJournalId(t) => Some(*t),
             _ => None,
@@ -347,6 +423,7 @@ impl BlockInfo {
 }
 
 bitflags! {
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct BlockFilter: u64 {
         const SKIP_APFS = 1 << 0;

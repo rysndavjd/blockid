@@ -7,9 +7,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType},
+    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
     io::{BlockIo, Reader},
-    probe::{Id, Magic, ProbeFlags, Usage},
+    probe::{Magic, ProbeFlags, Usage},
     std::{fmt, mem::offset_of},
 };
 
@@ -143,7 +143,7 @@ pub fn probe_apfs<IO: BlockIo>(
     let mut info = BlockInfo::new();
 
     info.set(BlockTag::BlockType(BlockType::Apfs));
-    info.set(BlockTag::Id(Id::Uuid(uuid)));
+    info.set(BlockTag::FilesystemId(FilesystemId::Uuid(uuid)));
     info.set(BlockTag::Usage(Usage::Filesystem));
     info.set(BlockTag::FsBlockSize(u64::from(sb.block_size)));
     info.set(BlockTag::BlockSize(u64::from(sb.block_size)));

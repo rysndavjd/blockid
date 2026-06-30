@@ -7,9 +7,9 @@ use zerocopy::{
 };
 
 use crate::{
-    Id, ProbeFlags, Usage,
+    ProbeFlags, Usage,
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType},
+    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
     io::{BlockIo, Reader},
     probe::Magic,
     std::{fmt, mem::offset_of, str::Utf8Error},
@@ -220,7 +220,7 @@ pub fn probe_xfs<IO: BlockIo>(
     sb.verify(&mut crc_area)?;
 
     let label = if sb.fname[0] != 0 {
-        if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+        if flags.contains(ProbeFlags::FailOnInvalidUTF) {
             Some(decode_utf8_from(&sb.fname).map_err(XfsError::Utf8Error)?)
         } else {
             Some(decode_utf8_lossy_from(&sb.fname))
@@ -232,7 +232,9 @@ pub fn probe_xfs<IO: BlockIo>(
     let mut info = BlockInfo::new();
 
     info.set(BlockTag::BlockType(BlockType::Xfs));
-    info.set(BlockTag::Id(Id::Uuid(Uuid::from_bytes(sb.uuid))));
+    info.set(BlockTag::FilesystemId(FilesystemId::Uuid(
+        Uuid::from_bytes(sb.uuid),
+    )));
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }

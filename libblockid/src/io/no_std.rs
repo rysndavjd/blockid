@@ -1,3 +1,5 @@
+pub mod path;
+
 pub use embedded_io::SeekFrom;
 use embedded_io::{Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek};
 use rustix::{

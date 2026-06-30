@@ -19,6 +19,15 @@ pub enum AlignmentOffset {
     Offset(u64),
 }
 
+impl From<AlignmentOffset> for Option<u64> {
+    fn from(v: AlignmentOffset) -> Self {
+        match v {
+            AlignmentOffset::Misaligned => None,
+            AlignmentOffset::Offset(t) => Some(t),
+        }
+    }
+}
+
 /// Trait used to get topology infomation.
 pub trait Ioctl: Io {
     /// Devices size in bytes.

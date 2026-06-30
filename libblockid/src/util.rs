@@ -66,13 +66,6 @@ pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, Utf8Error> {
 /// ## FreeBSD
 /// TODO!.
 ///
-/// # `std`
-/// The path bytes are decoded into a UTF-8 [`String`] lossily before assembling the
-/// standard library [`PathBuf`](https://doc.rust-lang.org/std/path/struct.PathBuf.html).
-///
-/// # `no_std`
-/// The raw bytes are used as is to assemble the crate wrapper type `PathBuf`.
-///
 /// [`fcntl`]: https://docs.rs/libc/latest/libc/fn.fcntl.html
 #[cfg(feature = "os_calls")]
 pub fn fd_to_path<F: rustix::fd::AsRawFd>(
@@ -80,14 +73,18 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(
 ) -> Result<crate::io::PathBuf, crate::error::Error<crate::io::IoError>> {
     #[cfg(target_os = "linux")]
     {
-        use rustix::fs::readlink;
-
         use crate::io::PathBuf;
 
-        let link = readlink(format!("/proc/self/fd/{}", fd.as_raw_fd()), Vec::new())?;
+        let link = rustix::fs::readlink(format!("/proc/self/fd/{}", fd.as_raw_fd()), Vec::new())?;
 
         #[cfg(feature = "std")]
-        return Ok(PathBuf::from(link.to_string_lossy().to_string()));
+        {
+            use std::ffi::OsStr;
+            use std::os::unix::ffi::OsStrExt;
+
+            return Ok(PathBuf::from(OsStr::from_bytes(link.as_bytes())));
+        }
+
         #[cfg(feature = "no_std")]
         return Ok(PathBuf::from(link.as_bytes()));
     }
@@ -107,7 +104,13 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(
         }
 
         #[cfg(feature = "std")]
-        return Ok(PathBuf::from(decode_utf8_lossy_from(&buf)));
+        {
+            use std::ffi::OsStr;
+            use std::os::unix::ffi::OsStrExt;
+
+            return Ok(PathBuf::from(OsStr::from_bytes(&buf)));
+        }
+
         #[cfg(feature = "no_std")]
         return Ok(PathBuf::from(buf.as_slice()));
     }

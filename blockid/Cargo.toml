@@ -3,14 +3,15 @@ name = "blockid"
 version = "0.1.0"
 edition = "2024"
 
+#, default-features = false, features = ["std", "os_calls"]
 [dependencies]
 clap = { version = "4.5.41", default-features = false, features = ["std", "derive", "color", "cargo", "suggestions", "usage", "help"] }
-libblockid = { path = "../libblockid", features = []}
-shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "git2", "build"]}
-[dependencies.rustix]
-version = "1.1.4"
-default-features = false
-features = ["stdio", "fs", "alloc", "std"]
+glob = { version = "0.3.3", default-features = false }
+libblockid = { path = "../libblockid" }
+serde = { version =  "1.0.228", default-features = false, features = ["std", "derive"] }
+serde_dotenv = { version = "0.1.0", path = "../../serde_dotenv" }
+serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
+shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "build"] }
 
 [build-dependencies]
-shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "git2", "build"]}
+shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "build"] }

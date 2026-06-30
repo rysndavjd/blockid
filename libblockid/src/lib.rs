@@ -18,16 +18,16 @@ mod util;
 
 #[cfg(feature = "no_std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
-pub use crate::io::path::{Path, PathBuf};
-pub use crate::probe::{Endianness, Id, ProbeFlags, Usage};
+pub use crate::io::no_std::path::{Path, PathBuf};
+pub use crate::probe::{Endianness, ProbeFlags, Usage};
 #[cfg(feature = "os_calls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "os_calls")))]
 pub use crate::{io::ioctl::AlignmentOffset, util::fd_to_path};
 
 #[cfg(feature = "os_calls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "os_calls")))]
-pub type Probe = RawProbe<crate::io::File>;
-pub use crate::probe::RawProbe;
+pub type Probe = crate::probe::Probe<crate::io::File>;
+#[cfg(not(feature = "os_calls"))]
+pub use crate::probe::Probe;
 
 #[cfg(all(feature = "std", feature = "no_std"))]
 compile_error!("`std` and `no_std` are mutually exclusive");

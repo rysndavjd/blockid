@@ -2,24 +2,19 @@ mod block;
 #[cfg(feature = "os_calls")]
 pub mod ioctl;
 #[cfg(all(feature = "os_calls", feature = "no_std"))]
-mod no_std;
-#[cfg(feature = "no_std")]
-pub mod path;
+pub mod no_std;
 #[cfg(feature = "std")]
 mod std;
 
 #[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
 pub use embedded_io::SeekFrom;
 
+#[cfg(all(feature = "os_calls", feature = "no_std"))]
+pub use crate::io::no_std::{Error as IoError, File, SeekFrom, path::PathBuf};
 #[cfg(all(not(feature = "os_calls"), feature = "std"))]
 pub use crate::io::std::SeekFrom;
 #[cfg(all(feature = "os_calls", feature = "std"))]
 pub use crate::io::std::{File, IoError, PathBuf, SeekFrom};
-#[cfg(all(feature = "os_calls", feature = "no_std"))]
-pub use crate::io::{
-    no_std::{Error as IoError, File, SeekFrom},
-    path::PathBuf,
-};
 use crate::{error::Error, probe::Magic};
 
 /// Trait used to get access to underlying device.
@@ -79,7 +74,7 @@ impl<IO: BlockIo> Reader<IO> {
     }
 
     /// Searches through list of provided magics checking if they exist,
-    /// returning the found magic.
+    /// returning the first found magic.
     pub fn get_magic(
         &mut self,
         magics: &'static [Magic],

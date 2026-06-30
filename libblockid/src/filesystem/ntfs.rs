@@ -1,4 +1,4 @@
-use fat_volume_id::VolumeId64;
+use fat_volume_id::id64::VolumeId64;
 use widestring::error::Utf16Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
@@ -8,9 +8,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType},
+    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
     io::{BlockIo, Reader},
-    probe::{Endianness, Id, Magic, ProbeFlags, Usage},
+    probe::{Endianness, Magic, ProbeFlags, Usage},
     std::fmt,
     util::{decode_utf16_from, decode_utf16_lossy_from},
 };
@@ -258,7 +258,7 @@ impl NtfsSuperBlock {
                         return Ok(None);
                     }
 
-                    let label = if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+                    let label = if flags.contains(ProbeFlags::FailOnInvalidUTF) {
                         decode_utf16_from(val, Endianness::Little)
                             .map_err(NtfsError::Utf16Error)?
                             .to_string()
@@ -303,7 +303,6 @@ pub fn probe_ntfs<IO: BlockIo>(
     mag: Magic,
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<NtfsSuperBlock>()] = reader.read_exact_at(offset)?;
-
     let sb: &NtfsSuperBlock = transmute_ref!(&buf);
 
     let (sector_size, sectors_per_cluster) = sb.check_ntfs()?;
@@ -316,9 +315,9 @@ pub fn probe_ntfs<IO: BlockIo>(
     if let Some(label) = label {
         info.set(BlockTag::Label(label));
     }
-    info.set(BlockTag::Id(Id::VolumeId64(VolumeId64::from_bytes(
-        sb.volume_serial,
-    ))));
+    info.set(BlockTag::FilesystemId(FilesystemId::VolumeId64(
+        VolumeId64::from_bytes(sb.volume_serial),
+    )));
     info.set(BlockTag::Usage(Usage::Filesystem));
     info.set(BlockTag::Magic(mag.magic.to_vec()));
     info.set(BlockTag::FsSize(u64::from(

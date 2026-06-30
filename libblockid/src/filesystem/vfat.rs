@@ -1,5 +1,5 @@
 use bitflags::bitflags;
-use fat_volume_id::VolumeId32;
+use fat_volume_id::id32::VolumeId32;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::LittleEndian,
     byteorder::U16, byteorder::U32, transmute_ref,
@@ -7,9 +7,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, SubType},
+    filesystem::{BlockInfo, BlockTag, BlockType, SubType, FilesystemId},
     io::{BlockIo, Reader},
-    probe::{Id, Magic, ProbeFlags, Usage},
+    probe::{ Magic, ProbeFlags, Usage},
     std::{fmt, str::Utf8Error},
     util::{decode_utf8_from, decode_utf8_lossy_from},
 };
@@ -24,12 +24,14 @@ pub enum VFatError {
     ProbablyHPFS,
     InvalidFatTableCount,
     InvalidReservedValue,
+    InvalidSectorRange,
     ClusterSizeNotPowerOfTwo,
     ClusterCountGreaterThenMax,
     InvalidClusterCount,
     InvalidExtBootSign,
     InvalidFsInfoSignatureOne,
     InvalidFsInfoSignatureTwo,
+    Overflow,
 }
 
 impl fmt::Display for VFatError {
@@ -45,6 +47,7 @@ impl fmt::Display for VFatError {
             VFatError::ProbablyHPFS => write!(f, "Filesystem has HPFS magic number"),
             VFatError::InvalidFatTableCount => write!(f, "Should be atleast one fat table"),
             VFatError::InvalidReservedValue => write!(f, "ms_reserved is invalid"),
+            VFatError::InvalidSectorRange => write!(f, "sector size is not within 512 to 4096"),
             VFatError::ClusterSizeNotPowerOfTwo => write!(f, "Cluster size not a power of 2"),
             VFatError::ClusterCountGreaterThenMax => {
                 write!(f, "Cluster count greater then max cluster count")
@@ -53,6 +56,7 @@ impl fmt::Display for VFatError {
             VFatError::InvalidExtBootSign => write!(f, "Invalid ext_boot_sign"),
             VFatError::InvalidFsInfoSignatureOne => write!(f, "Invalid fsinfo.signature1"),
             VFatError::InvalidFsInfoSignatureTwo => write!(f, "Invalid fsinfo.signature2"),
+            VFatError::Overflow => write!(f, "internal calculation overflowed"),
         }
     }
 }
@@ -215,32 +219,15 @@ const FAT12_MAX: u32 = 0xFF4;
 const FAT16_MAX: u32 = 0xFFF4;
 const FAT32_MAX: u32 = 0x0FFFFFF6;
 
-pub fn get_fat_size(ms: &MsDosSuperBlock, vs: &VFatSuperBlock) -> u32 {
-    let num_fat: u32 = ms.ms_fats.into();
-    let fat_length: u32 = if ms.ms_fat_length == 0 {
-        vs.vs_fat32_length.into()
+pub fn get_fat_size(ms: &MsDosSuperBlock, vs: &VFatSuperBlock) -> Option<u32> {
+    let num_fat = u32::from(ms.ms_fats);
+    let fat_length = if ms.ms_fat_length == 0 {
+        u32::from(vs.vs_fat32_length)
     } else {
-        ms.ms_fat_length.into()
+        u32::from(ms.ms_fat_length)
     };
 
-    return fat_length * num_fat;
-}
-
-pub fn get_cluster_count(ms: &MsDosSuperBlock, vs: &VFatSuperBlock) -> u32 {
-    let sect_count: u32 = if ms.ms_sectors == 0 {
-        u32::from(ms.ms_total_sect)
-    } else {
-        u32::from(ms.ms_sectors)
-    };
-
-    let sector_size: u32 = u32::from(ms.ms_sector_size);
-    let cluster_count: u32 = (sect_count
-        - (u32::from(ms.ms_reserved)
-            + get_fat_size(ms, vs)
-            + ((u32::from(ms.ms_dir_entries) * 32) + (sector_size - 1) / sector_size)))
-        / ms.ms_cluster_size as u32;
-
-    return cluster_count;
+    return fat_length.checked_mul(num_fat);
 }
 
 pub fn get_sect_count(ms: &MsDosSuperBlock) -> u32 {
@@ -251,6 +238,26 @@ pub fn get_sect_count(ms: &MsDosSuperBlock) -> u32 {
     };
 
     return sect_count;
+}
+
+pub fn get_cluster_count(ms: &MsDosSuperBlock, vs: &VFatSuperBlock) -> Option<u32> {
+    let sect_count = get_sect_count(ms);
+    let sector_size = u32::from(ms.ms_sector_size);
+
+    let root_dir_sectors = u32::from(ms.ms_dir_entries)
+        .checked_mul(32 /*size_of::<VfatDirEntry>()*/)?
+        /*safey: sector size is checked before this fn is called*/
+        .checked_add(sector_size - 1)?
+        / sector_size;
+
+    let cluster_count = sect_count.checked_sub(
+        u32::from(ms.ms_reserved)
+            .checked_add(get_fat_size(ms, vs)?)?
+            .checked_add(root_dir_sectors)?)? 
+            /*safey: cluster size is checked before this fn is called*/
+            / u32::from(ms.ms_cluster_size);
+
+    return Some(cluster_count);
 }
 
 pub fn valid_fat(
@@ -291,9 +298,13 @@ pub fn valid_fat(
         return Err(VFatError::ClusterSizeNotPowerOfTwo);
     }
 
-    let cluster_count: u32 = get_cluster_count(ms, vs);
+    if !(512..=4096).contains(&u16::from(ms.ms_sector_size)) {
+        return Err(VFatError::InvalidSectorRange);
+    }
 
-    let max_count = if ms.ms_fat_length == 0 && vs.vs_fat32_length > 0 {
+    let cluster_count: u32 = get_cluster_count(ms, vs).ok_or(VFatError::Overflow)?;
+
+    let max_count = if ms.ms_fat_length == 0 && vs.vs_fat32_length != 0 {
         FAT32_MAX
     } else if cluster_count > FAT12_MAX {
         FAT16_MAX
@@ -368,7 +379,7 @@ pub fn search_fat_label<IO: BlockIo>(
                 label_bytes[0] = 0xE5;
             }
 
-            let label = if flags.contains(ProbeFlags::FailOnInvaildUTF) {
+            let label = if flags.contains(ProbeFlags::FailOnInvalidUTF) {
                 decode_utf8_from(&label_bytes).map_err(VFatError::Utf8Error)?
             } else {
                 decode_utf8_lossy_from(&label_bytes)
@@ -486,7 +497,7 @@ pub fn probe_vfat<IO: BlockIo>(
 
     let sub_type = valid_fat(ms, vs, &magic)?;
 
-    let fat_size = get_fat_size(ms, vs);
+    let fat_size = get_fat_size(ms, vs).ok_or(VFatError::Overflow)?;
 
     let (label, serno) = if ms.ms_fat_length != 0 {
         probe_fat16(reader, flags, ms, vs, fat_size)?
@@ -500,7 +511,7 @@ pub fn probe_vfat<IO: BlockIo>(
 
     info.set(BlockTag::BlockType(BlockType::Vfat));
     info.set(BlockTag::SubType(sub_type));
-    info.set(BlockTag::Id(Id::VolumeId32(serno)));
+    info.set(BlockTag::FilesystemId(FilesystemId::VolumeId32(serno)));
     if let Some(l) = label {
         info.set(BlockTag::Label(l));
     }
