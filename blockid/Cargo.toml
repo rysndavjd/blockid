@@ -3,7 +3,6 @@ name = "blockid"
 version = "0.1.0"
 edition = "2024"
 
-#, default-features = false, features = ["std", "os_calls"]
 [dependencies]
 clap = { version = "4.5.41", default-features = false, features = ["std", "derive", "color", "cargo", "suggestions", "usage", "help"] }
 glob = { version = "0.3.3", default-features = false }

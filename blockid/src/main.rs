@@ -26,7 +26,7 @@ shadow!(build);
 #[command(about, long_about)]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 
     /// List all known supported superblocks
     #[arg(short = 'k', long = "list-superblocks")]
@@ -79,84 +79,16 @@ enum Format {
     Json,
 }
 
-// fn print_probe_pt(format: Format, info: PartTableInfo) {
-//     match format {
-//         Format::Export => {
-//             if let Some(pt_type) = info.pt_type() {
-//                 println!("PT_TYPE=\"{}\"", pt_type);
-
-//                 if let Some(id) = info.id() {
-//                     match pt_type {
-//                         PTType::Aix => (),
-//                         PTType::Gpt => {
-//                             println!(
-//                                 "PT_ID=\"{}\"",
-//                                 id.as_uuid().expect("should be a uuid with GPT")
-//                             )
-//                         }
-//                         PTType::Mbr => {
-//                             println!(
-//                                 "PT_ID=\"{}\"",
-//                                 id.as_mbr().expect("should be a u32 with MBR")
-//                             )
-//                         }
-//                         _ => (),
-//                     }
-//                 }
-
-//                 if let Some(pt_size) = info.pt_size() {
-//                     println!("PT_SIZE=\"{}\"", pt_size);
-//                 }
-
-//                 if let Some(magic) = info.magic() {
-//                     println!("PT_MAGIC=\"{:x?}\"", magic);
-//                 }
-
-//                 if let Some(magic_offset) = info.magic_offset() {
-//                     println!("PT_MAGIC_OFFSET=\"{:?}\"", magic_offset);
-//                 }
-
-//                 if let Some(partitions) = info.partitions() {
-//                     for partition in partitions {
-//                         println!("PART{}_START=\"{}\"", partition.part_no, partition.start);
-//                         println!("PART{}_END=\"{}\"", partition.part_no, partition.end);
-//                         match pt_type {
-//                             PTType::Gpt => {
-//                                 println!(
-//                                     "PART{}_ID=\"{}\"",
-//                                     partition.part_no,
-//                                     partition
-//                                         .partition_id
-//                                         .as_uuid()
-//                                         .expect("should be a uuid with GPT")
-//                                 );
-//                             }
-//                             _ => todo!(),
-//                         }
-
-//                         if let Some(name) = &partition.partition_name {
-//                             println!("PART{}_NAME=\"{}\"", partition.part_no, name);
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-//         Format::Json => {
-//             todo!()
-//         }
-//     }
-// }
-
-#[allow(non_snake_case)]
 #[derive(Serialize)]
+#[serde(rename_all = "UPPERCASE")]
 struct Topology {
-    DEVICE_SIZE: u64,
-    LOGICAL_SECTOR_SIZE: u64,
-    PHYSICAL_SECTOR_SIZE: u64,
-    MINIMUM_IO_SIZE: u64,
-    OPTIMAL_IO_SIZE: u64,
+    device_size: u64,
+    logical_sector_size: u64,
+    physical_sector_size: u64,
+    minimum_io_size: u64,
+    optimal_io_size: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    ALIGNMENT_OFFSET: Option<u64>,
+    alignment_offset: Option<u64>,
 }
 
 fn main() {
@@ -183,97 +115,84 @@ fn _main() -> Result<(), Error<io::Error>> {
         return Ok(());
     }
 
-    match cli.command {
-        Commands::Probe {
-            device,
-            offset,
-            format,
-            blocks,
-        } => {
-            let mut probe = Probe::open(device, ProbeFlags::empty(), offset.unwrap_or_default())?;
+    if let Some(command) = cli.command {
+        match command {
+            Commands::Probe {
+                device,
+                offset,
+                format,
+                blocks,
+            } => {
+                let mut probe =
+                    Probe::open(device, ProbeFlags::empty(), offset.unwrap_or_default())?;
 
-            match probe.probe_part_table(PTFilter::empty()) {
-                Ok(info) => {
-                    match format.unwrap_or_default() {
-                        Format::Export => {
-                            for tag in info.inner() {
-                                match tag {
-                                    PartTableTag::PartTableType(t) => {
-                                        to_dotenv_writer(stdout(), t).unwrap()
-                                    }
-                                    PartTableTag::PartTableId(t) => {
-                                        to_dotenv_writer(stdout(), t).unwrap()
-                                    }
-                                    PartTableTag::PartTableSize(t) => {
-                                        to_dotenv_writer(stdout(), t).unwrap()
-                                    }
-                                    // PartTableTag::Magic(t) => {
-                                    //     to_dotenv_writer(stdout(), t).unwrap()
-                                    // }
-                                    PartTableTag::MagicOffset(t) => {
-                                        to_dotenv_writer(stdout(), t).unwrap()
-                                    }
-                                    // PartTableTag::Partitions(t) => {
-                                    //     to_dotenv_writer(stdout(), t).unwrap()
-                                    // }
-                                    _ => (),
-                                }
-                                println!()
+                match probe.probe_part_table(PTFilter::empty()) {
+                    Ok(info) => {
+                        match format.unwrap_or_default() {
+                            Format::Export => {
+                                to_dotenv_writer(stdout(), &info).unwrap();
+                            }
+                            Format::Json => {
+                                to_json_writer(stdout(), &info).unwrap();
                             }
                         }
-                        Format::Json => {
-                            todo!();
+
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        if let Error::Io(_) = e {
+                            return Err(e);
                         }
                     }
-
-                    return Ok(());
                 }
-                Err(e) => {
-                    if let Error::Io(_) = e {
-                        return Err(e);
+
+                match probe.probe_block(BlockFilter::empty()) {
+                    Ok(info) => {
+                        match format.unwrap_or_default() {
+                            Format::Export => {
+                                to_dotenv_writer(stdout(), &info).unwrap();
+                            }
+                            Format::Json => {
+                                to_json_writer(stdout(), &info).unwrap();
+                            }
+                        }
+
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        if let Error::Io(_) = e {
+                            return Err(e);
+                        }
+                    }
+                }
+
+                return Err(Error::ProbesExhausted);
+            }
+            Commands::Topology { device, format } => {
+                let probe = Probe::open(device, ProbeFlags::empty(), 0)?;
+
+                let topology = Topology {
+                    device_size: probe.device_size()?,
+                    logical_sector_size: probe.logical_sector_size()?,
+                    physical_sector_size: probe.physical_sector_size()?,
+                    minimum_io_size: probe.minimum_io_size()?,
+                    optimal_io_size: probe.optimal_io_size()?,
+                    alignment_offset: probe.alignment_offset()?.into(),
+                };
+
+                match format.unwrap_or_default() {
+                    Format::Export => {
+                        to_dotenv_writer(stdout(), &topology).expect("ahh, making dotenv failed.");
+                        println!();
+                    }
+                    Format::Json => {
+                        to_json_writer(stdout(), &topology)
+                            .expect("ahh, making JSON pretty failed.");
+                        println!();
                     }
                 }
             }
-
-            match probe.probe_block(BlockFilter::empty()) {
-                Ok(info) => {
-                    println!("{:?}", info);
-                    todo!();
-                    return Ok(());
-                }
-                Err(e) => {
-                    if let Error::Io(_) = e {
-                        return Err(e);
-                    }
-                }
-            }
-
-            Err(Error::ProbesExhausted)
-        }
-        Commands::Topology { device, format } => {
-            let probe = Probe::open(device, ProbeFlags::empty(), 0)?;
-
-            let topology = Topology {
-                DEVICE_SIZE: probe.device_size()?,
-                LOGICAL_SECTOR_SIZE: probe.logical_sector_size()?,
-                PHYSICAL_SECTOR_SIZE: probe.physical_sector_size()?,
-                MINIMUM_IO_SIZE: probe.minimum_io_size()?,
-                OPTIMAL_IO_SIZE: probe.optimal_io_size()?,
-                ALIGNMENT_OFFSET: probe.alignment_offset()?.into(),
-            };
-
-            match format.unwrap_or_default() {
-                Format::Export => {
-                    to_dotenv_writer(stdout(), &topology).expect("ahh, making dotenv failed.");
-                    println!();
-                }
-                Format::Json => {
-                    to_json_writer(stdout(), &topology).expect("ahh, making JSON pretty failed.");
-                    println!();
-                }
-            }
-
-            Ok(())
         }
     }
+    Ok(())
 }

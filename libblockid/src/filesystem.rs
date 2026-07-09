@@ -63,7 +63,11 @@ pub(crate) struct BlockHandler<IO: BlockIo> {
 
 /// The type of filesystem supported.
 #[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "lowercase")
+)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockType {
     Apfs,
@@ -228,7 +232,11 @@ impl From<VolumeId64> for FilesystemId {
 }
 
 /// The subtype of filesystems.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "lowercase")
+)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SubType {
     Fat12,
@@ -419,6 +427,84 @@ impl BlockInfo {
             BlockTag::Creator(t) => Some(t),
             _ => None,
         })
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for BlockInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        let mut map = serializer.serialize_map(Some(self.tags.len()))?;
+
+        for tag in &self.tags {
+            match tag {
+                BlockTag::BlockType(fs) => {
+                    map.serialize_entry("FS_TYPE", fs)?;
+                }
+                BlockTag::SubType(sub) => {
+                    map.serialize_entry("FS_SUB_TYPE", sub)?;
+                }
+                BlockTag::Label(label) => {
+                    map.serialize_entry("FS_LABEL", label)?;
+                }
+                BlockTag::FilesystemId(id) => match id {
+                    FilesystemId::Uuid(uuid) => {
+                        map.serialize_entry("FS_ID", uuid)?;
+                    }
+                    FilesystemId::VolumeId32(id32) => {
+                        map.serialize_entry("FS_ID", id32)?;
+                    }
+                    FilesystemId::VolumeId64(id64) => {
+                        map.serialize_entry("FS_ID", id64)?;
+                    }
+                },
+                BlockTag::SubMemberId(id) => {
+                    map.serialize_entry("FS_SUB_MEMBER_ID", id)?;
+                }
+                BlockTag::ExtLogId(id) => {
+                    map.serialize_entry("FS_EXT_LOG_ID", id)?;
+                }
+                BlockTag::ExtJournalId(id) => {
+                    map.serialize_entry("FS_JOURNAL_ID", id)?;
+                }
+                BlockTag::Usage(usage) => {
+                    map.serialize_entry("FS_USAGE", usage)?;
+                }
+                BlockTag::Version(ver) => {
+                    map.serialize_entry("FS_VERSION", ver)?;
+                }
+                BlockTag::Magic(mag) => {
+                    map.serialize_entry("FS_MAGIC", mag)?;
+                }
+                BlockTag::MagicOffset(off) => {
+                    map.serialize_entry("FS_MAGIC_OFFSET", off)?;
+                }
+                BlockTag::FsSize(sz) => {
+                    map.serialize_entry("FS_SIZE", sz)?;
+                }
+                BlockTag::FsLastBlock(last_block) => {
+                    map.serialize_entry("FS_LAST_BLOCK", last_block)?;
+                }
+                BlockTag::FsBlockSize(blk_sz) => {
+                    map.serialize_entry("FS_BLOCK_SIZE", blk_sz)?;
+                }
+                BlockTag::BlockSize(blk_sz) => {
+                    map.serialize_entry("BLOCK_SIZE", blk_sz)?;
+                }
+                BlockTag::Endianness(endian) => {
+                    map.serialize_entry("FS_ENDIANNESS", endian)?;
+                }
+                BlockTag::Creator(creator) => {
+                    map.serialize_entry("FS_CREATOR", creator)?;
+                }
+            }
+        }
+
+        map.end()
     }
 }
 

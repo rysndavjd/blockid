@@ -313,12 +313,12 @@ pub struct ExtCreator(U32<LittleEndian>);
 impl fmt::Display for ExtCreator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match u32::from(self.0) {
-            0 => write!(f, "Linux"),
-            1 => write!(f, "Hurd"),
-            2 => write!(f, "Masix"),
-            3 => write!(f, "FreeBSD"),
-            4 => write!(f, "Lites"),
-            _ => write!(f, "Unknown"),
+            0 => write!(f, "linux"),
+            1 => write!(f, "hurd"),
+            2 => write!(f, "masix"),
+            3 => write!(f, "freeBSD"),
+            4 => write!(f, "lites"),
+            _ => write!(f, "unknown: {}", self.0),
         }
     }
 }

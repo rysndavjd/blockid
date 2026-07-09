@@ -12,7 +12,7 @@ use crate::{
     partition::{
         aix::{AIX_MAGICS, AIX_MINSZ, probe_aix},
         gpt::{GPT_MAGICS, GPT_MINSZ, probe_gpt},
-        mbr::{MBR_MAGICS, MBR_MINSZ, probe_mbr},
+        mbr::{MBR_MAGICS, MBR_MINSZ, MbrPartitionType, probe_mbr},
     },
     probe::{Magic, ProbeFlags},
     std::fmt,
@@ -22,6 +22,7 @@ use crate::{
 #[rustfmt::skip]
 pub const PT_DETECT_ORDER: &[(PTFilter, PartTableType)] = &[
     (PTFilter::SKIP_GPT, PartTableType::Gpt),
+    (PTFilter::SKIP_MBR, PartTableType::Mbr),
 ];
 
 /// A generic handler for probing a partition table type.
@@ -39,7 +40,11 @@ pub(crate) struct PtHandler<IO: BlockIo> {
 
 /// The type of partition tables supported.
 #[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "lowercase")
+)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartTableType {
     /// AIX partition table is used on the [IBM AIX](https://en.wikipedia.org/wiki/IBM_AIX) operating system
@@ -125,7 +130,7 @@ impl From<u32> for PartTableId {
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartitionType {
     /// [Partition types](https://en.wikipedia.org/wiki/Partition_type) used in MBR partition table.
-    Hex(u8),
+    Mbr(MbrPartitionType),
     /// [Partition types GUIDs](https://en.wikipedia.org/wiki/GUID_Partition_Table#Partition_type_GUIDs) used in GPT partition table.
     Uuid(Uuid),
     /// Used for MAC partition table.
@@ -180,7 +185,7 @@ pub struct Partition {
     pub partition_id: PartitionId,
     /// The partition type of a specified partition table.
     pub partition_type: PartitionType,
-    /// Partition number
+    /// Partition number, starting from 1
     pub part_no: u64,
     /// Partition label
     pub partition_name: Option<String>,
@@ -192,11 +197,18 @@ pub struct Partition {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartTableTag {
+    /// Partition table type.
     PartTableType(PartTableType),
+    /// Partition table identifier.
     PartTableId(PartTableId),
+    /// Total size in bytes from the start of the disk to the end of the
+    /// partition table addressed region.
     PartTableSize(u64),
+    /// Partition table magic signature.
     Magic(Vec<u8>),
+    /// Partition table magic signature offset.
     MagicOffset(u64),
+    /// List of partitions in the partition table.
     Partitions(Vec<Partition>),
 }
 
@@ -263,6 +275,88 @@ impl PartTableInfo {
             PartTableTag::Partitions(t) => Some(t.as_slice()),
             _ => None,
         })
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for PartTableInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        let mut map = serializer.serialize_map(Some(self.tags.len()))?;
+
+        for tag in &self.tags {
+            match tag {
+                PartTableTag::PartTableType(pt) => {
+                    map.serialize_entry("PT_TYPE", pt)?;
+                }
+                PartTableTag::PartTableId(id) => match id {
+                    PartTableId::Uuid(uuid) => map.serialize_entry("PT_ID", uuid)?,
+                    PartTableId::Mbr { disk } => {
+                        map.serialize_entry("PT_ID", &format!("{:x}", disk))?;
+                    }
+                },
+                PartTableTag::PartTableSize(sz) => {
+                    map.serialize_entry("PT_SIZE", sz)?;
+                }
+                PartTableTag::Magic(mag) => {
+                    map.serialize_entry("PT_MAGIC", mag)?;
+                }
+                PartTableTag::MagicOffset(off) => {
+                    map.serialize_entry("PT_MAGIC_OFFSET", off)?;
+                }
+                PartTableTag::Partitions(parts) => {
+                    for part in parts {
+                        map.serialize_entry(&format!("PART{}_START", part.part_no), &part.start)?;
+                        map.serialize_entry(&format!("PART{}_END", part.part_no), &part.end)?;
+                        match &part.partition_id {
+                            PartitionId::Uuid(uuid) => {
+                                map.serialize_entry(&format!("PART{}_ID", part.part_no), uuid)?;
+                            }
+                            PartitionId::Mbr { disk, part_no } => {
+                                map.serialize_entry(
+                                    &format!("PART{}_ID", part.part_no),
+                                    &format!("{:#x}{:x}", disk, part_no),
+                                )?;
+                            }
+                        }
+                        match &part.partition_type {
+                            PartitionType::Mbr(byte) => {
+                                map.serialize_entry(&format!("PART{}_TYPE", part.part_no), byte)?;
+                            }
+                            PartitionType::Uuid(uuid) => {
+                                map.serialize_entry(&format!("PART{}_TYPE", part.part_no), uuid)?;
+                            }
+                            PartitionType::String(str) => {
+                                map.serialize_entry(&format!("PART{}_TYPE", part.part_no), str)?;
+                            }
+                        }
+                        if let Some(name) = &part.partition_name {
+                            map.serialize_entry(&format!("PART{}_NAME", part.part_no), name)?;
+                        }
+                        match &part.attributes {
+                            PartAttributes::Mbr(attr) => {
+                                map.serialize_entry(
+                                    &format!("PART{}_ATTRIBUTES", part.part_no),
+                                    attr,
+                                )?;
+                            }
+                            PartAttributes::Gpt(attr) => {
+                                map.serialize_entry(
+                                    &format!("PART{}_ATTRIBUTES", part.part_no),
+                                    attr,
+                                )?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        map.end()
     }
 }
 
