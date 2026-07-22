@@ -46,7 +46,6 @@ impl<E: fmt::Debug> From<XfsError> for Error<E> {
 pub const XFS_MINSZ: Option<u64> = None;
 pub const XFS_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: b"XFSB",
-    len: 4,
     b_offset: 0,
 }]);
 
@@ -215,8 +214,8 @@ pub fn probe_xfs<IO: BlockIo>(
 ) -> Result<BlockInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<XfsSuperBlock>()] = reader.read_exact_at(offset)?;
     let sb: &XfsSuperBlock = transmute_ref!(&buf);
-    let mut crc_area = reader.read_vec_at(offset, usize::from(sb.sectsize))?;
 
+    let mut crc_area = reader.read_vec_at(offset, usize::from(sb.sectsize))?;
     sb.verify(&mut crc_area)?;
 
     let label = if sb.fname[0] != 0 {

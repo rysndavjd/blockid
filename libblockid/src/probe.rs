@@ -41,14 +41,12 @@ pub enum Endianness {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Magic {
     pub magic: &'static [u8],
-    pub len: usize,
     pub b_offset: u64,
 }
 
 impl Magic {
     const EMPTY_MAGIC: Magic = Magic {
         magic: &[0],
-        len: 0,
         b_offset: 0,
     };
 }

@@ -6,6 +6,7 @@ pub mod no_std;
 #[cfg(feature = "std")]
 mod std;
 
+use ::std::ops::Range;
 #[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
 pub use embedded_io::SeekFrom;
 
@@ -73,6 +74,21 @@ impl<IO: BlockIo> Reader<IO> {
         Ok(buf)
     }
 
+    pub fn read_at_exclude(
+        &mut self,
+        offset: u64,
+        size: usize,
+        exclude: Range<usize>,
+    ) -> Result<Vec<u8>, Error<IO::Error>> {
+        let mut buf = self.read_vec_at(offset, size)?;
+        if exclude.end > size {
+            return Err(Error::RangeEndExceedsGivenSize);
+        }
+        buf[exclude].fill(0);
+
+        Ok(buf)
+    }
+
     /// Searches through list of provided magics checking if they exist,
     /// returning the first found magic.
     pub fn get_magic(
@@ -81,16 +97,16 @@ impl<IO: BlockIo> Reader<IO> {
     ) -> Result<Option<Magic>, Error<IO::Error>> {
         let mut buf = [0u8; 16];
 
-        for magic in magics {
+        for mag in magics {
             debug_assert!(
-                magic.len <= buf.len(),
+                mag.magic.len() <= buf.len(),
                 "Magic should not be greater then `buf`"
             );
 
-            self.read_at(magic.b_offset, &mut buf)?;
+            self.read_at(mag.b_offset, &mut buf)?;
 
-            if &buf[..magic.len] == magic.magic {
-                return Ok(Some(*magic));
+            if &buf[..mag.magic.len()] == mag.magic {
+                return Ok(Some(*mag));
             }
         }
 

@@ -26,6 +26,7 @@ pub enum MbrError {
     ProbablyNTFS,
     MissingBootIndicator,
     BadPrimaryExtendedOffset,
+    MultipleExtendedPartitions,
     InvalidExtendedSignature,
     Overflow,
 }
@@ -43,6 +44,9 @@ impl fmt::Display for MbrError {
             }
             MbrError::BadPrimaryExtendedOffset => {
                 write!(f, "Bad offset in primary extended partition")
+            }
+            MbrError::MultipleExtendedPartitions => {
+                write!(f, "Multiple extended partitions was found")
             }
             MbrError::InvalidExtendedSignature => {
                 write!(f, "Extended partition is missing a valid signature")
@@ -66,7 +70,6 @@ const MBR_MAG_OFFSET: u64 = 510;
 pub const MBR_MINSZ: Option<u64> = Some(512);
 pub const MBR_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: MBR_MAG,
-    len: 2,
     b_offset: MBR_MAG_OFFSET,
 }]);
 
@@ -289,27 +292,32 @@ fn is_valid_mbr<IO: BlockIo>(
     Ok(())
 }
 
+/// When `os_calls` is unavailable parsing will default to 512 byte logical
+/// sector size as MBR does not provide enough information to figure out the
+/// partition table sector size from its header content alone.
+///
+/// When `os_calls` is available parsing will use the disks logical sector size
+/// for calculations.
 pub fn probe_mbr<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
+    _: ProbeFlags,
     offset: u64,
-    mag: Magic,
+    _: Magic,
 ) -> Result<PartTableInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<MbrTable>()] = reader.read_exact_at(offset)?;
 
-    let mbr_pt: &MbrTable = transmute_ref!(&buf);
-
-    if mbr_pt.boot_code1[0..3] == AIX_MAGIC {
+    if buf[0..3] == AIX_MAGIC {
         return Err(MbrError::ProbablyAix.into());
     }
 
+    let mbr_pt: &MbrTable = transmute_ref!(&buf);
+
     is_valid_mbr(reader, offset, mbr_pt)?;
 
-    let ssz = if cfg!(feature = "os_calls") {
-        reader.logical_sector_size()?
-    } else {
-        512
-    };
+    #[cfg(feature = "os_calls")]
+    let ssz = reader.logical_sector_size()?;
+    #[cfg(not(feature = "os_calls"))]
+    const ssz: u64 = 512;
 
     let mut partitions: Vec<Partition> = Vec::new();
 
@@ -332,7 +340,11 @@ pub fn probe_mbr<IO: BlockIo>(
         }
 
         if part.is_extended() {
-            extended = Some(part);
+            if extended.is_none() {
+                extended = Some(part);
+            } else {
+                return Err(MbrError::MultipleExtendedPartitions.into());
+            }
             continue;
         }
 

@@ -1,4 +1,5 @@
 pub(crate) mod apfs;
+pub(crate) mod cramfs;
 pub(crate) mod exfat;
 pub(crate) mod ext;
 pub(crate) mod luks;

@@ -65,7 +65,7 @@ impl fmt::Display for ExFatError {
     }
 }
 
-impl<E: core::fmt::Debug> From<ExFatError> for Error<E> {
+impl<E: fmt::Debug> From<ExFatError> for Error<E> {
     fn from(e: ExFatError) -> Self {
         Self::ExFat(e)
     }
@@ -74,7 +74,6 @@ impl<E: core::fmt::Debug> From<ExFatError> for Error<E> {
 pub const EXFAT_MINSZ: Option<u64> = Some(4194304);
 pub const EXFAT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: b"EXFAT   ",
-    len: 8,
     b_offset: 3,
 }]);
 
@@ -188,7 +187,7 @@ fn verify_exfat_checksum<IO: BlockIo>(
 
     let checksum_sector = &data[sector_size * 11..sector_size * 12];
 
-    for bytes in checksum_sector.chunks_exact(4) {
+    for bytes in checksum_sector.as_chunks::<4>().0 {
         let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
 
         if checksum != expected {

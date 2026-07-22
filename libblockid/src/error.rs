@@ -1,8 +1,8 @@
 use crate::std::fmt;
 pub use crate::{
     filesystem::{
-        apfs::ApfsError, exfat::ExFatError, ext::ExtError, luks::LuksError, ntfs::NtfsError,
-        vfat::VFatError, vxfs::VxfsError, xfs::XfsError,
+        apfs::ApfsError, cramfs::CramfsError, exfat::ExFatError, ext::ExtError, luks::LuksError,
+        ntfs::NtfsError, vfat::VFatError, vxfs::VxfsError, xfs::XfsError,
     },
     partition::{aix::AixError, gpt::GptError, mbr::MbrError},
 };
@@ -32,6 +32,8 @@ pub enum Error<E: fmt::Debug> {
     Vxfs(VxfsError),
     /// Errors returned from XFS probing logic.
     Xfs(XfsError),
+    /// Errors returned from cramfs probeing logic
+    Cramfs(CramfsError),
     /// Errors returned from AIX probing logic.
     Aix(AixError),
     /// Errors returned from MBR (Master Boot Record) probing logic.
@@ -43,6 +45,8 @@ pub enum Error<E: fmt::Debug> {
     /// The device is smaller than the minimum required to hold
     /// the supported filesystem or partition table structure.
     DeviceTooSmall,
+    /// Range end exceeds given size read
+    RangeEndExceedsGivenSize,
     /// The provided offset exceeds the bounds of the device.
     OffsetExceedsDeviceSize,
     /// All available probes were attempted and none succeeded.
@@ -61,6 +65,7 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
             Self::VFat(e) => write!(f, "VFAT Error: {}", e),
             Self::Vxfs(_) => write!(f, "VXFS Error"),
             Self::Xfs(e) => write!(f, "XFS Error: {}", e),
+            Self::Cramfs(e) => write!(f, "cramfs error: {}", e),
             Self::Aix(_) => write!(f, "AIX Error"),
             Self::Mbr(e) => write!(f, "MBR Error: {}", e),
             Self::Gpt(e) => write!(f, "GPT Error: {}", e),
@@ -69,6 +74,9 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
                 f,
                 "device is smaller than the minimum required to hold the supported filesystem or partition table structure"
             ),
+            Self::RangeEndExceedsGivenSize => {
+                write!(f, "range end exceeds given size read")
+            }
             Self::OffsetExceedsDeviceSize => {
                 write!(f, "provided offset exceeds the bounds of the device")
             }

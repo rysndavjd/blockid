@@ -27,12 +27,10 @@ pub const VXFS_MINSZ: Option<u64> = None;
 pub const VXFS_MAGICS: Option<&'static [Magic]> = Some(&[
     Magic {
         magic: LITTLE_ENDIAN_MAGIC,
-        len: 4,
         b_offset: 1024,
     },
     Magic {
         magic: BIG_ENDIAN_MAGIC,
-        len: 4,
         b_offset: 8192,
     },
 ]);

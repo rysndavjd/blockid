@@ -71,32 +71,26 @@ pub const VFAT_MINSZ: Option<u64> = Some(32768);
 pub const VFAT_MAGICS: Option<&'static [Magic]> = Some(&[
     Magic {
         magic: b"MSWIN",
-        len: 5,
         b_offset: 0x52,
     },
     Magic {
         magic: b"FAT32   ",
-        len: 8,
         b_offset: 0x52,
     },
     Magic {
         magic: b"MSDOS",
-        len: 5,
         b_offset: 0x36,
     },
     Magic {
         magic: b"FAT16   ",
-        len: 8,
         b_offset: 0x36,
     },
     Magic {
         magic: b"FAT12   ",
-        len: 8,
         b_offset: 0x36,
     },
     Magic {
         magic: b"FAT     ",
-        len: 8,
         b_offset: 0x36,
     },
 ]);
@@ -265,7 +259,7 @@ pub fn valid_fat(
     vs: &VFatSuperBlock,
     mag: &Magic,
 ) -> Result<SubType, VFatError> {
-    if mag.len <= 2 {
+    if mag.magic.len() <= 2 {
         if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
             return Err(VFatError::ProbablyDOS);
         }

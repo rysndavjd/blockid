@@ -47,7 +47,6 @@ impl<E: fmt::Debug> From<ApfsError> for Error<E> {
 pub const APFS_MINSZ: Option<u64> = None;
 pub const APFS_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: ApfsSuperBlock::MAGIC,
-    len: ApfsSuperBlock::MAGIC.len(),
     b_offset: ApfsSuperBlock::MAGIC_OFFSET,
 }]);
 

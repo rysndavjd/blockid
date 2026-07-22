@@ -67,14 +67,12 @@ pub const SECONDARY_OFFSETS: [u64; 9] = [
 pub const LUKS1_MINSZ: Option<u64> = Some(1048576);
 pub const LUKS1_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: &LUKS1_MAGIC,
-    len: 6,
     b_offset: 0,
 }]);
 
 pub const LUKS2_MINSZ: Option<u64> = Some(4194304);
 pub const LUKS2_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: &LUKS2_MAGIC,
-    len: 6,
     b_offset: 0,
 }]);
 

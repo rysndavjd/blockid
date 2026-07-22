@@ -67,7 +67,6 @@ impl<E: fmt::Debug> From<NtfsError> for Error<E> {
 pub const NTFS_MINSZ: Option<u64> = None;
 pub const NTFS_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: b"NTFS    ",
-    len: 8,
     b_offset: 3,
 }]);
 

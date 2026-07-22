@@ -19,7 +19,6 @@ impl<E: core::fmt::Debug> From<AixError> for Error<E> {
 pub const AIX_MINSZ: Option<u64> = None;
 pub const AIX_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     magic: &AIX_MAGIC,
-    len: 4,
     b_offset: 0,
 }]);
 
