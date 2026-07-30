@@ -45,6 +45,7 @@ pub(crate) struct PtHandler<IO: BlockIo> {
     derive(serde::Serialize, serde::Deserialize),
     serde(rename_all = "lowercase")
 )]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartTableType {
     /// AIX partition table is used on the [IBM AIX](https://en.wikipedia.org/wiki/IBM_AIX) operating system

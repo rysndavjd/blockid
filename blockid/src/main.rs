@@ -53,9 +53,13 @@ enum Commands {
         #[arg(short = 'f', long = "format", value_enum)]
         format: Option<Format>,
 
-        /// Set filter for what superblock type to parse for.
+        /// Set filter for what filesystem type to parse for.
         #[arg(short = 't', long = "type-filter", value_enum)]
-        blocks: Option<Vec<String>>,
+        filesystem: Option<Vec<BlockType>>,
+
+        /// Set filter for what partition table type to parse for.
+        #[arg(short = 't', long = "type-filter", value_enum)]
+        part_table: Option<Vec<PartTableType>>,
     },
 
     /// Display I/O topology of a device
@@ -85,8 +89,11 @@ struct Topology {
     device_size: u64,
     logical_sector_size: u64,
     physical_sector_size: u64,
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     minimum_io_size: u64,
+    #[cfg(target_os = "linux")]
     optimal_io_size: u64,
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     #[serde(skip_serializing_if = "Option::is_none")]
     alignment_offset: Option<u64>,
 }
@@ -121,7 +128,8 @@ fn _main() -> Result<(), Error<io::Error>> {
                 device,
                 offset,
                 format,
-                blocks,
+                filesystem,
+                part_table,
             } => {
                 let mut probe =
                     Probe::open(device, ProbeFlags::empty(), offset.unwrap_or_default())?;
@@ -175,8 +183,11 @@ fn _main() -> Result<(), Error<io::Error>> {
                     device_size: probe.device_size()?,
                     logical_sector_size: probe.logical_sector_size()?,
                     physical_sector_size: probe.physical_sector_size()?,
+                    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
                     minimum_io_size: probe.minimum_io_size()?,
+                    #[cfg(target_os = "linux")]
                     optimal_io_size: probe.optimal_io_size()?,
+                    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
                     alignment_offset: probe.alignment_offset()?.into(),
                 };
 

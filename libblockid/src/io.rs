@@ -6,7 +6,6 @@ pub mod no_std;
 #[cfg(feature = "std")]
 mod std;
 
-use ::std::ops::Range;
 #[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
 pub use embedded_io::SeekFrom;
 
@@ -16,7 +15,7 @@ pub use crate::io::no_std::{Error as IoError, File, SeekFrom, path::PathBuf};
 pub use crate::io::std::SeekFrom;
 #[cfg(all(feature = "os_calls", feature = "std"))]
 pub use crate::io::std::{File, IoError, PathBuf, SeekFrom};
-use crate::{error::Error, probe::Magic};
+use crate::{error::Error, probe::Magic, std::ops::Range};
 
 /// Trait used to get access to underlying device.
 #[cfg(not(feature = "os_calls"))]

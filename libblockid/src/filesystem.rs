@@ -69,6 +69,7 @@ pub(crate) struct BlockHandler<IO: BlockIo> {
     derive(serde::Serialize, serde::Deserialize),
     serde(rename_all = "lowercase")
 )]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum BlockType {
     Apfs,
