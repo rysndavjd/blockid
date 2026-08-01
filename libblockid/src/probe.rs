@@ -2,9 +2,9 @@ use bitflags::bitflags;
 
 use crate::{
     error::Error,
-    filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo, BlockType},
+    filesystem::{FS_DETECT_ORDER, FsFilter, FsInfo, FsType},
     io::{BlockIo, Reader},
-    partition::{PT_DETECT_ORDER, PTFilter, PartTableInfo, PartTableType},
+    partition::{PT_DETECT_ORDER, PtFilter, PtInfo, PtType},
 };
 
 /// Describes the intended usage of a superblock.
@@ -15,9 +15,9 @@ use crate::{
 )]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Usage {
-    /// Stores files and directories in a structured filesystem.
+    /// Stores files and directories in a structured manner.
     Filesystem,
-    /// Spans or mirrors data across multiple physical disks (RAID).
+    /// Spans or mirrors data across multiple disks.
     Raid,
     /// Manages an encrypted volume or backing store.
     Crypto,
@@ -61,18 +61,18 @@ bitflags! {
     }
 }
 
-pub fn probe_block<IO: BlockIo>(
+pub fn probe_filesystem<IO: BlockIo>(
     reader: &mut Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
-    filter: BlockFilter,
-) -> Result<BlockInfo, Error<IO::Error>> {
-    for block in BLOCK_DETECT_ORDER {
+    filter: FsFilter,
+) -> Result<FsInfo, Error<IO::Error>> {
+    for block in FS_DETECT_ORDER {
         if filter.contains(block.0) {
             continue;
         }
 
-        let handle = block.1.block_handler();
+        let handle = block.1.fs_handler();
 
         #[cfg(feature = "os_calls")]
         {
@@ -112,13 +112,13 @@ pub fn probe_block<IO: BlockIo>(
     return Err(Error::ProbesExhausted);
 }
 
-pub fn search_for_block<IO: BlockIo>(
+pub fn search_for_filesystem<IO: BlockIo>(
     reader: &mut Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
-    block: BlockType,
-) -> Result<BlockInfo, Error<IO::Error>> {
-    let handle = block.block_handler::<IO>();
+    filesystem: FsType,
+) -> Result<FsInfo, Error<IO::Error>> {
+    let handle = filesystem.fs_handler::<IO>();
 
     #[cfg(feature = "os_calls")]
     {
@@ -153,8 +153,8 @@ pub fn probe_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
-    filter: PTFilter,
-) -> Result<PartTableInfo, Error<IO::Error>> {
+    filter: PtFilter,
+) -> Result<PtInfo, Error<IO::Error>> {
     for block in PT_DETECT_ORDER {
         if filter.contains(block.0) {
             continue;
@@ -204,8 +204,8 @@ pub fn search_for_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
-    part_table: PartTableType,
-) -> Result<PartTableInfo, Error<IO::Error>> {
+    part_table: PtType,
+) -> Result<PtInfo, Error<IO::Error>> {
     let handle = part_table.pt_handler::<IO>();
 
     #[cfg(feature = "os_calls")]
@@ -270,28 +270,28 @@ impl<IO: BlockIo> Probe<IO> {
     }
 
     #[inline]
-    pub fn probe_block(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
-        probe_block(&mut self.reader, self.flags, self.offset, filter)
+    pub fn probe_filesystem(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
+        probe_filesystem(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
-    pub fn search_for_block(&mut self, block: BlockType) -> Result<BlockInfo, Error<IO::Error>> {
-        search_for_block(&mut self.reader, self.flags, self.offset, block)
+    pub fn search_for_filesystem(&mut self, filesystem: FsType) -> Result<BlockInfo, Error<IO::Error>> {
+        search_for_filesystem(&mut self.reader, self.flags, self.offset, filesystem)
     }
 
     #[inline]
     pub fn probe_part_table(
         &mut self,
-        filter: PTFilter,
-    ) -> Result<PartTableInfo, Error<IO::Error>> {
+        filter: PtFilter,
+    ) -> Result<PtInfo, Error<IO::Error>> {
         probe_part_table(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
     pub fn search_for_part_table(
         &mut self,
-        part_table: PTType,
-    ) -> Result<PartTableInfo, Error<IO::Error>> {
+        part_table: PtType,
+    ) -> Result<PtInfo, Error<IO::Error>> {
         search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
     }
 }
@@ -363,34 +363,34 @@ impl Probe<crate::io::File> {
     }
 
     #[inline]
-    pub fn probe_block(
+    pub fn probe_filesystem(
         &mut self,
-        filter: BlockFilter,
-    ) -> Result<BlockInfo, Error<crate::io::IoError>> {
-        probe_block(&mut self.reader, self.flags, self.offset, filter)
+        filter: FsFilter,
+    ) -> Result<FsInfo, Error<crate::io::IoError>> {
+        probe_filesystem(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
-    pub fn search_for_block(
+    pub fn search_for_filesystem(
         &mut self,
-        block: BlockType,
-    ) -> Result<BlockInfo, Error<crate::io::IoError>> {
-        search_for_block(&mut self.reader, self.flags, self.offset, block)
+        filesystem: FsType,
+    ) -> Result<FsInfo, Error<crate::io::IoError>> {
+        search_for_filesystem(&mut self.reader, self.flags, self.offset, filesystem)
     }
 
     #[inline]
     pub fn probe_part_table(
         &mut self,
-        filter: PTFilter,
-    ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
+        filter: PtFilter,
+    ) -> Result<PtInfo, Error<crate::io::IoError>> {
         probe_part_table(&mut self.reader, self.flags, self.offset, filter)
     }
 
     #[inline]
     pub fn search_for_part_table(
         &mut self,
-        part_table: PartTableType,
-    ) -> Result<PartTableInfo, Error<crate::io::IoError>> {
+        part_table: PtType,
+    ) -> Result<PtInfo, Error<crate::io::IoError>> {
         search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
     }
 

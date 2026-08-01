@@ -7,7 +7,7 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, SubType, FilesystemId},
+    filesystem::{FsInfo, FsTag, FsType, SubType, FsId},
     io::{BlockIo, Reader},
     probe::{ Magic, ProbeFlags, Usage},
     std::{fmt, str::Utf8Error},
@@ -54,8 +54,8 @@ impl fmt::Display for VFatError {
             }
             VFatError::InvalidClusterCount => write!(f, "Invalid cluster count"),
             VFatError::InvalidExtBootSign => write!(f, "Invalid ext_boot_sign"),
-            VFatError::InvalidFsInfoSignatureOne => write!(f, "Invalid fsinfo.signature1"),
-            VFatError::InvalidFsInfoSignatureTwo => write!(f, "Invalid fsinfo.signature2"),
+            VFatError::InvalidFsInfoSignatureOne => write!(f, "Invalid FsInfo.signature1"),
+            VFatError::InvalidFsInfoSignatureTwo => write!(f, "Invalid FsInfo.signature2"),
             VFatError::Overflow => write!(f, "internal calculation overflowed"),
         }
     }
@@ -483,7 +483,7 @@ pub fn probe_vfat<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; 512] = reader.read_exact_at(offset)?;
 
     let ms: &MsDosSuperBlock = transmute_ref!(&buf);
@@ -501,27 +501,27 @@ pub fn probe_vfat<IO: BlockIo>(
         return Err(VFatError::InvalidVFat.into());
     };
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Vfat));
-    info.set(BlockTag::SubType(sub_type));
-    info.set(BlockTag::FilesystemId(FilesystemId::VolumeId32(serno)));
+    info.set(FsTag::FsType(FsType::Vfat));
+    info.set(FsTag::SubType(sub_type));
+    info.set(FsTag::FsId(FsId::VolumeId32(serno)));
     if let Some(l) = label {
-        info.set(BlockTag::Label(l));
+        info.set(FsTag::Label(l));
     }
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
-    info.set(BlockTag::FsSize(
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsSize(
         u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms)),
     ));
-    info.set(BlockTag::FsLastBlock(
+    info.set(FsTag::FsLastBlock(
         u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms)),
     ));
-    info.set(BlockTag::FsBlockSize(
+    info.set(FsTag::FsBlockSize(
         u64::from(vs.vs_cluster_size) * u64::from(ms.ms_sector_size),
     ));
-    info.set(BlockTag::BlockSize(u64::from(ms.ms_sector_size)));
+    info.set(FsTag::BlockSize(u64::from(ms.ms_sector_size)));
 
     return Ok(info);
 }

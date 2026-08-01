@@ -9,7 +9,7 @@ use zerocopy::{
 use crate::{
     ProbeFlags, Usage,
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
+    filesystem::{FsInfo, FsTag, FsType, FsId},
     io::{BlockIo, Reader},
     probe::Magic,
     std::{fmt, mem::offset_of, str::Utf8Error},
@@ -211,7 +211,7 @@ pub fn probe_xfs<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<XfsSuperBlock>()] = reader.read_exact_at(offset)?;
     let sb: &XfsSuperBlock = transmute_ref!(&buf);
 
@@ -228,22 +228,22 @@ pub fn probe_xfs<IO: BlockIo>(
         None
     };
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Xfs));
-    info.set(BlockTag::FilesystemId(FilesystemId::Uuid(
+    info.set(FsTag::FsType(FsType::Xfs));
+    info.set(FsTag::FsId(FsId::Uuid(
         Uuid::from_bytes(sb.uuid),
     )));
     if let Some(l) = label {
-        info.set(BlockTag::Label(l));
+        info.set(FsTag::Label(l));
     }
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
-    info.set(BlockTag::FsSize(sb.fssize()));
-    info.set(BlockTag::FsLastBlock(sb.dblocks.get()));
-    info.set(BlockTag::FsBlockSize(u64::from(sb.blocksize)));
-    info.set(BlockTag::BlockSize(u64::from(sb.sectsize)));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsSize(sb.fssize()));
+    info.set(FsTag::FsLastBlock(sb.dblocks.get()));
+    info.set(FsTag::FsBlockSize(u64::from(sb.blocksize)));
+    info.set(FsTag::BlockSize(u64::from(sb.sectsize)));
 
     return Ok(info);
 }

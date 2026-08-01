@@ -7,7 +7,7 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
+    filesystem::{FsInfo, FsTag, FsType, FsId},
     io::{BlockIo, Reader},
     probe::{Magic, ProbeFlags, Usage},
     std::{
@@ -147,7 +147,7 @@ pub fn probe_luks1<IO: BlockIo>(
     _: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Luks1Header>()] = reader.read_exact_at(offset)?;
 
     let sb: &Luks1Header = transmute_ref!(&buf);
@@ -161,14 +161,14 @@ pub fn probe_luks1<IO: BlockIo>(
 
     let version = sb.version.to_string();
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::LUKS1));
-    info.set(BlockTag::FilesystemId(FilesystemId::Uuid(uuid)));
-    info.set(BlockTag::Usage(Usage::Crypto));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsType(FsType::LUKS1));
+    info.set(FsTag::FsId(FsId::Uuid(uuid)));
+    info.set(FsTag::Usage(Usage::Crypto));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
 
     return Ok(info);
 }
@@ -178,7 +178,7 @@ pub fn probe_luks2<IO: BlockIo>(
     _: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset)?;
 
     let sb: &Luks2Header = transmute_ref!(&buf);
@@ -192,14 +192,14 @@ pub fn probe_luks2<IO: BlockIo>(
 
     let version = sb.version.to_string();
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::LUKS2));
-    info.set(BlockTag::FilesystemId(FilesystemId::Uuid(uuid)));
-    info.set(BlockTag::Usage(Usage::Crypto));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsType(FsType::LUKS2));
+    info.set(FsTag::FsId(FsId::Uuid(uuid)));
+    info.set(FsTag::Usage(Usage::Crypto));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
 
     return Ok(info);
 }
@@ -209,7 +209,7 @@ pub fn probe_luks_opal<IO: BlockIo>(
     _: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset)?;
 
     let sb: &Luks2Header = transmute_ref!(&buf);
@@ -227,14 +227,14 @@ pub fn probe_luks_opal<IO: BlockIo>(
 
     let version = sb.version.to_string();
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::LUKSOpal));
-    info.set(BlockTag::FilesystemId(FilesystemId::Uuid(uuid)));
-    info.set(BlockTag::Usage(Usage::Crypto));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsType(FsType::LUKSOpal));
+    info.set(FsTag::FsId(FsId::Uuid(uuid)));
+    info.set(FsTag::Usage(Usage::Crypto));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
 
     return Ok(info);
 }

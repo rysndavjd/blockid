@@ -32,34 +32,34 @@ use crate::{
     std::fmt,
 };
 
-/// Order used to detect partition tables
+/// Order used to detect filesystems
 #[rustfmt::skip]
-pub const BLOCK_DETECT_ORDER: &[(BlockFilter, BlockType)] = &[
-    (BlockFilter::SKIP_APFS, BlockType::Apfs),
-    (BlockFilter::SKIP_EXFAT, BlockType::Exfat),
-    (BlockFilter::SKIP_JBD, BlockType::Jbd),
-    (BlockFilter::SKIP_EXT2, BlockType::Ext2),
-    (BlockFilter::SKIP_EXT3, BlockType::Ext3),
-    (BlockFilter::SKIP_EXT4, BlockType::Ext4),
-    (BlockFilter::SKIP_LUKS1, BlockType::LUKS1),
-    (BlockFilter::SKIP_LUKS2, BlockType::LUKS2),
-    (BlockFilter::SKIP_LUKS_OPAL, BlockType::LUKSOpal),
-    (BlockFilter::SKIP_NTFS, BlockType::Ntfs),
-    (BlockFilter::SKIP_VFAT, BlockType::Vfat),
-    (BlockFilter::SKIP_VXFS, BlockType::Vxfs),
-    (BlockFilter::SKIP_XFS, BlockType::Xfs),
+pub const FS_DETECT_ORDER: &[(FsFilter, FsType)] = &[
+    (FsFilter::SKIP_APFS, FsType::Apfs),
+    (FsFilter::SKIP_EXFAT, FsType::Exfat),
+    (FsFilter::SKIP_JBD, FsType::Jbd),
+    (FsFilter::SKIP_EXT2, FsType::Ext2),
+    (FsFilter::SKIP_EXT3, FsType::Ext3),
+    (FsFilter::SKIP_EXT4, FsType::Ext4),
+    (FsFilter::SKIP_LUKS1, FsType::LUKS1),
+    (FsFilter::SKIP_LUKS2, FsType::LUKS2),
+    (FsFilter::SKIP_LUKS_OPAL, FsType::LUKSOpal),
+    (FsFilter::SKIP_NTFS, FsType::Ntfs),
+    (FsFilter::SKIP_VFAT, FsType::Vfat),
+    (FsFilter::SKIP_VXFS, FsType::Vxfs),
+    (FsFilter::SKIP_XFS, FsType::Xfs),
 ];
 
 /// A generic handler for probing a filesystem type.
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct BlockHandler<IO: BlockIo> {
+pub(crate) struct FsHandler<IO: BlockIo> {
     /// Minimum disk size in bytes required for filesystem, if any.
     pub minsz: Option<u64>,
     /// Minimum disk size in bytes required for this filesystem, if any.
     pub magics: Option<&'static [Magic]>,
     /// Probes the filesystem, returning its info on success.
     #[allow(clippy::type_complexity)]
-    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<BlockInfo, Error<IO::Error>>,
+    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<FsInfo, Error<IO::Error>>,
 }
 
 /// The type of filesystem supported.
@@ -71,7 +71,7 @@ pub(crate) struct BlockHandler<IO: BlockIo> {
 )]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum BlockType {
+pub enum FsType {
     Apfs,
     Exfat,
     Jbd,
@@ -87,92 +87,92 @@ pub enum BlockType {
     Xfs,
 }
 
-impl fmt::Display for BlockType {
+impl fmt::Display for FsType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BlockType::Apfs => write!(f, "apfs"),
-            BlockType::Exfat => write!(f, "exfat"),
-            BlockType::Jbd => write!(f, "jbd"),
-            BlockType::Ext2 => write!(f, "ext2"),
-            BlockType::Ext3 => write!(f, "ext3"),
-            BlockType::Ext4 => write!(f, "ext4"),
-            BlockType::LUKS1 => write!(f, "luks1"),
-            BlockType::LUKS2 => write!(f, "luks2"),
-            BlockType::LUKSOpal => write!(f, "luks_opal"),
-            BlockType::Ntfs => write!(f, "ntfs"),
-            BlockType::Vfat => write!(f, "vfat"),
-            BlockType::Vxfs => write!(f, "vxfs"),
-            BlockType::Xfs => write!(f, "xfs"),
+            FsType::Apfs => write!(f, "apfs"),
+            FsType::Exfat => write!(f, "exfat"),
+            FsType::Jbd => write!(f, "jbd"),
+            FsType::Ext2 => write!(f, "ext2"),
+            FsType::Ext3 => write!(f, "ext3"),
+            FsType::Ext4 => write!(f, "ext4"),
+            FsType::LUKS1 => write!(f, "luks1"),
+            FsType::LUKS2 => write!(f, "luks2"),
+            FsType::LUKSOpal => write!(f, "luks_opal"),
+            FsType::Ntfs => write!(f, "ntfs"),
+            FsType::Vfat => write!(f, "vfat"),
+            FsType::Vxfs => write!(f, "vxfs"),
+            FsType::Xfs => write!(f, "xfs"),
         }
     }
 }
 
-impl BlockType {
-    pub(crate) const fn block_handler<IO: BlockIo>(&self) -> BlockHandler<IO> {
+impl FsType {
+    pub(crate) const fn fs_handler<IO: BlockIo>(&self) -> FsHandler<IO> {
         match self {
-            BlockType::LUKS1 => BlockHandler {
+            FsType::LUKS1 => FsHandler {
                 minsz: LUKS1_MINSZ,
                 magics: LUKS1_MAGICS,
                 probe: probe_luks1,
             },
 
-            BlockType::LUKS2 => BlockHandler {
+            FsType::LUKS2 => FsHandler {
                 minsz: LUKS2_MINSZ,
                 magics: LUKS2_MAGICS,
                 probe: probe_luks2,
             },
 
-            BlockType::LUKSOpal => BlockHandler {
+            FsType::LUKSOpal => FsHandler {
                 minsz: LUKS2_MINSZ,
                 magics: LUKSOPAL_MAGICS,
                 probe: probe_luks_opal,
             },
-            BlockType::Exfat => BlockHandler {
+            FsType::Exfat => FsHandler {
                 minsz: EXFAT_MINSZ,
                 magics: EXFAT_MAGICS,
                 probe: probe_exfat,
             },
-            BlockType::Jbd => BlockHandler {
+            FsType::Jbd => FsHandler {
                 minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_jbd,
             },
-            BlockType::Apfs => BlockHandler {
+            FsType::Apfs => FsHandler {
                 minsz: APFS_MINSZ,
                 magics: APFS_MAGICS,
                 probe: probe_apfs,
             },
-            BlockType::Ext2 => BlockHandler {
+            FsType::Ext2 => FsHandler {
                 minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext2,
             },
-            BlockType::Ext3 => BlockHandler {
+            FsType::Ext3 => FsHandler {
                 minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext3,
             },
-            BlockType::Ext4 => BlockHandler {
+            FsType::Ext4 => FsHandler {
                 minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext4,
             },
-            BlockType::Ntfs => BlockHandler {
+            FsType::Ntfs => FsHandler {
                 minsz: NTFS_MINSZ,
                 magics: NTFS_MAGICS,
                 probe: probe_ntfs,
             },
-            BlockType::Vfat => BlockHandler {
+            FsType::Vfat => FsHandler {
                 minsz: VFAT_MINSZ,
                 magics: VFAT_MAGICS,
                 probe: probe_vfat,
             },
-            BlockType::Vxfs => BlockHandler {
+            FsType::Vxfs => FsHandler {
                 minsz: VXFS_MINSZ,
                 magics: VXFS_MAGICS,
                 probe: probe_vxfs,
             },
-            BlockType::Xfs => BlockHandler {
+            FsType::Xfs => FsHandler {
                 minsz: XFS_MINSZ,
                 magics: XFS_MAGICS,
                 probe: probe_xfs,
@@ -183,7 +183,7 @@ impl BlockType {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum FilesystemId {
+pub enum FsId {
     /// A 128-bit universally unique identifier.
     Uuid(Uuid),
     /// A 32-bit volume serial number.
@@ -192,44 +192,44 @@ pub enum FilesystemId {
     VolumeId64(VolumeId64),
 }
 
-impl FilesystemId {
+impl FsId {
     pub fn as_uuid(&self) -> Option<Uuid> {
         match self {
-            FilesystemId::Uuid(t) => Some(*t),
+            FsId::Uuid(t) => Some(*t),
             _ => None,
         }
     }
 
     pub fn as_volumeid32(&self) -> Option<VolumeId32> {
         match self {
-            FilesystemId::VolumeId32(t) => Some(*t),
+            FsId::VolumeId32(t) => Some(*t),
             _ => None,
         }
     }
 
     pub fn as_volumeid64(&self) -> Option<VolumeId64> {
         match self {
-            FilesystemId::VolumeId64(t) => Some(*t),
+            FsId::VolumeId64(t) => Some(*t),
             _ => None,
         }
     }
 }
 
-impl From<Uuid> for FilesystemId {
+impl From<Uuid> for FsId {
     fn from(value: Uuid) -> Self {
-        FilesystemId::Uuid(value)
+        FsId::Uuid(value)
     }
 }
 
-impl From<VolumeId32> for FilesystemId {
+impl From<VolumeId32> for FsId {
     fn from(value: VolumeId32) -> Self {
-        FilesystemId::VolumeId32(value)
+        FsId::VolumeId32(value)
     }
 }
 
-impl From<VolumeId64> for FilesystemId {
+impl From<VolumeId64> for FsId {
     fn from(value: VolumeId64) -> Self {
-        FilesystemId::VolumeId64(value)
+        FsId::VolumeId64(value)
     }
 }
 
@@ -249,9 +249,9 @@ pub enum SubType {
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BlockTag {
+pub enum FsTag {
     /// Block type, Eg: EXT4.
-    BlockType(BlockType),
+    FsType(FsType),
     /// Sub block type, Eg: Filsystem is VFAT but subtype is FAT16.
     SubType(SubType),
     /// Filesystem label, Eg: `LABEL`.
@@ -261,7 +261,7 @@ pub enum BlockTag {
     ///     UUID: `67e55044-10b1-426f-9247-bb680e5fe0c8`
     ///     VolumeId32: `2a9d-b913`
     ///     VolumeId64: `17acf19235bcde78`
-    FilesystemId(FilesystemId),
+    FsId(FsId),
     /// Sub member identifier.
     SubMemberId(Uuid),
     /// External log identifier.
@@ -291,149 +291,149 @@ pub enum BlockTag {
 }
 
 #[derive(Debug)]
-pub struct BlockInfo {
-    tags: Vec<BlockTag>,
+pub struct FsInfo {
+    tags: Vec<FsTag>,
 }
 
-impl BlockInfo {
-    pub(crate) fn new() -> BlockInfo {
-        BlockInfo { tags: Vec::new() }
+impl FsInfo {
+    pub(crate) fn new() -> FsInfo {
+        FsInfo { tags: Vec::new() }
     }
 
-    pub fn inner(&self) -> &[BlockTag] {
+    pub fn inner(&self) -> &[FsTag] {
         &self.tags
     }
 
-    pub fn into_inner(self) -> Vec<BlockTag> {
+    pub fn into_inner(self) -> Vec<FsTag> {
         self.tags
     }
 
-    pub(crate) fn set(&mut self, tag: BlockTag) {
+    pub(crate) fn set(&mut self, tag: FsTag) {
         self.tags.push(tag);
     }
 
-    pub fn block_type(&self) -> Option<BlockType> {
+    pub fn fs_type(&self) -> Option<FsType> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::BlockType(t) => Some(*t),
+            FsTag::FsType(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn sub_type(&self) -> Option<SubType> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::SubType(t) => Some(*t),
+            FsTag::SubType(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn label(&self) -> Option<&String> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Label(t) => Some(t),
+            FsTag::Label(t) => Some(t),
             _ => None,
         })
     }
 
-    pub fn filesystem_id(&self) -> Option<FilesystemId> {
+    pub fn fs_id(&self) -> Option<FsId> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::FilesystemId(t) => Some(*t),
+            FsTag::FsId(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn sub_member_id(&self) -> Option<Uuid> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::SubMemberId(t) => Some(*t),
+            FsTag::SubMemberId(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn ext_log_id(&self) -> Option<Uuid> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::ExtLogId(t) => Some(*t),
+            FsTag::ExtLogId(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn ext_journal_id(&self) -> Option<Uuid> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::ExtJournalId(t) => Some(*t),
+            FsTag::ExtJournalId(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn usage(&self) -> Option<Usage> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Usage(t) => Some(*t),
+            FsTag::Usage(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn version(&self) -> Option<&String> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Version(t) => Some(t),
+            FsTag::Version(t) => Some(t),
             _ => None,
         })
     }
 
     pub fn magic(&self) -> Option<&[u8]> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Magic(t) => Some(t.as_slice()),
+            FsTag::Magic(t) => Some(t.as_slice()),
             _ => None,
         })
     }
 
     pub fn magic_offset(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::MagicOffset(t) => Some(*t),
+            FsTag::MagicOffset(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn fs_size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::FsSize(t) => Some(*t),
+            FsTag::FsSize(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn fs_last_block(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::FsLastBlock(t) => Some(*t),
+            FsTag::FsLastBlock(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn fs_block_size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::FsBlockSize(t) => Some(*t),
+            FsTag::FsBlockSize(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn block_size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::BlockSize(t) => Some(*t),
+            FsTag::BlockSize(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn endianness(&self) -> Option<Endianness> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Endianness(t) => Some(*t),
+            FsTag::Endianness(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn creator(&self) -> Option<&String> {
         self.tags.iter().find_map(|t| match t {
-            BlockTag::Creator(t) => Some(t),
+            FsTag::Creator(t) => Some(t),
             _ => None,
         })
     }
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for BlockInfo {
+impl serde::Serialize for FsInfo {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -444,64 +444,64 @@ impl serde::Serialize for BlockInfo {
 
         for tag in &self.tags {
             match tag {
-                BlockTag::BlockType(fs) => {
+                FsTag::FsType(fs) => {
                     map.serialize_entry("FS_TYPE", fs)?;
                 }
-                BlockTag::SubType(sub) => {
-                    map.serialize_entry("FS_SUB_TYPE", sub)?;
+                FsTag::SubType(sub) => {
+                    map.serialize_entry("SUB_TYPE", sub)?;
                 }
-                BlockTag::Label(label) => {
-                    map.serialize_entry("FS_LABEL", label)?;
+                FsTag::Label(label) => {
+                    map.serialize_entry("LABEL", label)?;
                 }
-                BlockTag::FilesystemId(id) => match id {
-                    FilesystemId::Uuid(uuid) => {
+                FsTag::FsId(id) => match id {
+                    FsId::Uuid(uuid) => {
                         map.serialize_entry("FS_ID", uuid)?;
                     }
-                    FilesystemId::VolumeId32(id32) => {
+                    FsId::VolumeId32(id32) => {
                         map.serialize_entry("FS_ID", id32)?;
                     }
-                    FilesystemId::VolumeId64(id64) => {
+                    FsId::VolumeId64(id64) => {
                         map.serialize_entry("FS_ID", id64)?;
                     }
                 },
-                BlockTag::SubMemberId(id) => {
-                    map.serialize_entry("FS_SUB_MEMBER_ID", id)?;
+                FsTag::SubMemberId(id) => {
+                    map.serialize_entry("SUB_MEMBER_ID", id)?;
                 }
-                BlockTag::ExtLogId(id) => {
-                    map.serialize_entry("FS_EXT_LOG_ID", id)?;
+                FsTag::ExtLogId(id) => {
+                    map.serialize_entry("EXT_LOG_ID", id)?;
                 }
-                BlockTag::ExtJournalId(id) => {
-                    map.serialize_entry("FS_JOURNAL_ID", id)?;
+                FsTag::ExtJournalId(id) => {
+                    map.serialize_entry("EXT_JOURNAL_ID", id)?;
                 }
-                BlockTag::Usage(usage) => {
-                    map.serialize_entry("FS_USAGE", usage)?;
+                FsTag::Usage(usage) => {
+                    map.serialize_entry("USAGE", usage)?;
                 }
-                BlockTag::Version(ver) => {
-                    map.serialize_entry("FS_VERSION", ver)?;
+                FsTag::Version(ver) => {
+                    map.serialize_entry("VERSION", ver)?;
                 }
-                BlockTag::Magic(mag) => {
-                    map.serialize_entry("FS_MAGIC", mag)?;
+                FsTag::Magic(mag) => {
+                    map.serialize_entry("MAGIC", mag)?;
                 }
-                BlockTag::MagicOffset(off) => {
-                    map.serialize_entry("FS_MAGIC_OFFSET", off)?;
+                FsTag::MagicOffset(off) => {
+                    map.serialize_entry("MAGIC_OFFSET", off)?;
                 }
-                BlockTag::FsSize(sz) => {
+                FsTag::FsSize(sz) => {
                     map.serialize_entry("FS_SIZE", sz)?;
                 }
-                BlockTag::FsLastBlock(last_block) => {
+                FsTag::FsLastBlock(last_block) => {
                     map.serialize_entry("FS_LAST_BLOCK", last_block)?;
                 }
-                BlockTag::FsBlockSize(blk_sz) => {
+                FsTag::FsBlockSize(blk_sz) => {
                     map.serialize_entry("FS_BLOCK_SIZE", blk_sz)?;
                 }
-                BlockTag::BlockSize(blk_sz) => {
+                FsTag::BlockSize(blk_sz) => {
                     map.serialize_entry("BLOCK_SIZE", blk_sz)?;
                 }
-                BlockTag::Endianness(endian) => {
-                    map.serialize_entry("FS_ENDIANNESS", endian)?;
+                FsTag::Endianness(endian) => {
+                    map.serialize_entry("ENDIANNESS", endian)?;
                 }
-                BlockTag::Creator(creator) => {
-                    map.serialize_entry("FS_CREATOR", creator)?;
+                FsTag::Creator(creator) => {
+                    map.serialize_entry("CREATOR", creator)?;
                 }
             }
         }
@@ -513,7 +513,7 @@ impl serde::Serialize for BlockInfo {
 bitflags! {
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    pub struct BlockFilter: u64 {
+    pub struct FsFilter: u64 {
         const SKIP_APFS = 1 << 0;
         const SKIP_EXFAT = 1 << 1;
         const SKIP_JBD = 1 << 2;

@@ -7,7 +7,7 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
+    filesystem::{FsTag, FsType, FsId, FsInfo},
     io::{BlockIo, Reader},
     probe::{Magic, ProbeFlags, Usage},
     std::{fmt, mem::offset_of},
@@ -16,7 +16,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum ApfsError {
     HeaderChecksumInvalid,
-    InvalidSuperblockType,
+    InvalidSuperFsType,
     InvalidSuperblockSubType,
     PaddingNotZero,
     InvalidBlockSize,
@@ -27,7 +27,7 @@ impl fmt::Display for ApfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ApfsError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
-            ApfsError::InvalidSuperblockType => write!(f, "Invalid APFS container superblock type"),
+            ApfsError::InvalidSuperFsType => write!(f, "Invalid APFS container superblock type"),
             ApfsError::InvalidSuperblockSubType => {
                 write!(f, "Invalid APFS container superblock subtype")
             }
@@ -107,7 +107,7 @@ pub fn probe_apfs<IO: BlockIo>(
     _: ProbeFlags,
     offset: u64,
     _: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<ApfsSuperBlock>()] = reader.read_exact_at(offset)?;
     let sb: &ApfsSuperBlock = transmute_ref!(&buf);
 
@@ -118,7 +118,7 @@ pub fn probe_apfs<IO: BlockIo>(
     }
 
     if u16::from(sb.apfs_type) != ApfsSuperBlock::CONTAINER_SUPERBLOCK_TYPE {
-        return Err(ApfsError::InvalidSuperblockType.into());
+        return Err(ApfsError::InvalidSuperFsType.into());
     }
 
     if u16::from(sb.subtype) != ApfsSuperBlock::CONTAINER_SUPERBLOCK_SUBTYPE {
@@ -139,16 +139,16 @@ pub fn probe_apfs<IO: BlockIo>(
         return Err(ApfsError::UuidEmpty.into());
     };
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Apfs));
-    info.set(BlockTag::FilesystemId(FilesystemId::Uuid(uuid)));
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::FsBlockSize(u64::from(sb.block_size)));
-    info.set(BlockTag::BlockSize(u64::from(sb.block_size)));
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Magic(ApfsSuperBlock::MAGIC.to_vec()));
-    info.set(BlockTag::MagicOffset(ApfsSuperBlock::MAGIC_OFFSET));
+    info.set(FsTag::FsType(FsType::Apfs));
+    info.set(FsTag::FsId(FsId::Uuid(uuid)));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::FsBlockSize(u64::from(sb.block_size)));
+    info.set(FsTag::BlockSize(u64::from(sb.block_size)));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Magic(ApfsSuperBlock::MAGIC.to_vec()));
+    info.set(FsTag::MagicOffset(ApfsSuperBlock::MAGIC_OFFSET));
 
     return Ok(info);
 }

@@ -20,9 +20,9 @@ use crate::{
 
 /// Order used to detect partition tables
 #[rustfmt::skip]
-pub const PT_DETECT_ORDER: &[(PTFilter, PartTableType)] = &[
-    (PTFilter::SKIP_GPT, PartTableType::Gpt),
-    (PTFilter::SKIP_MBR, PartTableType::Mbr),
+pub const PT_DETECT_ORDER: &[(PtFilter, PtType)] = &[
+    (PtFilter::SKIP_GPT, PtType::Gpt),
+    (PtFilter::SKIP_MBR, PtType::Mbr),
 ];
 
 /// A generic handler for probing a partition table type.
@@ -35,7 +35,7 @@ pub(crate) struct PtHandler<IO: BlockIo> {
     /// Probes the partition table, returning its info on success.
     #[allow(clippy::type_complexity)]
     pub probe:
-        fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PartTableInfo, Error<IO::Error>>,
+        fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
 }
 
 /// The type of partition tables supported.
@@ -47,7 +47,7 @@ pub(crate) struct PtHandler<IO: BlockIo> {
 )]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum PartTableType {
+pub enum PtType {
     /// AIX partition table is used on the [IBM AIX](https://en.wikipedia.org/wiki/IBM_AIX) operating system
     Aix,
     /// [Master boot record partition table](https://en.wikipedia.org/wiki/Master_boot_record).
@@ -56,30 +56,30 @@ pub enum PartTableType {
     Gpt,
 }
 
-impl fmt::Display for PartTableType {
+impl fmt::Display for PtType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PartTableType::Aix => write!(f, "aix"),
-            PartTableType::Mbr => write!(f, "mbr"),
-            PartTableType::Gpt => write!(f, "gpt"),
+            PtType::Aix => write!(f, "aix"),
+            PtType::Mbr => write!(f, "mbr"),
+            PtType::Gpt => write!(f, "gpt"),
         }
     }
 }
 
-impl PartTableType {
+impl PtType {
     pub(crate) const fn pt_handler<IO: BlockIo>(&self) -> PtHandler<IO> {
         match self {
-            PartTableType::Aix => PtHandler {
+            PtType::Aix => PtHandler {
                 minsz: AIX_MINSZ,
                 magics: AIX_MAGICS,
                 probe: probe_aix,
             },
-            PartTableType::Mbr => PtHandler {
+            PtType::Mbr => PtHandler {
                 minsz: MBR_MINSZ,
                 magics: MBR_MAGICS,
                 probe: probe_mbr,
             },
-            PartTableType::Gpt => PtHandler {
+            PtType::Gpt => PtHandler {
                 minsz: GPT_MINSZ,
                 magics: GPT_MAGICS,
                 probe: probe_gpt,
@@ -91,38 +91,38 @@ impl PartTableType {
 /// Identifier used by a filesystem or partition table.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum PartTableId {
+pub enum PtId {
     /// A 128-bit universally unique identifier.
     Uuid(Uuid),
     /// A 32-bit MBR disk signature.
     Mbr { disk: u32 },
 }
 
-impl PartTableId {
+impl PtId {
     pub fn as_uuid(&self) -> Option<Uuid> {
         match self {
-            PartTableId::Uuid(t) => Some(*t),
+            PtId::Uuid(t) => Some(*t),
             _ => None,
         }
     }
 
     pub fn as_mbr(&self) -> Option<u32> {
         match self {
-            PartTableId::Mbr { disk } => Some(*disk),
+            PtId::Mbr { disk } => Some(*disk),
             _ => None,
         }
     }
 }
 
-impl From<Uuid> for PartTableId {
+impl From<Uuid> for PtId {
     fn from(value: Uuid) -> Self {
-        PartTableId::Uuid(value)
+        PtId::Uuid(value)
     }
 }
 
-impl From<u32> for PartTableId {
+impl From<u32> for PtId {
     fn from(disk: u32) -> Self {
-        PartTableId::Mbr { disk }
+        PtId::Mbr { disk }
     }
 }
 
@@ -156,6 +156,8 @@ impl PartitionId {
         }
     }
 
+    /// Currently we return the disk ID and the partition number, eventully I 
+    /// will probally make a custom mbr type or something like fat_volume_id
     pub fn as_mbr(&self) -> Option<(u32, u8)> {
         match self {
             PartitionId::Mbr { disk, part_no } => Some((*disk, *part_no)),
@@ -167,7 +169,7 @@ impl PartitionId {
 /// The partition attributes of a specified partition table.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum PartAttributes {
+pub enum PartitionAttributes {
     /// Used in MBR partition tables for if partition is active or inactive.
     Mbr(u8),
     /// Used in GPT partition tables.
@@ -191,20 +193,20 @@ pub struct Partition {
     /// Partition label
     pub partition_name: Option<String>,
     /// The partition attributes of a specified partition table.
-    pub attributes: PartAttributes,
+    pub attributes: PartitionAttributes,
 }
 
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum PartTableTag {
+pub enum PtTag {
     /// Partition table type.
-    PartTableType(PartTableType),
+    PtType(PtType),
     /// Partition table identifier.
-    PartTableId(PartTableId),
+    PtId(PtId),
     /// Total size in bytes from the start of the disk to the end of the
     /// partition table addressed region.
-    PartTableSize(u64),
+    PTSize(u64),
     /// Partition table magic signature.
     Magic(Vec<u8>),
     /// Partition table magic signature offset.
@@ -215,72 +217,72 @@ pub enum PartTableTag {
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct PartTableInfo {
-    tags: Vec<PartTableTag>,
+pub struct PtInfo {
+    tags: Vec<PtTag>,
 }
 
-impl PartTableInfo {
-    pub(crate) fn new() -> PartTableInfo {
-        PartTableInfo { tags: Vec::new() }
+impl PtInfo {
+    pub(crate) fn new() -> PtInfo {
+        PtInfo { tags: Vec::new() }
     }
 
-    pub fn inner(&self) -> &[PartTableTag] {
+    pub fn inner(&self) -> &[PtTag] {
         self.tags.as_slice()
     }
 
-    pub fn into_inner(self) -> Vec<PartTableTag> {
+    pub fn into_inner(self) -> Vec<PtTag> {
         self.tags
     }
 
-    pub(crate) fn set(&mut self, tag: PartTableTag) {
+    pub(crate) fn set(&mut self, tag: PtTag) {
         self.tags.push(tag);
     }
 
-    pub fn part_table_type(&self) -> Option<PartTableType> {
+    pub fn pt_type(&self) -> Option<PtType> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::PartTableType(t) => Some(*t),
+            PtTag::PtType(t) => Some(*t),
             _ => None,
         })
     }
 
-    pub fn part_table_id(&self) -> Option<PartTableId> {
+    pub fn pt_id(&self) -> Option<PtId> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::PartTableId(t) => Some(*t),
+            PtTag::PtId(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn pt_size(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::PartTableSize(t) => Some(*t),
+            PtTag::PTSize(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn magic(&self) -> Option<&[u8]> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::Magic(t) => Some(t.as_slice()),
+            PtTag::Magic(t) => Some(t.as_slice()),
             _ => None,
         })
     }
 
     pub fn magic_offset(&self) -> Option<u64> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::MagicOffset(t) => Some(*t),
+            PtTag::MagicOffset(t) => Some(*t),
             _ => None,
         })
     }
 
     pub fn partitions(&self) -> Option<&[Partition]> {
         self.tags.iter().find_map(|t| match t {
-            PartTableTag::Partitions(t) => Some(t.as_slice()),
+            PtTag::Partitions(t) => Some(t.as_slice()),
             _ => None,
         })
     }
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for PartTableInfo {
+impl serde::Serialize for PtInfo {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -291,25 +293,25 @@ impl serde::Serialize for PartTableInfo {
 
         for tag in &self.tags {
             match tag {
-                PartTableTag::PartTableType(pt) => {
+                PtTag::PtType(pt) => {
                     map.serialize_entry("PT_TYPE", pt)?;
                 }
-                PartTableTag::PartTableId(id) => match id {
-                    PartTableId::Uuid(uuid) => map.serialize_entry("PT_ID", uuid)?,
-                    PartTableId::Mbr { disk } => {
+                PtTag::PtId(id) => match id {
+                    PtId::Uuid(uuid) => map.serialize_entry("PT_ID", uuid)?,
+                    PtId::Mbr { disk } => {
                         map.serialize_entry("PT_ID", &format!("{:x}", disk))?;
                     }
                 },
-                PartTableTag::PartTableSize(sz) => {
+                PtTag::PTSize(sz) => {
                     map.serialize_entry("PT_SIZE", sz)?;
                 }
-                PartTableTag::Magic(mag) => {
-                    map.serialize_entry("PT_MAGIC", mag)?;
+                PtTag::Magic(mag) => {
+                    map.serialize_entry("MAGIC", mag)?;
                 }
-                PartTableTag::MagicOffset(off) => {
-                    map.serialize_entry("PT_MAGIC_OFFSET", off)?;
+                PtTag::MagicOffset(off) => {
+                    map.serialize_entry("MAGIC_OFFSET", off)?;
                 }
-                PartTableTag::Partitions(parts) => {
+                PtTag::Partitions(parts) => {
                     for part in parts {
                         map.serialize_entry(&format!("PART{}_START", part.part_no), &part.start)?;
                         map.serialize_entry(&format!("PART{}_END", part.part_no), &part.end)?;
@@ -339,13 +341,13 @@ impl serde::Serialize for PartTableInfo {
                             map.serialize_entry(&format!("PART{}_NAME", part.part_no), name)?;
                         }
                         match &part.attributes {
-                            PartAttributes::Mbr(attr) => {
+                            PartitionAttributes::Mbr(attr) => {
                                 map.serialize_entry(
                                     &format!("PART{}_ATTRIBUTES", part.part_no),
                                     attr,
                                 )?;
                             }
-                            PartAttributes::Gpt(attr) => {
+                            PartitionAttributes::Gpt(attr) => {
                                 map.serialize_entry(
                                     &format!("PART{}_ATTRIBUTES", part.part_no),
                                     attr,
@@ -364,8 +366,9 @@ impl serde::Serialize for PartTableInfo {
 bitflags! {
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    pub struct PTFilter: u64 {
-        const SKIP_MBR = 1 << 0;
-        const SKIP_GPT = 1 << 1;
+    pub struct PtFilter: u64 {
+        const SKIP_AIX = 1 << 0;
+        const SKIP_MBR = 1 << 1;
+        const SKIP_GPT = 1 << 2;
     }
 }

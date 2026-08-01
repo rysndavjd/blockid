@@ -10,8 +10,8 @@ use crate::{
     error::Error,
     io::Reader,
     partition::{
-        BlockIo, PartAttributes, PartTableId, PartTableInfo, PartTableTag, PartTableType,
-        Partition, PartitionId, PartitionType,
+        BlockIo, PtId, PtType, PartitionAttributes, PtInfo, PtTag, Partition, PartitionId,
+        PartitionType,
     },
     probe::{Endianness, Magic, ProbeFlags},
     std::mem::offset_of,
@@ -258,7 +258,7 @@ pub fn probe_gpt<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     _: Magic,
-) -> Result<PartTableInfo, Error<IO::Error>> {
+) -> Result<PtInfo, Error<IO::Error>> {
     #[cfg(not(feature = "os_calls"))]
     let (header, entries_buf, lssz) = {
         let buf: [u8; GptTable::GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
@@ -408,23 +408,21 @@ pub fn probe_gpt<IO: BlockIo>(
             partition_type: PartitionType::Uuid(partition.partition_type_guid.into()),
             part_no: i + 1,
             partition_name: name,
-            attributes: PartAttributes::Gpt(u64::from(partition.attributes)),
+            attributes: PartitionAttributes::Gpt(u64::from(partition.attributes)),
         });
     }
 
-    let mut info = PartTableInfo::new();
+    let mut info = PtInfo::new();
 
-    info.set(PartTableTag::PartTableType(PartTableType::Gpt));
-    info.set(PartTableTag::PartTableId(PartTableId::Uuid(
-        header.disk_guid.into(),
-    )));
-    info.set(PartTableTag::PartTableSize(
+    info.set(PtTag::PtType(PtType::Gpt));
+    info.set(PtTag::PtId(PtId::Uuid(header.disk_guid.into())));
+    info.set(PtTag::PTSize(
         (u64::from(header.alternate_lba) + 1) * lssz,
     ));
-    info.set(PartTableTag::Magic(GptTable::SIGNATURE_STR.to_vec()));
-    info.set(PartTableTag::MagicOffset(lssz));
+    info.set(PtTag::Magic(GptTable::SIGNATURE_STR.to_vec()));
+    info.set(PtTag::MagicOffset(lssz));
     if !partitions.is_empty() {
-        info.set(PartTableTag::Partitions(partitions));
+        info.set(PtTag::Partitions(partitions));
     }
 
     return Ok(info);

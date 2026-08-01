@@ -8,7 +8,7 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
+    filesystem::{FsInfo, FsTag, FsType, FsId},
     io::{BlockIo, Reader},
     probe::{Magic, ProbeFlags, Usage},
     std::{fmt, mem::offset_of, str::Utf8Error},
@@ -389,7 +389,7 @@ fn ext_get_info(
 ) -> Result<
     (
         Option<String>,
-        FilesystemId,
+        FsId,
         Option<Uuid>,
         String,
         u64,
@@ -411,7 +411,7 @@ fn ext_get_info(
         None
     };
 
-    let uuid = FilesystemId::Uuid(Uuid::from_bytes(es.s_uuid));
+    let uuid = FsId::Uuid(Uuid::from_bytes(es.s_uuid));
 
     let journal_uuid: Option<Uuid> = if fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
         if es.s_journal_uuid == [0; 16] {
@@ -458,7 +458,7 @@ pub fn probe_jbd<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
 
@@ -473,25 +473,25 @@ pub fn probe_jbd<IO: BlockIo>(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
         ext_get_info(flags, es)?;
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Jbd));
+    info.set(FsTag::FsType(FsType::Jbd));
     if let Some(l) = label {
-        info.set(BlockTag::Label(l));
+        info.set(FsTag::Label(l));
     }
-    info.set(BlockTag::FilesystemId(uuid));
+    info.set(FsTag::FsId(uuid));
     if let Some(id) = journal_uuid {
-        info.set(BlockTag::ExtJournalId(id));
+        info.set(FsTag::ExtJournalId(id));
     }
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
-    info.set(BlockTag::FsSize(fs_size));
-    info.set(BlockTag::FsLastBlock(fs_last_block));
-    info.set(BlockTag::FsBlockSize(block_size));
-    info.set(BlockTag::BlockSize(block_size));
-    info.set(BlockTag::Creator(creator));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsSize(fs_size));
+    info.set(FsTag::FsLastBlock(fs_last_block));
+    info.set(FsTag::FsBlockSize(block_size));
+    info.set(FsTag::BlockSize(block_size));
+    info.set(FsTag::Creator(creator));
 
     return Ok(info);
 }
@@ -501,7 +501,7 @@ pub fn probe_ext2<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
 
@@ -526,25 +526,25 @@ pub fn probe_ext2<IO: BlockIo>(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
         ext_get_info(flags, es)?;
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Ext2));
+    info.set(FsTag::FsType(FsType::Ext2));
     if let Some(l) = label {
-        info.set(BlockTag::Label(l));
+        info.set(FsTag::Label(l));
     }
-    info.set(BlockTag::FilesystemId(uuid));
+    info.set(FsTag::FsId(uuid));
     if let Some(id) = journal_uuid {
-        info.set(BlockTag::ExtJournalId(id));
+        info.set(FsTag::ExtJournalId(id));
     }
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
-    info.set(BlockTag::FsSize(fs_size));
-    info.set(BlockTag::FsLastBlock(fs_last_block));
-    info.set(BlockTag::FsBlockSize(block_size));
-    info.set(BlockTag::BlockSize(block_size));
-    info.set(BlockTag::Creator(creator));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsSize(fs_size));
+    info.set(FsTag::FsLastBlock(fs_last_block));
+    info.set(FsTag::FsBlockSize(block_size));
+    info.set(FsTag::BlockSize(block_size));
+    info.set(FsTag::Creator(creator));
 
     return Ok(info);
 }
@@ -554,7 +554,7 @@ pub fn probe_ext3<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
 
@@ -579,25 +579,25 @@ pub fn probe_ext3<IO: BlockIo>(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
         ext_get_info(flags, es)?;
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Ext3));
+    info.set(FsTag::FsType(FsType::Ext3));
     if let Some(l) = label {
-        info.set(BlockTag::Label(l));
+        info.set(FsTag::Label(l));
     }
-    info.set(BlockTag::FilesystemId(uuid));
+    info.set(FsTag::FsId(uuid));
     if let Some(id) = journal_uuid {
-        info.set(BlockTag::ExtJournalId(id));
+        info.set(FsTag::ExtJournalId(id));
     }
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
-    info.set(BlockTag::FsSize(fs_size));
-    info.set(BlockTag::FsLastBlock(fs_last_block));
-    info.set(BlockTag::FsBlockSize(block_size));
-    info.set(BlockTag::BlockSize(block_size));
-    info.set(BlockTag::Creator(creator));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsSize(fs_size));
+    info.set(FsTag::FsLastBlock(fs_last_block));
+    info.set(FsTag::FsBlockSize(block_size));
+    info.set(FsTag::BlockSize(block_size));
+    info.set(FsTag::Creator(creator));
 
     return Ok(info);
 }
@@ -607,7 +607,7 @@ pub fn probe_ext4<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
 
@@ -636,25 +636,25 @@ pub fn probe_ext4<IO: BlockIo>(
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
         ext_get_info(flags, es)?;
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Ext4));
+    info.set(FsTag::FsType(FsType::Ext4));
     if let Some(l) = label {
-        info.set(BlockTag::Label(l));
+        info.set(FsTag::Label(l));
     }
-    info.set(BlockTag::FilesystemId(uuid));
+    info.set(FsTag::FsId(uuid));
     if let Some(id) = journal_uuid {
-        info.set(BlockTag::ExtJournalId(id));
+        info.set(FsTag::ExtJournalId(id));
     }
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(magic.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(magic.b_offset));
-    info.set(BlockTag::FsSize(fs_size));
-    info.set(BlockTag::FsLastBlock(fs_last_block));
-    info.set(BlockTag::FsBlockSize(block_size));
-    info.set(BlockTag::BlockSize(block_size));
-    info.set(BlockTag::Creator(creator));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(magic.magic.to_vec()));
+    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set(FsTag::FsSize(fs_size));
+    info.set(FsTag::FsLastBlock(fs_last_block));
+    info.set(FsTag::FsBlockSize(block_size));
+    info.set(FsTag::BlockSize(block_size));
+    info.set(FsTag::Creator(creator));
 
     return Ok(info);
 }

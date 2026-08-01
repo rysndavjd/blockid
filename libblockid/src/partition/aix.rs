@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
     io::{BlockIo, Reader},
-    partition::{PartTableInfo, PartTableTag, PartTableType},
+    partition::{PtInfo, PtTag, PtType},
     probe::{Magic, ProbeFlags},
 };
 
@@ -27,12 +27,12 @@ pub fn probe_aix<IO: BlockIo>(
     _: ProbeFlags,
     _: u64,
     _: Magic,
-) -> Result<PartTableInfo, Error<IO::Error>> {
-    let mut info = PartTableInfo::new();
+) -> Result<PtInfo, Error<IO::Error>> {
+    let mut info = PtInfo::new();
 
-    info.set(PartTableTag::PartTableType(PartTableType::Aix));
-    info.set(PartTableTag::Magic(AIX_MAGIC.to_vec()));
-    info.set(PartTableTag::MagicOffset(0));
+    info.set(PtTag::PtType(PtType::Aix));
+    info.set(PtTag::Magic(AIX_MAGIC.to_vec()));
+    info.set(PtTag::MagicOffset(0));
 
     return Ok(info);
 }

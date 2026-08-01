@@ -5,7 +5,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, transmute_ref};
 
 use crate::{
     error::Error,
-    filesystem::BlockInfo,
+    filesystem::FsInfo,
     io::{BlockIo, Reader},
     probe::{Magic, ProbeFlags},
     std::fmt,
@@ -90,7 +90,7 @@ pub fn probe_cramfs<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     mag: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<CramfsSuperBlock>()] = reader.read_exact_at(offset)?;
 
     let sb: &CramfsSuperBlock = transmute_ref!(&buf);

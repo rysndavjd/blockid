@@ -8,7 +8,7 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
+    filesystem::{FsInfo, FsTag, FsType, FsId},
     io::{BlockIo, Reader},
     probe::{Endianness, Magic, ProbeFlags, Usage},
     std::fmt,
@@ -300,7 +300,7 @@ pub fn probe_ntfs<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     mag: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<NtfsSuperBlock>()] = reader.read_exact_at(offset)?;
     let sb: &NtfsSuperBlock = transmute_ref!(&buf);
 
@@ -308,22 +308,22 @@ pub fn probe_ntfs<IO: BlockIo>(
 
     let label = sb.find_label(reader, flags, sector_size, sectors_per_cluster)?;
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Ntfs));
+    info.set(FsTag::FsType(FsType::Ntfs));
     if let Some(label) = label {
-        info.set(BlockTag::Label(label));
+        info.set(FsTag::Label(label));
     }
-    info.set(BlockTag::FilesystemId(FilesystemId::VolumeId64(
+    info.set(FsTag::FsId(FsId::VolumeId64(
         VolumeId64::from_bytes(sb.volume_serial),
     )));
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Magic(mag.magic.to_vec()));
-    info.set(BlockTag::FsSize(u64::from(
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Magic(mag.magic.to_vec()));
+    info.set(FsTag::FsSize(u64::from(
         sb.number_of_sectors * sector_size,
     )));
-    info.set(BlockTag::FsBlockSize(sector_size * sectors_per_cluster));
-    info.set(BlockTag::BlockSize(sector_size));
+    info.set(FsTag::FsBlockSize(sector_size * sectors_per_cluster));
+    info.set(FsTag::BlockSize(sector_size));
 
     return Ok(info);
 }

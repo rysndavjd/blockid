@@ -7,10 +7,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use libblockid::{
     AlignmentOffset, Probe, ProbeFlags,
     error::Error,
-    filesystem::{BLOCK_DETECT_ORDER, BlockFilter, BlockInfo, BlockType},
+    filesystem::{FS_DETECT_ORDER, FsFilter, FsInfo, FsType},
     partition::{
-        PT_DETECT_ORDER, PTFilter, PartTableInfo, PartTableTag, PartTableType, Partition,
-        PartitionType,
+        PT_DETECT_ORDER, PtFilter, PtType, PtInfo, PtTag, Partition, PartitionType,
     },
 };
 use serde::Serialize;
@@ -55,11 +54,11 @@ enum Commands {
 
         /// Set filter for what filesystem type to parse for.
         #[arg(short = 't', long = "type-filter", value_enum)]
-        filesystem: Option<Vec<BlockType>>,
+        filesystem: Option<Vec<FsType>>,
 
         /// Set filter for what partition table type to parse for.
         #[arg(short = 't', long = "type-filter", value_enum)]
-        part_table: Option<Vec<PartTableType>>,
+        part_table: Option<Vec<PtType>>,
     },
 
     /// Display I/O topology of a device
@@ -116,7 +115,7 @@ fn _main() -> Result<(), Error<io::Error>> {
         for (_, pt) in PT_DETECT_ORDER {
             println!("{}", pt)
         }
-        for (_, block) in BLOCK_DETECT_ORDER {
+        for (_, block) in FS_DETECT_ORDER {
             println!("{}", block)
         }
         return Ok(());
@@ -134,7 +133,7 @@ fn _main() -> Result<(), Error<io::Error>> {
                 let mut probe =
                     Probe::open(device, ProbeFlags::empty(), offset.unwrap_or_default())?;
 
-                match probe.probe_part_table(PTFilter::empty()) {
+                match probe.probe_part_table(PtFilter::empty()) {
                     Ok(info) => {
                         match format.unwrap_or_default() {
                             Format::Export => {
@@ -154,7 +153,7 @@ fn _main() -> Result<(), Error<io::Error>> {
                     }
                 }
 
-                match probe.probe_block(BlockFilter::empty()) {
+                match probe.probe_filesystem(FsFilter::empty()) {
                     Ok(info) => {
                         match format.unwrap_or_default() {
                             Format::Export => {

@@ -2,7 +2,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, transmut
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag},
+    filesystem::{FsInfo, FsTag},
     io::{BlockIo, Reader},
     probe::{Endianness, Magic, ProbeFlags},
     std::fmt,
@@ -59,37 +59,37 @@ pub fn probe_vxfs<IO: BlockIo>(
     _: ProbeFlags,
     offset: u64,
     magic: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<VxfsSuperBlock>()] = reader.read_exact_at(offset)?;
 
     let xvfs: &VxfsSuperBlock = transmute_ref!(&buf);
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
     if magic.magic == LITTLE_ENDIAN_MAGIC {
-        info.set(BlockTag::Version(format!(
+        info.set(FsTag::Version(format!(
             "{}",
             u32::from_le_bytes(xvfs.vs_version)
         )));
-        info.set(BlockTag::FsBlockSize(
+        info.set(FsTag::FsBlockSize(
             u32::from_le_bytes(xvfs.vs_bsize).into(),
         ));
-        info.set(BlockTag::BlockSize(
+        info.set(FsTag::BlockSize(
             u32::from_le_bytes(xvfs.vs_bsize).into(),
         ));
-        info.set(BlockTag::Endianness(Endianness::Little));
+        info.set(FsTag::Endianness(Endianness::Little));
     } else {
-        info.set(BlockTag::Version(format!(
+        info.set(FsTag::Version(format!(
             "{}",
             u32::from_be_bytes(xvfs.vs_version)
         )));
-        info.set(BlockTag::FsBlockSize(
+        info.set(FsTag::FsBlockSize(
             u32::from_be_bytes(xvfs.vs_bsize).into(),
         ));
-        info.set(BlockTag::BlockSize(
+        info.set(FsTag::BlockSize(
             u32::from_be_bytes(xvfs.vs_bsize).into(),
         ));
-        info.set(BlockTag::Endianness(Endianness::Big));
+        info.set(FsTag::Endianness(Endianness::Big));
     };
 
     return Ok(info);

@@ -7,7 +7,7 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{BlockInfo, BlockTag, BlockType, FilesystemId},
+    filesystem::{FsInfo, FsTag, FsType, FsId},
     io::{BlockIo, Reader},
     probe::{Endianness, Magic, ProbeFlags, Usage},
     std::fmt,
@@ -363,7 +363,7 @@ pub fn probe_exfat<IO: BlockIo>(
     flags: ProbeFlags,
     offset: u64,
     mag: Magic,
-) -> Result<BlockInfo, Error<IO::Error>> {
+) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<ExFatSuperBlock>()] = reader.read_exact_at(offset)?;
 
     let sb: &ExFatSuperBlock = transmute_ref!(&buf);
@@ -374,25 +374,25 @@ pub fn probe_exfat<IO: BlockIo>(
 
     let version = format!("{}.{}", sb.vermaj, sb.vermin);
 
-    let mut info = BlockInfo::new();
+    let mut info = FsInfo::new();
 
-    info.set(BlockTag::BlockType(BlockType::Exfat));
-    info.set(BlockTag::FilesystemId(FilesystemId::VolumeId32(
+    info.set(FsTag::FsType(FsType::Exfat));
+    info.set(FsTag::FsId(FsId::VolumeId32(
         VolumeId32::from_bytes(sb.volume_serial),
     )));
     if let Some(l) = label {
-        info.set(BlockTag::Label(l));
+        info.set(FsTag::Label(l));
     }
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::FsSize(
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::FsSize(
         sb.block_size() as u64 * u64::from(sb.volume_length),
     ));
-    info.set(BlockTag::FsBlockSize(sb.block_size() as u64));
-    info.set(BlockTag::BlockSize(sb.block_size() as u64));
-    info.set(BlockTag::Usage(Usage::Filesystem));
-    info.set(BlockTag::Version(version));
-    info.set(BlockTag::Magic(mag.magic.to_vec()));
-    info.set(BlockTag::MagicOffset(mag.b_offset));
+    info.set(FsTag::FsBlockSize(sb.block_size() as u64));
+    info.set(FsTag::BlockSize(sb.block_size() as u64));
+    info.set(FsTag::Usage(Usage::Filesystem));
+    info.set(FsTag::Version(version));
+    info.set(FsTag::Magic(mag.magic.to_vec()));
+    info.set(FsTag::MagicOffset(mag.b_offset));
 
     return Ok(info);
 }

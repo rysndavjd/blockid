@@ -10,7 +10,7 @@ use crate::{
     filesystem::{exfat::probe_is_exfat, ntfs::probe_is_ntfs, vfat::probe_is_vfat},
     io::{BlockIo, Reader},
     partition::{
-        PartAttributes, PartTableId, PartTableInfo, PartTableTag, PartTableType, Partition,
+        PartitionAttributes, PtId, PtInfo, PtTag, PtType, Partition,
         PartitionId, PartitionType, aix::AIX_MAGIC,
     },
     probe::{Magic, ProbeFlags},
@@ -303,7 +303,7 @@ pub fn probe_mbr<IO: BlockIo>(
     _: ProbeFlags,
     offset: u64,
     _: Magic,
-) -> Result<PartTableInfo, Error<IO::Error>> {
+) -> Result<PtInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<MbrTable>()] = reader.read_exact_at(offset)?;
 
     if buf[0..3] == AIX_MAGIC {
@@ -358,7 +358,7 @@ pub fn probe_mbr<IO: BlockIo>(
             partition_type: PartitionType::Mbr(part.sys_ind),
             part_no: u64::from(part_no),
             partition_name: None,
-            attributes: PartAttributes::Mbr(part.boot_ind),
+            attributes: PartitionAttributes::Mbr(part.boot_ind),
         });
     }
 
@@ -366,16 +366,16 @@ pub fn probe_mbr<IO: BlockIo>(
         todo!()
     }
 
-    let mut info = PartTableInfo::new();
+    let mut info = PtInfo::new();
 
-    info.set(PartTableTag::PartTableType(PartTableType::Mbr));
-    info.set(PartTableTag::PartTableId(PartTableId::Mbr {
+    info.set(PtTag::PtType(PtType::Mbr));
+    info.set(PtTag::PtId(PtId::Mbr {
         disk: u32::from_le_bytes(mbr_pt.disk_id),
     }));
-    info.set(PartTableTag::Magic(MBR_MAG.to_vec()));
-    info.set(PartTableTag::MagicOffset(MBR_MAG_OFFSET));
+    info.set(PtTag::Magic(MBR_MAG.to_vec()));
+    info.set(PtTag::MagicOffset(MBR_MAG_OFFSET));
     if !partitions.is_empty() {
-        info.set(PartTableTag::Partitions(partitions));
+        info.set(PtTag::Partitions(partitions));
     }
 
     Ok(info)

@@ -31,7 +31,7 @@ pub struct Reader<IO: BlockIo>(IO);
 
 #[allow(dead_code)]
 impl<IO: BlockIo> Reader<IO> {
-    pub fn new(reader: IO) -> Self {
+    pub const fn new(reader: IO) -> Self {
         Self(reader)
     }
 
