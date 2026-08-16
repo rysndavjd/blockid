@@ -5,12 +5,10 @@ use std::{
 
 use clap::{Parser, Subcommand, ValueEnum};
 use libblockid::{
-    AlignmentOffset, Probe, ProbeFlags,
+    Probe, ProbeFlags,
     error::Error,
-    filesystem::{FS_DETECT_ORDER, FsFilter, FsInfo, FsType},
-    partition::{
-        PT_DETECT_ORDER, PtFilter, PtType, PtInfo, PtTag, Partition, PartitionType,
-    },
+    filesystem::{FS_DETECT_ORDER, FsFilter, FsType},
+    partition::{PT_DETECT_ORDER, PtFilter, PtType},
 };
 use serde::Serialize;
 use serde_dotenv::to_writer as to_dotenv_writer;
@@ -53,11 +51,11 @@ enum Commands {
         format: Option<Format>,
 
         /// Set filter for what filesystem type to parse for.
-        #[arg(short = 't', long = "type-filter", value_enum)]
+        #[arg(long = "fs-filter", value_enum)]
         filesystem: Option<Vec<FsType>>,
 
         /// Set filter for what partition table type to parse for.
-        #[arg(short = 't', long = "type-filter", value_enum)]
+        #[arg(long = "pt-filter", value_enum)]
         part_table: Option<Vec<PtType>>,
     },
 

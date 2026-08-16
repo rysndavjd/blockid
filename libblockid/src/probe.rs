@@ -7,22 +7,6 @@ use crate::{
     partition::{PT_DETECT_ORDER, PtFilter, PtInfo, PtType},
 };
 
-/// Describes the intended usage of a superblock.
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(rename_all = "lowercase")
-)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum Usage {
-    /// Stores files and directories in a structured manner.
-    Filesystem,
-    /// Spans or mirrors data across multiple disks.
-    Raid,
-    /// Manages an encrypted volume or backing store.
-    Crypto,
-}
-
 /// The byte order used to represent multi-byte values.
 #[cfg_attr(
     feature = "serde",
@@ -40,18 +24,21 @@ pub enum Endianness {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Magic {
-    pub magic: &'static [u8],
-    pub b_offset: u64,
+    /// Magic byte slice.
+    pub bytes: &'static [u8],
+    /// Offset where magic is found.
+    pub offset: u64,
 }
 
 impl Magic {
     const EMPTY_MAGIC: Magic = Magic {
-        magic: &[0],
-        b_offset: 0,
+        bytes: &[0],
+        offset: 0,
     };
 }
 
 bitflags! {
+    // Might remove in future as I dont see a real use for runtime flags.
     /// Flags that control the behaviour of the probing process.
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -275,15 +262,15 @@ impl<IO: BlockIo> Probe<IO> {
     }
 
     #[inline]
-    pub fn search_for_filesystem(&mut self, filesystem: FsType) -> Result<BlockInfo, Error<IO::Error>> {
+    pub fn search_for_filesystem(
+        &mut self,
+        filesystem: FsType,
+    ) -> Result<BlockInfo, Error<IO::Error>> {
         search_for_filesystem(&mut self.reader, self.flags, self.offset, filesystem)
     }
 
     #[inline]
-    pub fn probe_part_table(
-        &mut self,
-        filter: PtFilter,
-    ) -> Result<PtInfo, Error<IO::Error>> {
+    pub fn probe_part_table(&mut self, filter: PtFilter) -> Result<PtInfo, Error<IO::Error>> {
         probe_part_table(&mut self.reader, self.flags, self.offset, filter)
     }
 

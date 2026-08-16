@@ -7,9 +7,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{FsInfo, FsTag, FsType, SubType, FsId},
+    filesystem::{FsInfo, FsType, SubType},
     io::{BlockIo, Reader},
-    probe::{ Magic, ProbeFlags, Usage},
+    probe::{ Magic, ProbeFlags},
     std::{fmt, str::Utf8Error},
     util::{decode_utf8_from, decode_utf8_lossy_from},
 };
@@ -70,28 +70,28 @@ impl<E: fmt::Debug> From<VFatError> for Error<E> {
 pub const VFAT_MINSZ: Option<u64> = Some(32768);
 pub const VFAT_MAGICS: Option<&'static [Magic]> = Some(&[
     Magic {
-        magic: b"MSWIN",
-        b_offset: 0x52,
+        bytes: b"MSWIN",
+        offset: 0x52,
     },
     Magic {
-        magic: b"FAT32   ",
-        b_offset: 0x52,
+        bytes: b"FAT32   ",
+        offset: 0x52,
     },
     Magic {
-        magic: b"MSDOS",
-        b_offset: 0x36,
+        bytes: b"MSDOS",
+        offset: 0x36,
     },
     Magic {
-        magic: b"FAT16   ",
-        b_offset: 0x36,
+        bytes: b"FAT16   ",
+        offset: 0x36,
     },
     Magic {
-        magic: b"FAT12   ",
-        b_offset: 0x36,
+        bytes: b"FAT12   ",
+        offset: 0x36,
     },
     Magic {
-        magic: b"FAT     ",
-        b_offset: 0x36,
+        bytes: b"FAT     ",
+        offset: 0x36,
     },
 ]);
 
@@ -257,9 +257,9 @@ pub fn get_cluster_count(ms: &MsDosSuperBlock, vs: &VFatSuperBlock) -> Option<u3
 pub fn valid_fat(
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
-    mag: &Magic,
+    magic: &Magic,
 ) -> Result<SubType, VFatError> {
-    if mag.magic.len() <= 2 {
+    if magic.bytes.len() <= 2 {
         if ms.ms_pmagic[0] != 0x55 || ms.ms_pmagic[1] != 0xAA {
             return Err(VFatError::ProbablyDOS);
         }
@@ -501,27 +501,28 @@ pub fn probe_vfat<IO: BlockIo>(
         return Err(VFatError::InvalidVFat.into());
     };
 
-    let mut info = FsInfo::new();
+    let mut info = FsInfo::empty();
 
-    info.set(FsTag::FsType(FsType::Vfat));
-    info.set(FsTag::SubType(sub_type));
-    info.set(FsTag::FsId(FsId::VolumeId32(serno)));
+    info.set_fs_type(FsType::Vfat);
+    info.set_sub_type(sub_type);
+    info.set_fs_id(serno.into());
     if let Some(l) = label {
-        info.set(FsTag::Label(l));
+        info.set_label(l);
     }
-    info.set(FsTag::Usage(Usage::Filesystem));
-    info.set(FsTag::Magic(magic.magic.to_vec()));
-    info.set(FsTag::MagicOffset(magic.b_offset));
-    info.set(FsTag::FsSize(
+    info.set_magic(
+        magic.bytes.to_vec(),
+        magic.offset,
+    );
+    info.set_fs_size(
         u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms)),
-    ));
-    info.set(FsTag::FsLastBlock(
+    );
+    info.set_fs_last_block(
         u64::from(ms.ms_sector_size) * u64::from(get_sect_count(ms)),
-    ));
-    info.set(FsTag::FsBlockSize(
+    );
+    info.set_fs_block_size(
         u64::from(vs.vs_cluster_size) * u64::from(ms.ms_sector_size),
-    ));
-    info.set(FsTag::BlockSize(u64::from(ms.ms_sector_size)));
+    );
+    info.set_block_size(u64::from(ms.ms_sector_size));
 
     return Ok(info);
 }

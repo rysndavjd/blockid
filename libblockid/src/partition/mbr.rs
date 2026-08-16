@@ -10,8 +10,7 @@ use crate::{
     filesystem::{exfat::probe_is_exfat, ntfs::probe_is_ntfs, vfat::probe_is_vfat},
     io::{BlockIo, Reader},
     partition::{
-        PartitionAttributes, PtId, PtInfo, PtTag, PtType, Partition,
-        PartitionId, PartitionType, aix::AIX_MAGIC,
+        Partition, PartitionAttributes, PartitionId, PartitionType, PtInfo, PtType, aix::AIX_MAGIC,
     },
     probe::{Magic, ProbeFlags},
     std::fmt,
@@ -69,8 +68,8 @@ const MBR_MAG_OFFSET: u64 = 510;
 
 pub const MBR_MINSZ: Option<u64> = Some(512);
 pub const MBR_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
-    magic: MBR_MAG,
-    b_offset: MBR_MAG_OFFSET,
+    bytes: MBR_MAG,
+    offset: MBR_MAG_OFFSET,
 }]);
 
 #[repr(C)]
@@ -366,16 +365,13 @@ pub fn probe_mbr<IO: BlockIo>(
         todo!()
     }
 
-    let mut info = PtInfo::new();
+    let mut info = PtInfo::empty();
 
-    info.set(PtTag::PtType(PtType::Mbr));
-    info.set(PtTag::PtId(PtId::Mbr {
-        disk: u32::from_le_bytes(mbr_pt.disk_id),
-    }));
-    info.set(PtTag::Magic(MBR_MAG.to_vec()));
-    info.set(PtTag::MagicOffset(MBR_MAG_OFFSET));
+    info.set_pt_type(PtType::Mbr);
+    info.set_pt_id(u32::from_le_bytes(mbr_pt.disk_id).into());
+    info.set_magic(MBR_MAG.to_vec(), MBR_MAG_OFFSET);
     if !partitions.is_empty() {
-        info.set(PtTag::Partitions(partitions));
+        info.set_partitions(partitions);
     }
 
     Ok(info)

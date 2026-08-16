@@ -8,9 +8,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{FsInfo, FsTag, FsType, FsId},
+    filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Endianness, Magic, ProbeFlags, Usage},
+    probe::{Endianness, Magic, ProbeFlags},
     std::fmt,
     util::{decode_utf16_from, decode_utf16_lossy_from},
 };
@@ -66,8 +66,8 @@ impl<E: fmt::Debug> From<NtfsError> for Error<E> {
 
 pub const NTFS_MINSZ: Option<u64> = None;
 pub const NTFS_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
-    magic: b"NTFS    ",
-    b_offset: 3,
+    bytes: b"NTFS    ",
+    offset: 3,
 }]);
 
 #[repr(C)]
@@ -299,7 +299,7 @@ pub fn probe_ntfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
-    mag: Magic,
+    magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<NtfsSuperBlock>()] = reader.read_exact_at(offset)?;
     let sb: &NtfsSuperBlock = transmute_ref!(&buf);
@@ -308,22 +308,17 @@ pub fn probe_ntfs<IO: BlockIo>(
 
     let label = sb.find_label(reader, flags, sector_size, sectors_per_cluster)?;
 
-    let mut info = FsInfo::new();
+    let mut info = FsInfo::empty();
 
-    info.set(FsTag::FsType(FsType::Ntfs));
+    info.set_fs_type(FsType::Ntfs);
     if let Some(label) = label {
-        info.set(FsTag::Label(label));
+        info.set_label(label);
     }
-    info.set(FsTag::FsId(FsId::VolumeId64(
-        VolumeId64::from_bytes(sb.volume_serial),
-    )));
-    info.set(FsTag::Usage(Usage::Filesystem));
-    info.set(FsTag::Magic(mag.magic.to_vec()));
-    info.set(FsTag::FsSize(u64::from(
-        sb.number_of_sectors * sector_size,
-    )));
-    info.set(FsTag::FsBlockSize(sector_size * sectors_per_cluster));
-    info.set(FsTag::BlockSize(sector_size));
+    info.set_fs_id(VolumeId64::from_bytes(sb.volume_serial).into());
+    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_fs_size(u64::from(sb.number_of_sectors * sector_size));
+    info.set_fs_block_size(sector_size * sectors_per_cluster);
+    info.set_block_size(sector_size);
 
     return Ok(info);
 }

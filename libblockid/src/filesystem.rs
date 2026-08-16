@@ -16,6 +16,7 @@ use crate::{
     error::Error,
     filesystem::{
         apfs::{APFS_MAGICS, APFS_MINSZ, probe_apfs},
+        cramfs::{CRAMFS_MAGICS, CRAMFS_MINSZ, probe_cramfs},
         exfat::{EXFAT_MAGICS, EXFAT_MINSZ, probe_exfat},
         ext::{EXT_MAGICS, EXT_MINSZ, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
         luks::{
@@ -28,7 +29,7 @@ use crate::{
         xfs::{XFS_MAGICS, XFS_MINSZ, probe_xfs},
     },
     io::{BlockIo, Reader},
-    probe::{Endianness, Magic, ProbeFlags, Usage},
+    probe::{Endianness, Magic, ProbeFlags},
     std::fmt,
 };
 
@@ -73,6 +74,7 @@ pub(crate) struct FsHandler<IO: BlockIo> {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum FsType {
     Apfs,
+    Cramfs,
     Exfat,
     Jbd,
     Ext2,
@@ -91,6 +93,7 @@ impl fmt::Display for FsType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FsType::Apfs => write!(f, "apfs"),
+            FsType::Cramfs => write!(f, "cramfs"),
             FsType::Exfat => write!(f, "exfat"),
             FsType::Jbd => write!(f, "jbd"),
             FsType::Ext2 => write!(f, "ext2"),
@@ -110,37 +113,20 @@ impl fmt::Display for FsType {
 impl FsType {
     pub(crate) const fn fs_handler<IO: BlockIo>(&self) -> FsHandler<IO> {
         match self {
-            FsType::LUKS1 => FsHandler {
-                minsz: LUKS1_MINSZ,
-                magics: LUKS1_MAGICS,
-                probe: probe_luks1,
+            FsType::Apfs => FsHandler {
+                minsz: APFS_MINSZ,
+                magics: APFS_MAGICS,
+                probe: probe_apfs,
             },
-
-            FsType::LUKS2 => FsHandler {
-                minsz: LUKS2_MINSZ,
-                magics: LUKS2_MAGICS,
-                probe: probe_luks2,
-            },
-
-            FsType::LUKSOpal => FsHandler {
-                minsz: LUKS2_MINSZ,
-                magics: LUKSOPAL_MAGICS,
-                probe: probe_luks_opal,
+            FsType::Cramfs => FsHandler {
+                minsz: CRAMFS_MINSZ,
+                magics: CRAMFS_MAGICS,
+                probe: probe_cramfs,
             },
             FsType::Exfat => FsHandler {
                 minsz: EXFAT_MINSZ,
                 magics: EXFAT_MAGICS,
                 probe: probe_exfat,
-            },
-            FsType::Jbd => FsHandler {
-                minsz: EXT_MINSZ,
-                magics: EXT_MAGICS,
-                probe: probe_jbd,
-            },
-            FsType::Apfs => FsHandler {
-                minsz: APFS_MINSZ,
-                magics: APFS_MAGICS,
-                probe: probe_apfs,
             },
             FsType::Ext2 => FsHandler {
                 minsz: EXT_MINSZ,
@@ -156,6 +142,26 @@ impl FsType {
                 minsz: EXT_MINSZ,
                 magics: EXT_MAGICS,
                 probe: probe_ext4,
+            },
+            FsType::Jbd => FsHandler {
+                minsz: EXT_MINSZ,
+                magics: EXT_MAGICS,
+                probe: probe_jbd,
+            },
+            FsType::LUKS1 => FsHandler {
+                minsz: LUKS1_MINSZ,
+                magics: LUKS1_MAGICS,
+                probe: probe_luks1,
+            },
+            FsType::LUKS2 => FsHandler {
+                minsz: LUKS2_MINSZ,
+                magics: LUKS2_MAGICS,
+                probe: probe_luks2,
+            },
+            FsType::LUKSOpal => FsHandler {
+                minsz: LUKS2_MINSZ,
+                magics: LUKSOPAL_MAGICS,
+                probe: probe_luks_opal,
             },
             FsType::Ntfs => FsHandler {
                 minsz: NTFS_MINSZ,
@@ -246,189 +252,191 @@ pub enum SubType {
     Fat32,
 }
 
-#[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FsTag {
+#[derive(Debug)]
+pub struct FsInfo {
     /// Block type, Eg: EXT4.
-    FsType(FsType),
+    fs_type: Option<FsType>,
     /// Sub block type, Eg: Filsystem is VFAT but subtype is FAT16.
-    SubType(SubType),
+    sub_type: Option<SubType>,
     /// Filesystem label, Eg: `LABEL`.
-    Label(String),
+    label: Option<String>,
     /// Filesystem identifier.
     /// Eg:
     ///     UUID: `67e55044-10b1-426f-9247-bb680e5fe0c8`
     ///     VolumeId32: `2a9d-b913`
     ///     VolumeId64: `17acf19235bcde78`
-    FsId(FsId),
+    fs_id: Option<FsId>,
     /// Sub member identifier.
-    SubMemberId(Uuid),
+    sub_member_id: Option<Uuid>,
     /// External log identifier.
-    ExtLogId(Uuid),
+    ext_log_id: Option<Uuid>,
     /// External journal identifier.
-    ExtJournalId(Uuid),
-    /// Usage string, Eg: `raid`, `filesystem`.
-    Usage(Usage),
+    ext_journal_id: Option<Uuid>,
     /// Filesystem version.
-    Version(String),
-    /// Superblock magic string.
-    Magic(Vec<u8>),
-    /// Superblock magic string offset.
-    MagicOffset(u64),
+    version: Option<String>,
+    /// Filesystem magic bytes.
+    magic: Option<Vec<u8>>,
+    /// Filesystem magic offset.
+    magic_offset: Option<u64>,
     /// Filesystem size.
-    FsSize(u64),
+    fs_size: Option<u64>,
     /// Last fsblock/total number of fsblocks.
-    FsLastBlock(u64),
+    fs_last_block: Option<u64>,
     /// Filesystem blocksize.
-    FsBlockSize(u64),
+    fs_block_size: Option<u64>,
     /// Minimal block size accessible by the filesystem.
-    BlockSize(u64),
+    block_size: Option<u64>,
     /// Endianness of filesystem.
-    Endianness(Endianness),
+    endianness: Option<Endianness>,
     /// OS used to create filesystem.
-    Creator(String),
-}
-
-#[derive(Debug)]
-pub struct FsInfo {
-    tags: Vec<FsTag>,
+    creator: Option<String>,
 }
 
 impl FsInfo {
-    pub(crate) fn new() -> FsInfo {
-        FsInfo { tags: Vec::new() }
+    pub(crate) fn empty() -> FsInfo {
+        FsInfo {
+            fs_type: None,
+            sub_type: None,
+            label: None,
+            fs_id: None,
+            sub_member_id: None,
+            ext_log_id: None,
+            ext_journal_id: None,
+            version: None,
+            magic: None,
+            magic_offset: None,
+            fs_size: None,
+            fs_last_block: None,
+            fs_block_size: None,
+            block_size: None,
+            endianness: None,
+            creator: None,
+        }
     }
 
-    pub fn inner(&self) -> &[FsTag] {
-        &self.tags
-    }
-
-    pub fn into_inner(self) -> Vec<FsTag> {
-        self.tags
-    }
-
-    pub(crate) fn set(&mut self, tag: FsTag) {
-        self.tags.push(tag);
+    pub(crate) fn set_fs_type(&mut self, fs_type: FsType) {
+        self.fs_type = Some(fs_type);
     }
 
     pub fn fs_type(&self) -> Option<FsType> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::FsType(t) => Some(*t),
-            _ => None,
-        })
+        self.fs_type
+    }
+
+    pub(crate) fn set_sub_type(&mut self, sub_type: SubType) {
+        self.sub_type = Some(sub_type);
     }
 
     pub fn sub_type(&self) -> Option<SubType> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::SubType(t) => Some(*t),
-            _ => None,
-        })
+        self.sub_type
+    }
+
+    pub(crate) fn set_label(&mut self, label: String) {
+        self.label = Some(label);
     }
 
     pub fn label(&self) -> Option<&String> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::Label(t) => Some(t),
-            _ => None,
-        })
+        self.label.as_ref()
+    }
+
+    pub(crate) fn set_fs_id(&mut self, fs_id: FsId) {
+        self.fs_id = Some(fs_id);
     }
 
     pub fn fs_id(&self) -> Option<FsId> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::FsId(t) => Some(*t),
-            _ => None,
-        })
+        self.fs_id
+    }
+
+    pub(crate) fn set_sub_member_id(&mut self, sub_member_id: Uuid) {
+        self.sub_member_id = Some(sub_member_id);
     }
 
     pub fn sub_member_id(&self) -> Option<Uuid> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::SubMemberId(t) => Some(*t),
-            _ => None,
-        })
+        self.sub_member_id
+    }
+
+    pub(crate) fn set_ext_log_id(&mut self, ext_log_id: Uuid) {
+        self.ext_log_id = Some(ext_log_id);
     }
 
     pub fn ext_log_id(&self) -> Option<Uuid> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::ExtLogId(t) => Some(*t),
-            _ => None,
-        })
+        self.ext_log_id
+    }
+
+    pub(crate) fn set_ext_journal_id(&mut self, ext_journal_id: Uuid) {
+        self.ext_journal_id = Some(ext_journal_id);
     }
 
     pub fn ext_journal_id(&self) -> Option<Uuid> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::ExtJournalId(t) => Some(*t),
-            _ => None,
-        })
+        self.ext_journal_id
     }
 
-    pub fn usage(&self) -> Option<Usage> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::Usage(t) => Some(*t),
-            _ => None,
-        })
+    pub(crate) fn set_version(&mut self, version: String) {
+        self.version = Some(version);
     }
 
     pub fn version(&self) -> Option<&String> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::Version(t) => Some(t),
-            _ => None,
-        })
+        self.version.as_ref()
     }
 
-    pub fn magic(&self) -> Option<&[u8]> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::Magic(t) => Some(t.as_slice()),
-            _ => None,
-        })
+    pub(crate) fn set_magic(&mut self, bytes: Vec<u8>, offset: u64) {
+        self.magic = Some(bytes);
+        self.magic_offset = Some(offset);
     }
 
-    pub fn magic_offset(&self) -> Option<u64> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::MagicOffset(t) => Some(*t),
-            _ => None,
-        })
+    pub fn magic(&self) -> Option<(&[u8], u64)> {
+        match (&self.magic, &self.magic_offset) {
+            (Some(magic), Some(offset)) => Some((magic.as_slice(), *offset)),
+            (None, None) => None,
+            _ => unreachable!("magic and magic_offset are only ever set together via set_magic"),
+        }
+    }
+
+    pub(crate) fn set_fs_size(&mut self, fs_size: u64) {
+        self.fs_size = Some(fs_size);
     }
 
     pub fn fs_size(&self) -> Option<u64> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::FsSize(t) => Some(*t),
-            _ => None,
-        })
+        self.fs_size
+    }
+
+    pub(crate) fn set_fs_last_block(&mut self, fs_last_block: u64) {
+        self.fs_last_block = Some(fs_last_block);
     }
 
     pub fn fs_last_block(&self) -> Option<u64> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::FsLastBlock(t) => Some(*t),
-            _ => None,
-        })
+        self.fs_last_block
+    }
+
+    pub(crate) fn set_fs_block_size(&mut self, fs_block_size: u64) {
+        self.fs_block_size = Some(fs_block_size);
     }
 
     pub fn fs_block_size(&self) -> Option<u64> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::FsBlockSize(t) => Some(*t),
-            _ => None,
-        })
+        self.fs_block_size
+    }
+
+    pub(crate) fn set_block_size(&mut self, block_size: u64) {
+        self.block_size = Some(block_size);
     }
 
     pub fn block_size(&self) -> Option<u64> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::BlockSize(t) => Some(*t),
-            _ => None,
-        })
+        self.block_size
+    }
+
+    pub(crate) fn set_endianness(&mut self, endianness: Endianness) {
+        self.endianness = Some(endianness);
     }
 
     pub fn endianness(&self) -> Option<Endianness> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::Endianness(t) => Some(*t),
-            _ => None,
-        })
+        self.endianness
+    }
+
+    pub(crate) fn set_creator(&mut self, creator: String) {
+        self.creator = Some(creator);
     }
 
     pub fn creator(&self) -> Option<&String> {
-        self.tags.iter().find_map(|t| match t {
-            FsTag::Creator(t) => Some(t),
-            _ => None,
-        })
+        self.creator.as_ref()
     }
 }
 
@@ -440,70 +448,81 @@ impl serde::Serialize for FsInfo {
     {
         use serde::ser::SerializeMap;
 
-        let mut map = serializer.serialize_map(Some(self.tags.len()))?;
+        let len = self.fs_type.is_some() as usize
+            + self.sub_type.is_some() as usize
+            + self.label.is_some() as usize
+            + self.fs_id.is_some() as usize
+            + self.sub_member_id.is_some() as usize
+            + self.ext_log_id.is_some() as usize
+            + self.ext_journal_id.is_some() as usize
+            + self.version.is_some() as usize
+            + self.fs_size.is_some() as usize
+            + self.fs_last_block.is_some() as usize
+            + self.fs_block_size.is_some() as usize
+            + self.block_size.is_some() as usize
+            + self.endianness.is_some() as usize
+            + self.creator.is_some() as usize
+            + if self.magic.is_some() && self.magic_offset.is_some() {
+                2
+            } else {
+                0
+            };
 
-        for tag in &self.tags {
-            match tag {
-                FsTag::FsType(fs) => {
-                    map.serialize_entry("FS_TYPE", fs)?;
-                }
-                FsTag::SubType(sub) => {
-                    map.serialize_entry("SUB_TYPE", sub)?;
-                }
-                FsTag::Label(label) => {
-                    map.serialize_entry("LABEL", label)?;
-                }
-                FsTag::FsId(id) => match id {
-                    FsId::Uuid(uuid) => {
-                        map.serialize_entry("FS_ID", uuid)?;
-                    }
-                    FsId::VolumeId32(id32) => {
-                        map.serialize_entry("FS_ID", id32)?;
-                    }
-                    FsId::VolumeId64(id64) => {
-                        map.serialize_entry("FS_ID", id64)?;
-                    }
-                },
-                FsTag::SubMemberId(id) => {
-                    map.serialize_entry("SUB_MEMBER_ID", id)?;
-                }
-                FsTag::ExtLogId(id) => {
-                    map.serialize_entry("EXT_LOG_ID", id)?;
-                }
-                FsTag::ExtJournalId(id) => {
-                    map.serialize_entry("EXT_JOURNAL_ID", id)?;
-                }
-                FsTag::Usage(usage) => {
-                    map.serialize_entry("USAGE", usage)?;
-                }
-                FsTag::Version(ver) => {
-                    map.serialize_entry("VERSION", ver)?;
-                }
-                FsTag::Magic(mag) => {
-                    map.serialize_entry("MAGIC", mag)?;
-                }
-                FsTag::MagicOffset(off) => {
-                    map.serialize_entry("MAGIC_OFFSET", off)?;
-                }
-                FsTag::FsSize(sz) => {
-                    map.serialize_entry("FS_SIZE", sz)?;
-                }
-                FsTag::FsLastBlock(last_block) => {
-                    map.serialize_entry("FS_LAST_BLOCK", last_block)?;
-                }
-                FsTag::FsBlockSize(blk_sz) => {
-                    map.serialize_entry("FS_BLOCK_SIZE", blk_sz)?;
-                }
-                FsTag::BlockSize(blk_sz) => {
-                    map.serialize_entry("BLOCK_SIZE", blk_sz)?;
-                }
-                FsTag::Endianness(endian) => {
-                    map.serialize_entry("ENDIANNESS", endian)?;
-                }
-                FsTag::Creator(creator) => {
-                    map.serialize_entry("CREATOR", creator)?;
-                }
+        let mut map = serializer.serialize_map(Some(len))?;
+
+        if let Some(v) = &self.fs_type {
+            map.serialize_entry("FS_TYPE", v)?;
+        }
+        if let Some(v) = &self.sub_type {
+            map.serialize_entry("SUB_TYPE", v)?;
+        }
+        if let Some(v) = &self.label {
+            map.serialize_entry("LABEL", v)?;
+        }
+        if let Some(v) = &self.fs_id {
+            match v {
+                FsId::Uuid(uuid) => map.serialize_entry("FS_ID", uuid)?,
+                FsId::VolumeId32(id32) => map.serialize_entry("FS_ID", id32)?,
+                FsId::VolumeId64(id64) => map.serialize_entry("FS_ID", id64)?,
             }
+        }
+        if let Some(v) = &self.sub_member_id {
+            map.serialize_entry("SUB_MEMBER_ID", v)?;
+        }
+        if let Some(v) = &self.ext_log_id {
+            map.serialize_entry("EXT_LOG_ID", v)?;
+        }
+        if let Some(v) = &self.ext_journal_id {
+            map.serialize_entry("EXT_JOURNAL_ID", v)?;
+        }
+        if let Some(v) = &self.version {
+            map.serialize_entry("VERSION", v)?;
+        }
+        match (&self.magic, &self.magic_offset) {
+            (Some(magic), Some(offset)) => {
+                map.serialize_entry("MAGIC", magic)?;
+                map.serialize_entry("MAGIC_OFFSET", offset)?;
+            }
+            (None, None) => {}
+            _ => unreachable!("magic and magic_offset are only ever set together via set_magic"),
+        }
+        if let Some(v) = &self.fs_size {
+            map.serialize_entry("FS_SIZE", v)?;
+        }
+        if let Some(v) = &self.fs_last_block {
+            map.serialize_entry("FS_LAST_BLOCK", v)?;
+        }
+        if let Some(v) = &self.fs_block_size {
+            map.serialize_entry("FS_BLOCK_SIZE", v)?;
+        }
+        if let Some(v) = &self.block_size {
+            map.serialize_entry("BLOCK_SIZE", v)?;
+        }
+        if let Some(v) = &self.endianness {
+            map.serialize_entry("ENDIANNESS", v)?;
+        }
+        if let Some(v) = &self.creator {
+            map.serialize_entry("CREATOR", v)?;
         }
 
         map.end()

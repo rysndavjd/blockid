@@ -34,8 +34,7 @@ pub(crate) struct PtHandler<IO: BlockIo> {
     pub magics: Option<&'static [Magic]>,
     /// Probes the partition table, returning its info on success.
     #[allow(clippy::type_complexity)]
-    pub probe:
-        fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
+    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
 }
 
 /// The type of partition tables supported.
@@ -156,7 +155,7 @@ impl PartitionId {
         }
     }
 
-    /// Currently we return the disk ID and the partition number, eventully I 
+    /// Currently we return the disk ID and the partition number, eventully I
     /// will probally make a custom mbr type or something like fat_volume_id
     pub fn as_mbr(&self) -> Option<(u32, u8)> {
         match self {
@@ -180,6 +179,8 @@ pub enum PartitionAttributes {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Partition {
+    /// Partition number, starting from 1
+    pub part_no: u64,
     /// Start of partition in bytes.
     pub start: u64,
     /// End of partition in bytes.
@@ -188,8 +189,6 @@ pub struct Partition {
     pub partition_id: PartitionId,
     /// The partition type of a specified partition table.
     pub partition_type: PartitionType,
-    /// Partition number, starting from 1
-    pub part_no: u64,
     /// Partition label
     pub partition_name: Option<String>,
     /// The partition attributes of a specified partition table.
@@ -207,77 +206,84 @@ pub enum PtTag {
     /// Total size in bytes from the start of the disk to the end of the
     /// partition table addressed region.
     PTSize(u64),
-    /// Partition table magic signature.
-    Magic(Vec<u8>),
-    /// Partition table magic signature offset.
-    MagicOffset(u64),
+    /// Partition table magic bytes.
+    Magic { bytes: Vec<u8>, offset: u64 },
     /// List of partitions in the partition table.
     Partitions(Vec<Partition>),
 }
 
 #[derive(Debug)]
-#[repr(transparent)]
 pub struct PtInfo {
-    tags: Vec<PtTag>,
+    /// Partition table type.
+    pt_type: Option<PtType>,
+    /// Partition table identifier.
+    pt_id: Option<PtId>,
+    /// Total size in bytes from the start of the disk to the end of the
+    /// partition table addressed region.
+    pt_size: Option<u64>,
+    /// Partition table magic bytes.
+    magic: Option<Vec<u8>>,
+    /// Partition table magic offset.
+    magic_offset: Option<u64>,
+    /// List of partitions in the partition table.
+    partitions: Option<Vec<Partition>>,
 }
 
 impl PtInfo {
-    pub(crate) fn new() -> PtInfo {
-        PtInfo { tags: Vec::new() }
+    pub(crate) fn empty() -> PtInfo {
+        PtInfo {
+            pt_type: None,
+            pt_id: None,
+            pt_size: None,
+            magic: None,
+            magic_offset: None,
+            partitions: None,
+        }
     }
 
-    pub fn inner(&self) -> &[PtTag] {
-        self.tags.as_slice()
-    }
-
-    pub fn into_inner(self) -> Vec<PtTag> {
-        self.tags
-    }
-
-    pub(crate) fn set(&mut self, tag: PtTag) {
-        self.tags.push(tag);
+    pub(crate) const fn set_pt_type(&mut self, pt_type: PtType) {
+        self.pt_type = Some(pt_type)
     }
 
     pub fn pt_type(&self) -> Option<PtType> {
-        self.tags.iter().find_map(|t| match t {
-            PtTag::PtType(t) => Some(*t),
-            _ => None,
-        })
+        self.pt_type
+    }
+
+    pub(crate) const fn set_pt_id(&mut self, pt_id: PtId) {
+        self.pt_id = Some(pt_id)
     }
 
     pub fn pt_id(&self) -> Option<PtId> {
-        self.tags.iter().find_map(|t| match t {
-            PtTag::PtId(t) => Some(*t),
-            _ => None,
-        })
+        self.pt_id
+    }
+
+    pub(crate) const fn set_pt_size(&mut self, pt_size: u64) {
+        self.pt_size = Some(pt_size)
     }
 
     pub fn pt_size(&self) -> Option<u64> {
-        self.tags.iter().find_map(|t| match t {
-            PtTag::PTSize(t) => Some(*t),
-            _ => None,
-        })
+        self.pt_size
     }
 
-    pub fn magic(&self) -> Option<&[u8]> {
-        self.tags.iter().find_map(|t| match t {
-            PtTag::Magic(t) => Some(t.as_slice()),
-            _ => None,
-        })
+    pub(crate) fn set_magic(&mut self, bytes: Vec<u8>, offset: u64) {
+        self.magic = Some(bytes);
+        self.magic_offset = Some(offset);
     }
 
-    pub fn magic_offset(&self) -> Option<u64> {
-        self.tags.iter().find_map(|t| match t {
-            PtTag::MagicOffset(t) => Some(*t),
-            _ => None,
-        })
+    pub fn magic(&self) -> Option<(&[u8], u64)> {
+        match (&self.magic, &self.magic_offset) {
+            (Some(magic), Some(offset)) => Some((magic.as_slice(), *offset)),
+            (None, None) => None,
+            _ => unreachable!("magic and magic_offset are only ever set together via set_magic"),
+        }
+    }
+
+    pub(crate) fn set_partitions(&mut self, partitions: Vec<Partition>) {
+        self.partitions = Some(partitions)
     }
 
     pub fn partitions(&self) -> Option<&[Partition]> {
-        self.tags.iter().find_map(|t| match t {
-            PtTag::Partitions(t) => Some(t.as_slice()),
-            _ => None,
-        })
+        self.partitions.as_deref()
     }
 }
 
@@ -289,71 +295,75 @@ impl serde::Serialize for PtInfo {
     {
         use serde::ser::SerializeMap;
 
-        let mut map = serializer.serialize_map(Some(self.tags.len()))?;
+        let len = self.pt_type.is_some() as usize
+            | self.pt_id.is_some() as usize
+            | self.pt_size.is_some() as usize
+            | if self.magic.is_some() && self.magic_offset.is_some() {
+                2
+            } else {
+                0
+            }
+            | self.partitions.is_some() as usize;
 
-        for tag in &self.tags {
-            match tag {
-                PtTag::PtType(pt) => {
-                    map.serialize_entry("PT_TYPE", pt)?;
+        let mut map = serializer.serialize_map(Some(len))?;
+
+        if let Some(v) = &self.pt_type {
+            map.serialize_entry("PT_TYPE", v)?;
+        }
+        if let Some(v) = &self.pt_id {
+            match v {
+                PtId::Uuid(uuid) => map.serialize_entry("PT_ID", uuid)?,
+                PtId::Mbr { disk } => {
+                    map.serialize_entry("PT_ID", &format!("{:x}", disk))?;
                 }
-                PtTag::PtId(id) => match id {
-                    PtId::Uuid(uuid) => map.serialize_entry("PT_ID", uuid)?,
-                    PtId::Mbr { disk } => {
-                        map.serialize_entry("PT_ID", &format!("{:x}", disk))?;
+            }
+        }
+        if let Some(v) = &self.pt_size {
+            map.serialize_entry("PT_SIZE", v)?;
+        }
+        match (&self.magic, &self.magic_offset) {
+            (Some(magic), Some(offset)) => {
+                map.serialize_entry("MAGIC", magic)?;
+                map.serialize_entry("MAGIC_OFFSET", offset)?;
+            }
+            (None, None) => {}
+            _ => unreachable!("magic and magic_offset are only ever set together via set_magic"),
+        }
+        if let Some(v) = &self.partitions {
+            for part in v {
+                map.serialize_entry(&format!("PART{}_START", part.part_no), &part.start)?;
+                map.serialize_entry(&format!("PART{}_END", part.part_no), &part.end)?;
+                match &part.partition_id {
+                    PartitionId::Uuid(uuid) => {
+                        map.serialize_entry(&format!("PART{}_ID", part.part_no), uuid)?;
                     }
-                },
-                PtTag::PTSize(sz) => {
-                    map.serialize_entry("PT_SIZE", sz)?;
+                    PartitionId::Mbr { disk, part_no } => {
+                        map.serialize_entry(
+                            &format!("PART{}_ID", part.part_no),
+                            &format!("{:#x}{:x}", disk, part_no),
+                        )?;
+                    }
                 }
-                PtTag::Magic(mag) => {
-                    map.serialize_entry("MAGIC", mag)?;
+                match &part.partition_type {
+                    PartitionType::Mbr(byte) => {
+                        map.serialize_entry(&format!("PART{}_TYPE", part.part_no), byte)?;
+                    }
+                    PartitionType::Uuid(uuid) => {
+                        map.serialize_entry(&format!("PART{}_TYPE", part.part_no), uuid)?;
+                    }
+                    PartitionType::String(str) => {
+                        map.serialize_entry(&format!("PART{}_TYPE", part.part_no), str)?;
+                    }
                 }
-                PtTag::MagicOffset(off) => {
-                    map.serialize_entry("MAGIC_OFFSET", off)?;
+                if let Some(name) = &part.partition_name {
+                    map.serialize_entry(&format!("PART{}_NAME", part.part_no), name)?;
                 }
-                PtTag::Partitions(parts) => {
-                    for part in parts {
-                        map.serialize_entry(&format!("PART{}_START", part.part_no), &part.start)?;
-                        map.serialize_entry(&format!("PART{}_END", part.part_no), &part.end)?;
-                        match &part.partition_id {
-                            PartitionId::Uuid(uuid) => {
-                                map.serialize_entry(&format!("PART{}_ID", part.part_no), uuid)?;
-                            }
-                            PartitionId::Mbr { disk, part_no } => {
-                                map.serialize_entry(
-                                    &format!("PART{}_ID", part.part_no),
-                                    &format!("{:#x}{:x}", disk, part_no),
-                                )?;
-                            }
-                        }
-                        match &part.partition_type {
-                            PartitionType::Mbr(byte) => {
-                                map.serialize_entry(&format!("PART{}_TYPE", part.part_no), byte)?;
-                            }
-                            PartitionType::Uuid(uuid) => {
-                                map.serialize_entry(&format!("PART{}_TYPE", part.part_no), uuid)?;
-                            }
-                            PartitionType::String(str) => {
-                                map.serialize_entry(&format!("PART{}_TYPE", part.part_no), str)?;
-                            }
-                        }
-                        if let Some(name) = &part.partition_name {
-                            map.serialize_entry(&format!("PART{}_NAME", part.part_no), name)?;
-                        }
-                        match &part.attributes {
-                            PartitionAttributes::Mbr(attr) => {
-                                map.serialize_entry(
-                                    &format!("PART{}_ATTRIBUTES", part.part_no),
-                                    attr,
-                                )?;
-                            }
-                            PartitionAttributes::Gpt(attr) => {
-                                map.serialize_entry(
-                                    &format!("PART{}_ATTRIBUTES", part.part_no),
-                                    attr,
-                                )?;
-                            }
-                        }
+                match &part.attributes {
+                    PartitionAttributes::Mbr(attr) => {
+                        map.serialize_entry(&format!("PART{}_ATTRIBUTES", part.part_no), attr)?;
+                    }
+                    PartitionAttributes::Gpt(attr) => {
+                        map.serialize_entry(&format!("PART{}_ATTRIBUTES", part.part_no), attr)?;
                     }
                 }
             }

@@ -7,9 +7,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{FsTag, FsType, FsId, FsInfo},
+    filesystem::{FsId, FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Magic, ProbeFlags, Usage},
+    probe::{Magic, ProbeFlags},
     std::{fmt, mem::offset_of},
 };
 
@@ -46,8 +46,8 @@ impl<E: fmt::Debug> From<ApfsError> for Error<E> {
 
 pub const APFS_MINSZ: Option<u64> = None;
 pub const APFS_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
-    magic: ApfsSuperBlock::MAGIC,
-    b_offset: ApfsSuperBlock::MAGIC_OFFSET,
+    bytes: ApfsSuperBlock::MAGIC,
+    offset: ApfsSuperBlock::MAGIC_OFFSET,
 }]);
 
 #[repr(C)]
@@ -139,16 +139,13 @@ pub fn probe_apfs<IO: BlockIo>(
         return Err(ApfsError::UuidEmpty.into());
     };
 
-    let mut info = FsInfo::new();
+    let mut info = FsInfo::empty();
 
-    info.set(FsTag::FsType(FsType::Apfs));
-    info.set(FsTag::FsId(FsId::Uuid(uuid)));
-    info.set(FsTag::Usage(Usage::Filesystem));
-    info.set(FsTag::FsBlockSize(u64::from(sb.block_size)));
-    info.set(FsTag::BlockSize(u64::from(sb.block_size)));
-    info.set(FsTag::Usage(Usage::Filesystem));
-    info.set(FsTag::Magic(ApfsSuperBlock::MAGIC.to_vec()));
-    info.set(FsTag::MagicOffset(ApfsSuperBlock::MAGIC_OFFSET));
+    info.set_fs_type(FsType::Apfs);
+    info.set_fs_id(FsId::Uuid(uuid));
+    info.set_fs_block_size(u64::from(sb.block_size));
+    info.set_block_size(u64::from(sb.block_size));
+    info.set_magic(ApfsSuperBlock::MAGIC.to_vec(), ApfsSuperBlock::MAGIC_OFFSET);
 
     return Ok(info);
 }

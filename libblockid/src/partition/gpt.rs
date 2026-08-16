@@ -10,8 +10,7 @@ use crate::{
     error::Error,
     io::Reader,
     partition::{
-        BlockIo, PtId, PtType, PartitionAttributes, PtInfo, PtTag, Partition, PartitionId,
-        PartitionType,
+        BlockIo, Partition, PartitionAttributes, PartitionId, PartitionType, PtInfo, PtType,
     },
     probe::{Endianness, Magic, ProbeFlags},
     std::mem::offset_of,
@@ -412,17 +411,14 @@ pub fn probe_gpt<IO: BlockIo>(
         });
     }
 
-    let mut info = PtInfo::new();
+    let mut info = PtInfo::empty();
 
-    info.set(PtTag::PtType(PtType::Gpt));
-    info.set(PtTag::PtId(PtId::Uuid(header.disk_guid.into())));
-    info.set(PtTag::PTSize(
-        (u64::from(header.alternate_lba) + 1) * lssz,
-    ));
-    info.set(PtTag::Magic(GptTable::SIGNATURE_STR.to_vec()));
-    info.set(PtTag::MagicOffset(lssz));
+    info.set_pt_type(PtType::Gpt);
+    info.set_pt_id(Uuid::from(header.disk_guid).into());
+    info.set_pt_size((u64::from(header.alternate_lba) + 1) * lssz);
+    info.set_magic(GptTable::SIGNATURE_STR.to_vec(), lssz);
     if !partitions.is_empty() {
-        info.set(PtTag::Partitions(partitions));
+        info.set_partitions(partitions);
     }
 
     return Ok(info);

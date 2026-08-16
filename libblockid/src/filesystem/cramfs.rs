@@ -1,18 +1,21 @@
-use std::mem::offset_of;
-
 use crc::{CRC_32_ISO_HDLC, Crc};
 use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, transmute_ref};
 
 use crate::{
+    Endianness,
     error::Error,
-    filesystem::FsInfo,
+    filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
     probe::{Magic, ProbeFlags},
-    std::fmt,
+    std::{fmt, mem::offset_of, str::Utf8Error},
+    util::{decode_utf8_from, decode_utf8_lossy_from},
 };
 
 #[derive(Debug, Clone)]
-pub enum CramfsError {}
+pub enum CramfsError {
+    Utf8Error(Utf8Error),
+    HeaderChecksumInvalid,
+}
 
 impl fmt::Display for CramfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -32,12 +35,12 @@ const BIG_ENDIAN_MAGIC: &[u8; 4] = b"\x28\xcd\x3d\x45";
 pub const CRAMFS_MINSZ: Option<u64> = None;
 pub const CRAMFS_MAGICS: Option<&'static [Magic]> = Some(&[
     Magic {
-        magic: LITTLE_ENDIAN_MAGIC,
-        b_offset: 0,
+        bytes: LITTLE_ENDIAN_MAGIC,
+        offset: 0,
     },
     Magic {
-        magic: BIG_ENDIAN_MAGIC,
-        b_offset: 0,
+        bytes: BIG_ENDIAN_MAGIC,
+        offset: 0,
     },
 ]);
 
@@ -62,8 +65,8 @@ impl CramfsSuperBlock {
 
 fn verify_csum<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    mag: Magic,
-    sb: CramfsSuperBlock,
+    offset: u64,
+    sb: &CramfsSuperBlock,
     le: bool,
 ) -> Result<(), Error<IO::Error>> {
     let expected = if le {
@@ -82,20 +85,31 @@ fn verify_csum<IO: BlockIo>(
         todo!()
     }
 
-    todo!()
+    let crc_buf = reader.read_at_exclude(
+        offset,
+        csummed_size as usize,
+        offset_of!(CramfsSuperBlock, crc)..(offset_of!(CramfsSuperBlock, crc) + 2),
+    )?;
+
+    let calc_sum = Crc::<u32>::new(&CRC_32_ISO_HDLC).checksum(&crc_buf);
+
+    if calc_sum == expected.into() {
+        return Ok(());
+    }
+
+    Err(CramfsError::HeaderChecksumInvalid.into())
 }
 
 pub fn probe_cramfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
-    mag: Magic,
+    magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<CramfsSuperBlock>()] = reader.read_exact_at(offset)?;
-
     let sb: &CramfsSuperBlock = transmute_ref!(&buf);
 
-    let le = mag.magic == LITTLE_ENDIAN_MAGIC;
+    let le = magic.bytes == LITTLE_ENDIAN_MAGIC;
 
     let v2 = (if le {
         u32::from_le_bytes(sb.flags)
@@ -104,5 +118,26 @@ pub fn probe_cramfs<IO: BlockIo>(
     }) & CramfsSuperBlock::FLAG_FSID_VERSION_2
         != 0;
 
-    todo!()
+    if v2 && verify_csum(reader, offset, sb, le).is_err() {
+        todo!()
+    }
+
+    let mut info = FsInfo::empty();
+
+    info.set_fs_type(FsType::Cramfs);
+    if sb.name != [0u8; 16] {
+        info.set_label(decode_utf8_from(&sb.name).map_err(CramfsError::Utf8Error)?);
+    }
+    info.set_version(if v2 { "2".to_string() } else { "1".to_string() });
+    info.set_magic(magic.bytes.to_vec(), magic.offset);
+
+    if le {
+        info.set_fs_size(u32::from_le_bytes(sb.size).into());
+        info.set_endianness(Endianness::Little);
+    } else {
+        info.set_fs_size(u32::from_be_bytes(sb.size).into());
+        info.set_endianness(Endianness::Big);
+    }
+
+    return Ok(info);
 }

@@ -7,9 +7,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{FsInfo, FsTag, FsType, FsId},
+    filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Magic, ProbeFlags, Usage},
+    probe::{Magic, ProbeFlags},
     std::{
         fmt,
         str::{FromStr, Utf8Error},
@@ -66,14 +66,14 @@ pub const SECONDARY_OFFSETS: [u64; 9] = [
 
 pub const LUKS1_MINSZ: Option<u64> = Some(1048576);
 pub const LUKS1_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
-    magic: &LUKS1_MAGIC,
-    b_offset: 0,
+    bytes: &LUKS1_MAGIC,
+    offset: 0,
 }]);
 
 pub const LUKS2_MINSZ: Option<u64> = Some(4194304);
 pub const LUKS2_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
-    magic: &LUKS2_MAGIC,
-    b_offset: 0,
+    bytes: &LUKS2_MAGIC,
+    offset: 0,
 }]);
 
 pub const LUKSOPAL_MAGICS: Option<&'static [Magic]> = None;
@@ -159,16 +159,12 @@ pub fn probe_luks1<IO: BlockIo>(
     let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::Utf8Error)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
-    let version = sb.version.to_string();
+    let mut info = FsInfo::empty();
 
-    let mut info = FsInfo::new();
-
-    info.set(FsTag::FsType(FsType::LUKS1));
-    info.set(FsTag::FsId(FsId::Uuid(uuid)));
-    info.set(FsTag::Usage(Usage::Crypto));
-    info.set(FsTag::Version(version));
-    info.set(FsTag::Magic(magic.magic.to_vec()));
-    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set_fs_type(FsType::LUKS1);
+    info.set_fs_id(uuid.into());
+    info.set_version(format!("{}", sb.version));
+    info.set_magic(magic.bytes.to_vec(), magic.offset);
 
     return Ok(info);
 }
@@ -190,16 +186,12 @@ pub fn probe_luks2<IO: BlockIo>(
     let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::Utf8Error)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
-    let version = sb.version.to_string();
+    let mut info = FsInfo::empty();
 
-    let mut info = FsInfo::new();
-
-    info.set(FsTag::FsType(FsType::LUKS2));
-    info.set(FsTag::FsId(FsId::Uuid(uuid)));
-    info.set(FsTag::Usage(Usage::Crypto));
-    info.set(FsTag::Version(version));
-    info.set(FsTag::Magic(magic.magic.to_vec()));
-    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set_fs_type(FsType::LUKS2);
+    info.set_fs_id(uuid.into());
+    info.set_version(format!("{}", sb.version));
+    info.set_magic(magic.bytes.to_vec(), magic.offset);
 
     return Ok(info);
 }
@@ -225,16 +217,12 @@ pub fn probe_luks_opal<IO: BlockIo>(
     let utf = decode_utf8_from(&sb.uuid).map_err(LuksError::Utf8Error)?;
     let uuid = Uuid::from_str(&utf).map_err(LuksError::UuidConversionError)?;
 
-    let version = sb.version.to_string();
+    let mut info = FsInfo::empty();
 
-    let mut info = FsInfo::new();
-
-    info.set(FsTag::FsType(FsType::LUKSOpal));
-    info.set(FsTag::FsId(FsId::Uuid(uuid)));
-    info.set(FsTag::Usage(Usage::Crypto));
-    info.set(FsTag::Version(version));
-    info.set(FsTag::Magic(magic.magic.to_vec()));
-    info.set(FsTag::MagicOffset(magic.b_offset));
+    info.set_fs_type(FsType::LUKS2);
+    info.set_fs_id(uuid.into());
+    info.set_version(format!("{}", sb.version));
+    info.set_magic(magic.bytes.to_vec(), magic.offset);
 
     return Ok(info);
 }

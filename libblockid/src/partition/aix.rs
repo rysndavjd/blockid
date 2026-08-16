@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
     io::{BlockIo, Reader},
-    partition::{PtInfo, PtTag, PtType},
+    partition::{PtInfo, PtType},
     probe::{Magic, ProbeFlags},
 };
 
@@ -18,8 +18,8 @@ impl<E: core::fmt::Debug> From<AixError> for Error<E> {
 
 pub const AIX_MINSZ: Option<u64> = None;
 pub const AIX_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
-    magic: &AIX_MAGIC,
-    b_offset: 0,
+    bytes: &AIX_MAGIC,
+    offset: 0,
 }]);
 
 pub fn probe_aix<IO: BlockIo>(
@@ -28,11 +28,10 @@ pub fn probe_aix<IO: BlockIo>(
     _: u64,
     _: Magic,
 ) -> Result<PtInfo, Error<IO::Error>> {
-    let mut info = PtInfo::new();
+    let mut info = PtInfo::empty();
 
-    info.set(PtTag::PtType(PtType::Aix));
-    info.set(PtTag::Magic(AIX_MAGIC.to_vec()));
-    info.set(PtTag::MagicOffset(0));
+    info.set_pt_type(PtType::Aix);
+    info.set_magic(AIX_MAGIC.to_vec(), 0);
 
     return Ok(info);
 }

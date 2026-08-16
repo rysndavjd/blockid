@@ -7,9 +7,9 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{FsInfo, FsTag, FsType, FsId},
+    filesystem::{FsId, FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Endianness, Magic, ProbeFlags, Usage},
+    probe::{Endianness, Magic, ProbeFlags},
     std::fmt,
     util::{decode_utf16_from, decode_utf16_lossy_from},
 };
@@ -73,8 +73,8 @@ impl<E: fmt::Debug> From<ExFatError> for Error<E> {
 
 pub const EXFAT_MINSZ: Option<u64> = Some(4194304);
 pub const EXFAT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
-    magic: b"EXFAT   ",
-    b_offset: 3,
+    bytes: b"EXFAT   ",
+    offset: 3,
 }]);
 
 #[repr(C)]
@@ -362,7 +362,7 @@ pub fn probe_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     flags: ProbeFlags,
     offset: u64,
-    mag: Magic,
+    magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<ExFatSuperBlock>()] = reader.read_exact_at(offset)?;
 
@@ -370,29 +370,18 @@ pub fn probe_exfat<IO: BlockIo>(
 
     valid_exfat(reader, offset, sb)?;
 
-    let label = find_label(reader, flags, sb)?;
+    let mut info = FsInfo::empty();
 
-    let version = format!("{}.{}", sb.vermaj, sb.vermin);
-
-    let mut info = FsInfo::new();
-
-    info.set(FsTag::FsType(FsType::Exfat));
-    info.set(FsTag::FsId(FsId::VolumeId32(
-        VolumeId32::from_bytes(sb.volume_serial),
-    )));
-    if let Some(l) = label {
-        info.set(FsTag::Label(l));
+    info.set_fs_type(FsType::Exfat);
+    info.set_fs_id(FsId::VolumeId32(VolumeId32::from_bytes(sb.volume_serial)));
+    if let Some(l) = find_label(reader, flags, sb)? {
+        info.set_label(l);
     }
-    info.set(FsTag::Usage(Usage::Filesystem));
-    info.set(FsTag::FsSize(
-        sb.block_size() as u64 * u64::from(sb.volume_length),
-    ));
-    info.set(FsTag::FsBlockSize(sb.block_size() as u64));
-    info.set(FsTag::BlockSize(sb.block_size() as u64));
-    info.set(FsTag::Usage(Usage::Filesystem));
-    info.set(FsTag::Version(version));
-    info.set(FsTag::Magic(mag.magic.to_vec()));
-    info.set(FsTag::MagicOffset(mag.b_offset));
+    info.set_fs_size(sb.block_size() as u64 * u64::from(sb.volume_length));
+    info.set_fs_block_size(sb.block_size() as u64);
+    info.set_block_size(sb.block_size() as u64);
+    info.set_version(format!("{}.{}", sb.vermaj, sb.vermin));
+    info.set_magic(magic.bytes.to_vec(), magic.offset);
 
     return Ok(info);
 }

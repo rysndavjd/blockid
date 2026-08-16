@@ -2,7 +2,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, transmut
 
 use crate::{
     error::Error,
-    filesystem::{FsInfo, FsTag},
+    filesystem::FsInfo,
     io::{BlockIo, Reader},
     probe::{Endianness, Magic, ProbeFlags},
     std::fmt,
@@ -10,12 +10,6 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum VxfsError {}
-
-// impl fmt::Display for VxfsError {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {}
-//     }
-// }
 
 impl<E: fmt::Debug> From<VxfsError> for Error<E> {
     fn from(e: VxfsError) -> Self {
@@ -26,12 +20,12 @@ impl<E: fmt::Debug> From<VxfsError> for Error<E> {
 pub const VXFS_MINSZ: Option<u64> = None;
 pub const VXFS_MAGICS: Option<&'static [Magic]> = Some(&[
     Magic {
-        magic: LITTLE_ENDIAN_MAGIC,
-        b_offset: 1024,
+        bytes: LITTLE_ENDIAN_MAGIC,
+        offset: 1024,
     },
     Magic {
-        magic: BIG_ENDIAN_MAGIC,
-        b_offset: 8192,
+        bytes: BIG_ENDIAN_MAGIC,
+        offset: 8192,
     },
 ]);
 
@@ -64,32 +58,20 @@ pub fn probe_vxfs<IO: BlockIo>(
 
     let xvfs: &VxfsSuperBlock = transmute_ref!(&buf);
 
-    let mut info = FsInfo::new();
+    let mut info = FsInfo::empty();
 
-    if magic.magic == LITTLE_ENDIAN_MAGIC {
-        info.set(FsTag::Version(format!(
-            "{}",
-            u32::from_le_bytes(xvfs.vs_version)
-        )));
-        info.set(FsTag::FsBlockSize(
-            u32::from_le_bytes(xvfs.vs_bsize).into(),
-        ));
-        info.set(FsTag::BlockSize(
-            u32::from_le_bytes(xvfs.vs_bsize).into(),
-        ));
-        info.set(FsTag::Endianness(Endianness::Little));
+    info.set_magic(magic.bytes.to_vec(), magic.offset);
+
+    if magic.bytes == LITTLE_ENDIAN_MAGIC {
+        info.set_version(format!("{}", u32::from_le_bytes(xvfs.vs_version)));
+        info.set_fs_block_size(u32::from_le_bytes(xvfs.vs_bsize).into());
+        info.set_block_size(u32::from_le_bytes(xvfs.vs_bsize).into());
+        info.set_endianness(Endianness::Little);
     } else {
-        info.set(FsTag::Version(format!(
-            "{}",
-            u32::from_be_bytes(xvfs.vs_version)
-        )));
-        info.set(FsTag::FsBlockSize(
-            u32::from_be_bytes(xvfs.vs_bsize).into(),
-        ));
-        info.set(FsTag::BlockSize(
-            u32::from_be_bytes(xvfs.vs_bsize).into(),
-        ));
-        info.set(FsTag::Endianness(Endianness::Big));
+        info.set_version(format!("{}", u32::from_be_bytes(xvfs.vs_version)));
+        info.set_fs_block_size(u32::from_be_bytes(xvfs.vs_bsize).into());
+        info.set_block_size(u32::from_be_bytes(xvfs.vs_bsize).into());
+        info.set_endianness(Endianness::Big);
     };
 
     return Ok(info);

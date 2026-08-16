@@ -96,16 +96,16 @@ impl<IO: BlockIo> Reader<IO> {
     ) -> Result<Option<Magic>, Error<IO::Error>> {
         let mut buf = [0u8; 16];
 
-        for mag in magics {
+        for magic in magics {
             debug_assert!(
-                mag.magic.len() <= buf.len(),
+                magic.bytes.len() <= buf.len(),
                 "Magic should not be greater then `buf`"
             );
 
-            self.read_at(mag.b_offset, &mut buf)?;
+            self.read_at(magic.offset, &mut buf)?;
 
-            if &buf[..mag.magic.len()] == mag.magic {
-                return Ok(Some(*mag));
+            if &buf[..(magic.bytes.len())] == magic.bytes {
+                return Ok(Some(*magic));
             }
         }
 
