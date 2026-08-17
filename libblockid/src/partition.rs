@@ -91,7 +91,7 @@ impl PtType {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PtId {
-    /// A 128-bit universally unique identifier.
+    /// A 128-bit universally unique identifier or [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier).
     Uuid(Uuid),
     /// A 32-bit MBR disk signature.
     Mbr { disk: u32 },
@@ -156,7 +156,6 @@ impl PartitionId {
     }
 
     /// Currently we return the disk ID and the partition number, eventully I
-    /// Currently we return the disk ID and the partition number, eventully I
     /// will probally make a custom mbr type or something like fat_volume_id
     pub fn as_mbr(&self) -> Option<(u32, u8)> {
         match self {
@@ -170,9 +169,7 @@ impl PartitionId {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartitionAttributes {
-    /// Used in MBR partition tables for if partition is active or inactive.
     Mbr(MbrAttributes),
-    /// Used in GPT partition tables.
     Gpt(GptAttributes),
 }
 
@@ -194,23 +191,6 @@ pub struct Partition {
     pub partition_name: Option<Label>,
     /// The partition attributes of a specified partition table.
     pub attributes: PartitionAttributes,
-}
-
-#[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Debug, Clone)]
-pub enum PtTag {
-    /// Partition table type.
-    PtType(PtType),
-    /// Partition table identifier.
-    PtId(PtId),
-    /// Total size in bytes from the start of the disk to the end of the
-    /// partition table addressed region.
-    PTSize(u64),
-    /// Partition table magic bytes.
-    Magic { bytes: Vec<u8>, offset: u64 },
-    /// List of partitions in the partition table.
-    Partitions(Vec<Partition>),
 }
 
 #[derive(Debug)]

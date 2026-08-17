@@ -1,5 +1,5 @@
-use bstr::{BString, ByteSlice};
-use widestring::U16String;
+use bstr::{BStr, BString, ByteSlice};
+use widestring::{U16Str, U16String};
 
 use crate::{
     error::Error,
@@ -23,10 +23,61 @@ pub enum Endianness {
     Big,
 }
 
+/// A label as raw bytes read from disk, tagged as UTF-8 or UTF-16.
+///
+/// The tag reflects what the superblock declares, not a guarantee that the
+/// bytes are validly encoded. Callers may validate/convert the data to a
+/// proper encoded string or use the raw bytes directly.
 #[derive(Debug, Clone)]
 pub enum Label {
     Utf8(BString),
     Utf16(U16String),
+}
+
+impl Label {
+    /// Returns `true` if the label is [`Label::Utf8`].
+    pub fn is_utf8(&self) -> bool {
+        matches!(self, Label::Utf8(_))
+    }
+
+    /// Returns `true` if the label is [`Label::Utf16`].
+    pub fn is_utf16(&self) -> bool {
+        matches!(self, Label::Utf16(_))
+    }
+
+    /// Returns the label as a [`BStr`] if it is [`Label::Utf8`], otherwise `None`.
+    pub fn as_bstr(&self) -> Option<&BStr> {
+        match self {
+            Label::Utf8(utf8) => Some(utf8.as_bstr()),
+            _ => None,
+        }
+    }
+
+    /// Returns the label as a [`U16Str`] if it is [`Label::Utf16`], otherwise `None`.
+    pub fn as_u16str(&self) -> Option<&U16Str> {
+        match self {
+            Label::Utf16(utf16) => Some(utf16.as_ustr()),
+            _ => None,
+        }
+    }
+
+    /// Consumes the label and returns the inner [`BString`] if it is
+    /// [`Label::Utf8`], otherwise `None`.
+    pub fn into_bstring(self) -> Option<BString> {
+        match self {
+            Label::Utf8(utf8) => Some(utf8),
+            _ => None,
+        }
+    }
+
+    /// Consumes the label and returns the inner [`U16String`] if it is
+    /// [`Label::Utf16`], otherwise `None`.
+    pub fn into_u16string(self) -> Option<U16String> {
+        match self {
+            Label::Utf16(utf16) => Some(utf16),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -57,6 +108,10 @@ impl From<U16String> for Label {
 }
 
 impl fmt::Display for Label {
+    /// Formats the label as a lossily converted UTF-8 string.
+    ///
+    /// For both [`Label::Utf8`] and [`Label::Utf16`], invalid sequences are
+    /// replaced with `U+FFFD`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Label::Utf8(utf8) => write!(f, "{}", utf8),
@@ -81,7 +136,7 @@ impl Magic {
     };
 }
 
-pub fn probe_filesystem<IO: BlockIo>(
+fn probe_filesystem<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     filter: FsFilter,
@@ -131,7 +186,7 @@ pub fn probe_filesystem<IO: BlockIo>(
     return Err(Error::ProbesExhausted);
 }
 
-pub fn search_for_filesystem<IO: BlockIo>(
+fn search_for_filesystem<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     filesystem: FsType,
@@ -167,7 +222,7 @@ pub fn search_for_filesystem<IO: BlockIo>(
     (handle.probe)(reader, offset, magic)
 }
 
-pub fn probe_part_table<IO: BlockIo>(
+fn probe_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     filter: PtFilter,
@@ -217,7 +272,7 @@ pub fn probe_part_table<IO: BlockIo>(
     return Err(Error::ProbesExhausted);
 }
 
-pub fn search_for_part_table<IO: BlockIo>(
+fn search_for_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     part_table: PtType,
@@ -256,7 +311,9 @@ pub fn search_for_part_table<IO: BlockIo>(
 /// Probe for detecting filesystems and partition tables on a block device.
 #[derive(Debug)]
 pub struct Probe<IO: BlockIo> {
+    /// Underlying `IO` source to probe.
     reader: Reader<IO>,
+    /// Byte offset into the device at which probing begins.
     offset: u64,
 }
 
@@ -279,11 +336,13 @@ impl<IO: BlockIo> Probe<IO> {
         Ok(Probe { reader: io, offset })
     }
 
+    /// Probes the device for a filesystem, skipping any types set in `filter`.
     #[inline]
     pub fn probe_filesystem(&mut self, filter: FsFilter) -> Result<FsInfo, Error<IO::Error>> {
         probe_filesystem(&mut self.reader, self.offset, filter)
     }
 
+    /// Probes the device for a specific filesystem.
     #[inline]
     pub fn search_for_filesystem(
         &mut self,
@@ -292,11 +351,13 @@ impl<IO: BlockIo> Probe<IO> {
         search_for_filesystem(&mut self.reader, self.offset, filesystem)
     }
 
+    /// Probes the device for a partition table, skipping any types set in `filter`.
     #[inline]
     pub fn probe_part_table(&mut self, filter: PtFilter) -> Result<PtInfo, Error<IO::Error>> {
         probe_part_table(&mut self.reader, self.offset, filter)
     }
 
+    /// Probes the device for a specific partition table.
     #[inline]
     pub fn search_for_part_table(
         &mut self,
@@ -308,6 +369,7 @@ impl<IO: BlockIo> Probe<IO> {
 
 #[cfg(feature = "os_calls")]
 impl Probe<crate::io::File> {
+    /// Creates a new [`Probe`] from an already open [`File`](crate::io::File).
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn from_file(
@@ -323,6 +385,7 @@ impl Probe<crate::io::File> {
         Ok(Self { reader, offset })
     }
 
+    /// Opens the block device at [`path`](std::path::Path) and creates a new [`Probe`] for it.
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn open<P: AsRef<std::path::Path>>(
@@ -334,6 +397,7 @@ impl Probe<crate::io::File> {
         Self::from_file(file, offset)
     }
 
+    /// Creates a new [`Probe`] from an already open raw file descriptor `fd`.
     #[cfg(feature = "no_std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
     pub fn from_fd(
@@ -349,6 +413,7 @@ impl Probe<crate::io::File> {
         Ok(Self { reader, offset })
     }
 
+    /// Opens the block device at `path` and creates a new [`Probe`] for it.
     #[cfg(feature = "no_std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
     pub fn open<P: rustix::path::Arg>(
@@ -360,6 +425,7 @@ impl Probe<crate::io::File> {
         Self::from_fd(fd, offset)
     }
 
+    /// Probes the device for a filesystem, skipping any types set in `filter`.
     #[inline]
     pub fn probe_filesystem(
         &mut self,
@@ -368,6 +434,7 @@ impl Probe<crate::io::File> {
         probe_filesystem(&mut self.reader, self.offset, filter)
     }
 
+    /// Probes the device for a specific filesystem.
     #[inline]
     pub fn search_for_filesystem(
         &mut self,
@@ -376,6 +443,7 @@ impl Probe<crate::io::File> {
         search_for_filesystem(&mut self.reader, self.offset, filesystem)
     }
 
+    /// Probes the device for a partition table, skipping any types set in `filter`.
     #[inline]
     pub fn probe_part_table(
         &mut self,
@@ -384,6 +452,7 @@ impl Probe<crate::io::File> {
         probe_part_table(&mut self.reader, self.offset, filter)
     }
 
+    /// Probes the device for a specific partition table.
     #[inline]
     pub fn search_for_part_table(
         &mut self,
@@ -392,21 +461,25 @@ impl Probe<crate::io::File> {
         search_for_part_table(&mut self.reader, self.offset, part_table)
     }
 
+    /// Returns the total size of the device, in bytes.
     #[inline]
     pub fn device_size(&self) -> Result<u64, Error<crate::io::IoError>> {
         self.reader.device_size()
     }
 
+    /// Returns the device's logical sector size, in bytes.
     #[inline]
     pub fn logical_sector_size(&self) -> Result<u64, Error<crate::io::IoError>> {
         self.reader.logical_sector_size()
     }
 
+    /// Returns the device's physical sector size, in bytes.
     #[inline]
     pub fn physical_sector_size(&self) -> Result<u64, Error<crate::io::IoError>> {
         self.reader.physical_sector_size()
     }
 
+    /// Returns the device's minimum I/O size, in bytes.
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     #[cfg_attr(docsrs, doc(cfg(any(target_os = "linux", target_os = "freebsd"))))]
@@ -414,6 +487,7 @@ impl Probe<crate::io::File> {
         self.reader.minimum_io_size()
     }
 
+    /// Returns the device's optimal I/O size, in bytes.
     #[inline]
     #[cfg(target_os = "linux")]
     #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
@@ -421,6 +495,7 @@ impl Probe<crate::io::File> {
         self.reader.optimal_io_size()
     }
 
+    /// Returns the device's alignment offset.
     #[inline]
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     #[cfg_attr(docsrs, doc(cfg(any(target_os = "linux", target_os = "freebsd"))))]

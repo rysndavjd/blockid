@@ -187,10 +187,11 @@ impl FsType {
     }
 }
 
+/// Identifier used by a filesystem to uniquely identify them.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum FsId {
-    /// A 128-bit universally unique identifier.
+    /// A 128-bit universally unique identifier or [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier).
     Uuid(Uuid),
     /// A 32-bit volume serial number.
     VolumeId32(VolumeId32),
@@ -199,6 +200,7 @@ pub enum FsId {
 }
 
 impl FsId {
+    /// Returns the inner [`Uuid`] if this is a [`FsId::Uuid`], otherwise `None`.
     pub fn as_uuid(&self) -> Option<Uuid> {
         match self {
             FsId::Uuid(t) => Some(*t),
@@ -206,6 +208,7 @@ impl FsId {
         }
     }
 
+    /// Returns the inner [`VolumeId32`] if this is a [`FsId::VolumeId32`], otherwise `None`.
     pub fn as_volumeid32(&self) -> Option<VolumeId32> {
         match self {
             FsId::VolumeId32(t) => Some(*t),
@@ -213,6 +216,7 @@ impl FsId {
         }
     }
 
+    /// Returns the inner [`VolumeId64`] if this is a [`FsId::VolumeId64`], otherwise `None`.
     pub fn as_volumeid64(&self) -> Option<VolumeId64> {
         match self {
             FsId::VolumeId64(t) => Some(*t),
@@ -247,8 +251,11 @@ impl From<VolumeId64> for FsId {
 )]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SubType {
+    /// File Allocation Table 12 or [FAT12](https://en.wikipedia.org/wiki/File_Allocation_Table#FAT12)
     Fat12,
+    /// File Allocation Table 16 or [FAT16](https://en.wikipedia.org/wiki/File_Allocation_Table#Final_FAT16)
     Fat16,
+    /// File Allocation Table 32 or [FAT32](https://en.wikipedia.org/wiki/File_Allocation_Table#FAT32)
     Fat32,
 }
 
@@ -535,6 +542,7 @@ impl serde::Serialize for FsInfo {
 }
 
 bitflags! {
+    /// Filesystem types to skip checking for in probe operations.
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct FsFilter: u64 {
