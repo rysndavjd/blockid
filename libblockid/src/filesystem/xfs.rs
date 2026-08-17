@@ -1,3 +1,4 @@
+use bstr::BString;
 use crc::{CRC_32_ISCSI, Crc};
 use uuid::Uuid;
 use zerocopy::{
@@ -7,18 +8,15 @@ use zerocopy::{
 };
 
 use crate::{
-    ProbeFlags,
     error::Error,
     filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
     probe::Magic,
-    std::{fmt, mem::offset_of, str::Utf8Error},
-    util::{decode_utf8_from, decode_utf8_lossy_from},
+    std::{fmt, mem::offset_of},
 };
 
 #[derive(Debug, Clone)]
 pub enum XfsError {
-    Utf8Error(Utf8Error),
     InvalidHeaderRanges,
     InvalidHeaderVersion,
     InvalidHeaderFeatures,
@@ -28,7 +26,6 @@ pub enum XfsError {
 impl fmt::Display for XfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            XfsError::Utf8Error(e) => write!(f, "Filesystem label contains invalid UTF-8: {e}"),
             XfsError::InvalidHeaderRanges => write!(f, "Invalid XFS header ranges"),
             XfsError::InvalidHeaderVersion => write!(f, "Invalid XFS header version number"),
             XfsError::InvalidHeaderFeatures => write!(f, "Invalid XFS header features"),
@@ -208,7 +205,6 @@ impl XfsSuperBlock {
 
 pub fn probe_xfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -218,22 +214,12 @@ pub fn probe_xfs<IO: BlockIo>(
     let mut crc_area = reader.read_vec_at(offset, usize::from(sb.sectsize))?;
     sb.verify(&mut crc_area)?;
 
-    let label = if sb.fname[0] != 0 {
-        if flags.contains(ProbeFlags::FailOnInvalidUTF) {
-            Some(decode_utf8_from(&sb.fname).map_err(XfsError::Utf8Error)?)
-        } else {
-            Some(decode_utf8_lossy_from(&sb.fname))
-        }
-    } else {
-        None
-    };
-
     let mut info = FsInfo::empty();
 
     info.set_fs_type(FsType::Xfs);
     info.set_fs_id(Uuid::from_bytes(sb.uuid).into());
-    if let Some(l) = label {
-        info.set_label(l);
+    if sb.fname[0] != 0 {
+        info.set_label(BString::from(sb.fname).into());
     }
     info.set_magic(magic.bytes.to_vec(), magic.offset);
     info.set_fs_size(sb.fssize());

@@ -2,7 +2,7 @@ use crate::{
     error::Error,
     io::{BlockIo, Reader},
     partition::{PtInfo, PtType},
-    probe::{Magic, ProbeFlags},
+    probe::Magic,
 };
 
 pub const AIX_MAGIC: [u8; 4] = [0xC9, 0xC2, 0xD4, 0xC1];
@@ -24,7 +24,6 @@ pub const AIX_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
 
 pub fn probe_aix<IO: BlockIo>(
     _: &mut Reader<IO>,
-    _: ProbeFlags,
     _: u64,
     _: Magic,
 ) -> Result<PtInfo, Error<IO::Error>> {

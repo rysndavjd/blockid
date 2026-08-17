@@ -29,7 +29,7 @@ use crate::{
         xfs::{XFS_MAGICS, XFS_MINSZ, probe_xfs},
     },
     io::{BlockIo, Reader},
-    probe::{Endianness, Magic, ProbeFlags},
+    probe::{Endianness, Label, Magic},
     std::fmt,
 };
 
@@ -60,7 +60,7 @@ pub(crate) struct FsHandler<IO: BlockIo> {
     pub magics: Option<&'static [Magic]>,
     /// Probes the filesystem, returning its info on success.
     #[allow(clippy::type_complexity)]
-    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<FsInfo, Error<IO::Error>>,
+    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<FsInfo, Error<IO::Error>>,
 }
 
 /// The type of filesystem supported.
@@ -259,7 +259,7 @@ pub struct FsInfo {
     /// Sub block type, Eg: Filsystem is VFAT but subtype is FAT16.
     sub_type: Option<SubType>,
     /// Filesystem label, Eg: `LABEL`.
-    label: Option<String>,
+    label: Option<Label>,
     /// Filesystem identifier.
     /// Eg:
     ///     UUID: `67e55044-10b1-426f-9247-bb680e5fe0c8`
@@ -330,11 +330,11 @@ impl FsInfo {
         self.sub_type
     }
 
-    pub(crate) fn set_label(&mut self, label: String) {
+    pub(crate) fn set_label(&mut self, label: Label) {
         self.label = Some(label);
     }
 
-    pub fn label(&self) -> Option<&String> {
+    pub fn label(&self) -> Option<&Label> {
         self.label.as_ref()
     }
 
@@ -477,7 +477,12 @@ impl serde::Serialize for FsInfo {
             map.serialize_entry("SUB_TYPE", v)?;
         }
         if let Some(v) = &self.label {
-            map.serialize_entry("LABEL", v)?;
+            match v {
+                Label::Utf8(utf8) => {
+                    map.serialize_entry("LABEL", utf8)?;
+                }
+                Label::Utf16(utf16) => map.serialize_entry("LABEL", &utf16.to_string_lossy())?,
+            }
         }
         if let Some(v) = &self.fs_id {
             match v {

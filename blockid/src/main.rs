@@ -5,7 +5,7 @@ use std::{
 
 use clap::{Parser, Subcommand, ValueEnum};
 use libblockid::{
-    Probe, ProbeFlags,
+    Probe,
     error::Error,
     filesystem::{FS_DETECT_ORDER, FsFilter, FsType},
     partition::{PT_DETECT_ORDER, PtFilter, PtType},
@@ -128,8 +128,7 @@ fn _main() -> Result<(), Error<io::Error>> {
                 filesystem,
                 part_table,
             } => {
-                let mut probe =
-                    Probe::open(device, ProbeFlags::empty(), offset.unwrap_or_default())?;
+                let mut probe = Probe::open(device, offset.unwrap_or_default())?;
 
                 match probe.probe_part_table(PtFilter::empty()) {
                     Ok(info) => {
@@ -174,7 +173,7 @@ fn _main() -> Result<(), Error<io::Error>> {
                 return Err(Error::ProbesExhausted);
             }
             Commands::Topology { device, format } => {
-                let probe = Probe::open(device, ProbeFlags::empty(), 0)?;
+                let probe = Probe::open(device, 0)?;
 
                 let topology = Topology {
                     device_size: probe.device_size()?,

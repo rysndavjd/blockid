@@ -48,6 +48,7 @@ serde = { version = "1.0.228", default-features = false, features = [
 clap = { version = "4.6.4", default-features = false, features = [
     "derive",
 ], optional = true }
+bstr = { version = "1.13.1", default-features = false, features = ["alloc"] }
 
 # For getting path from FD we use fcntl on macOS and FreeBSD and for Linux
 # we use `/proc/self/fd/<fd>`
@@ -66,8 +67,9 @@ std = [
     "libc/std",
     "serde/std",
     "clap/std",
+    "bstr/std",
 ]
 no_std = ["dep:embedded-io"]
 os_calls = ["dep:rustix"]
-serde = ["dep:serde", "uuid/serde", "bitflags/serde"]
+serde = ["dep:serde", "uuid/serde", "bitflags/serde", "bstr/serde"]
 clap = ["dep:clap"]

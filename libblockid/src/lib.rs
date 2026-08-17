@@ -16,10 +16,10 @@ pub mod partition;
 mod probe;
 mod util;
 
-#[cfg(feature = "no_std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
+#[cfg(all(feature = "no_std", feature = "os_calls"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "no_std", feature = "os_calls"))))]
 pub use crate::io::no_std::path::{Path, PathBuf};
-pub use crate::probe::{Endianness, ProbeFlags};
+pub use crate::probe::Endianness;
 #[cfg(feature = "os_calls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "os_calls")))]
 pub use crate::{io::ioctl::AlignmentOffset, util::fd_to_path};

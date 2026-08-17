@@ -1,3 +1,4 @@
+use bstr::BString;
 use crc::{CRC_32_ISO_HDLC, Crc};
 use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned, transmute_ref};
 
@@ -6,14 +7,12 @@ use crate::{
     error::Error,
     filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Magic, ProbeFlags},
-    std::{fmt, mem::offset_of, str::Utf8Error},
-    util::{decode_utf8_from, decode_utf8_lossy_from},
+    probe::Magic,
+    std::{fmt, mem::offset_of},
 };
 
 #[derive(Debug, Clone)]
 pub enum CramfsError {
-    Utf8Error(Utf8Error),
     HeaderChecksumInvalid,
 }
 
@@ -102,7 +101,6 @@ fn verify_csum<IO: BlockIo>(
 
 pub fn probe_cramfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -126,7 +124,7 @@ pub fn probe_cramfs<IO: BlockIo>(
 
     info.set_fs_type(FsType::Cramfs);
     if sb.name != [0u8; 16] {
-        info.set_label(decode_utf8_from(&sb.name).map_err(CramfsError::Utf8Error)?);
+        info.set_label(BString::from(sb.name).into());
     }
     info.set_version(if v2 { "2".to_string() } else { "1".to_string() });
     info.set_magic(magic.bytes.to_vec(), magic.offset);

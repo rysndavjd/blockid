@@ -4,7 +4,7 @@ use crate::{
     error::Error,
     filesystem::FsInfo,
     io::{BlockIo, Reader},
-    probe::{Endianness, Magic, ProbeFlags},
+    probe::{Endianness, Magic},
     std::fmt,
 };
 
@@ -50,7 +50,6 @@ const BIG_ENDIAN_MAGIC: &[u8; 4] = b"\xa5\x01\xfc\xf5";
 
 pub fn probe_vxfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    _: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {

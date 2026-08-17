@@ -1,4 +1,5 @@
 use bitflags::bitflags;
+use bstr::BString;
 use crc::{Algorithm, Crc};
 use uuid::Uuid;
 use zerocopy::{
@@ -10,9 +11,8 @@ use crate::{
     error::Error,
     filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Magic, ProbeFlags},
+    probe::Magic,
     std::{fmt, mem::offset_of, str::Utf8Error},
-    util::{decode_utf8_from, decode_utf8_lossy_from},
 };
 
 /*
@@ -384,11 +384,10 @@ fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
 
 #[allow(clippy::type_complexity)]
 fn ext_get_info(
-    flags: ProbeFlags,
     es: &Ext2SuperBlock,
 ) -> Result<
     (
-        Option<String>,
+        Option<BString>,
         Uuid,
         Option<Uuid>,
         String,
@@ -401,12 +400,8 @@ fn ext_get_info(
 > {
     let fc = es.feature_compat();
 
-    let label: Option<String> = if es.s_volume_name[0] != 0 {
-        if flags.contains(ProbeFlags::FailOnInvalidUTF) {
-            Some(decode_utf8_from(&es.s_volume_name).map_err(ExtError::Utf8Error)?)
-        } else {
-            Some(decode_utf8_lossy_from(&es.s_volume_name))
-        }
+    let label: Option<BString> = if es.s_volume_name[0] != 0 {
+        Some(BString::from(es.s_volume_name))
     } else {
         None
     };
@@ -455,7 +450,6 @@ fn ext_get_info(
 
 pub fn probe_jbd<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -471,13 +465,13 @@ pub fn probe_jbd<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(flags, es)?;
+        ext_get_info(es)?;
 
     let mut info = FsInfo::empty();
 
     info.set_fs_type(FsType::Jbd);
     if let Some(l) = label {
-        info.set_label(l);
+        info.set_label(l.into());
     }
     info.set_fs_id(uuid.into());
     if let Some(id) = journal_uuid {
@@ -496,7 +490,6 @@ pub fn probe_jbd<IO: BlockIo>(
 
 pub fn probe_ext2<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -522,13 +515,13 @@ pub fn probe_ext2<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(flags, es)?;
+        ext_get_info(es)?;
 
     let mut info = FsInfo::empty();
 
     info.set_fs_type(FsType::Ext2);
     if let Some(l) = label {
-        info.set_label(l);
+        info.set_label(l.into());
     }
     info.set_fs_id(uuid.into());
     if let Some(id) = journal_uuid {
@@ -547,7 +540,6 @@ pub fn probe_ext2<IO: BlockIo>(
 
 pub fn probe_ext3<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -573,13 +565,13 @@ pub fn probe_ext3<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(flags, es)?;
+        ext_get_info(es)?;
 
     let mut info = FsInfo::empty();
 
     info.set_fs_type(FsType::Ext3);
     if let Some(l) = label {
-        info.set_label(l);
+        info.set_label(l.into());
     }
     info.set_fs_id(uuid.into());
     if let Some(id) = journal_uuid {
@@ -598,7 +590,6 @@ pub fn probe_ext3<IO: BlockIo>(
 
 pub fn probe_ext4<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -628,13 +619,13 @@ pub fn probe_ext4<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(flags, es)?;
+        ext_get_info(es)?;
 
     let mut info = FsInfo::empty();
 
     info.set_fs_type(FsType::Ext4);
     if let Some(l) = label {
-        info.set_label(l);
+        info.set_label(l.into());
     }
     info.set_fs_id(uuid.into());
     if let Some(id) = journal_uuid {

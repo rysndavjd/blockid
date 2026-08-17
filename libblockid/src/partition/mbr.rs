@@ -12,7 +12,7 @@ use crate::{
     partition::{
         Partition, PartitionAttributes, PartitionId, PartitionType, PtInfo, PtType, aix::AIX_MAGIC,
     },
-    probe::{Magic, ProbeFlags},
+    probe::Magic,
     std::fmt,
 };
 
@@ -87,8 +87,8 @@ pub struct MbrTable {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct MbrPartitionEntry {
-    pub boot_ind: MbrAttributes,   /* 0x80 - active */
-    pub begin_head: u8,            /* begin CHS */
+    pub boot_ind: MbrAttributes, /* 0x80 - active */
+    pub begin_head: u8,          /* begin CHS */
     pub begin_sector: u8,
     pub begin_cylinder: u8,
     pub sys_ind: MbrPartitionType, /* https://en.wikipedia.org/wiki/Partition_type */
@@ -100,8 +100,9 @@ pub struct MbrPartitionEntry {
 }
 
 impl MbrPartitionEntry {
+    #![allow(dead_code)]
     fn is_empty(&self) -> bool {
-        Self::as_bytes(self) == [0u8; 16]
+        self.as_bytes() == [0u8; 16]
     }
 
     fn is_extended(&self) -> bool {
@@ -306,7 +307,6 @@ fn is_valid_mbr<IO: BlockIo>(
 /// for calculations.
 pub fn probe_mbr<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    _: ProbeFlags,
     offset: u64,
     _: Magic,
 ) -> Result<PtInfo, Error<IO::Error>> {
@@ -326,12 +326,10 @@ pub fn probe_mbr<IO: BlockIo>(
     const ssz: u64 = 512;
 
     let mut partitions: Vec<Partition> = Vec::new();
-
-    let primary = mbr_pt.partition_entries;
     let mut part_no: u8 = 1;
     let mut extended: Option<MbrPartitionEntry> = None;
 
-    for part in primary {
+    for part in mbr_pt.partition_entries {
         let start = u64::from(part.start_sect)
             .checked_mul(ssz)
             .ok_or(MbrError::Overflow)?;

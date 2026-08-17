@@ -1,10 +1,12 @@
-use bitflags::bitflags;
+use bstr::{BString, ByteSlice};
+use widestring::U16String;
 
 use crate::{
     error::Error,
     filesystem::{FS_DETECT_ORDER, FsFilter, FsInfo, FsType},
     io::{BlockIo, Reader},
     partition::{PT_DETECT_ORDER, PtFilter, PtInfo, PtType},
+    std::fmt,
 };
 
 /// The byte order used to represent multi-byte values.
@@ -19,6 +21,48 @@ pub enum Endianness {
     Little,
     /// Most significant byte stored first.
     Big,
+}
+
+#[derive(Debug, Clone)]
+pub enum Label {
+    Utf8(BString),
+    Utf16(U16String),
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Label {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Label::Utf8(bs) => serializer.serialize_str(bs.to_str_lossy().trim_end_matches('\0')),
+            Label::Utf16(utf16) => {
+                serializer.serialize_str(utf16.to_string_lossy().trim_end_matches('\0'))
+            }
+        }
+    }
+}
+
+impl From<BString> for Label {
+    fn from(v: BString) -> Self {
+        Label::Utf8(v)
+    }
+}
+
+impl From<U16String> for Label {
+    fn from(v: U16String) -> Self {
+        Label::Utf16(v)
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Label::Utf8(utf8) => write!(f, "{}", utf8),
+            Label::Utf16(utf16) => write!(f, "{}", utf16.to_string_lossy()),
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -37,20 +81,8 @@ impl Magic {
     };
 }
 
-bitflags! {
-    // Might remove in future as I dont see a real use for runtime flags.
-    /// Flags that control the behaviour of the probing process.
-    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    pub struct ProbeFlags: u64 {
-        /// Return an error if a UTF string encountered during probing is Invalid.
-        const FailOnInvalidUTF = 1 << 0;
-    }
-}
-
 pub fn probe_filesystem<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     filter: FsFilter,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -87,7 +119,7 @@ pub fn probe_filesystem<IO: BlockIo>(
             None => Magic::EMPTY_MAGIC,
         };
 
-        match (handle.probe)(reader, flags, offset, magic) {
+        match (handle.probe)(reader, offset, magic) {
             Ok(t) => return Ok(t),
             Err(e) => {
                 if let Error::Io(_) = e {
@@ -101,7 +133,6 @@ pub fn probe_filesystem<IO: BlockIo>(
 
 pub fn search_for_filesystem<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     filesystem: FsType,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -133,12 +164,11 @@ pub fn search_for_filesystem<IO: BlockIo>(
         None => Magic::EMPTY_MAGIC,
     };
 
-    (handle.probe)(reader, flags, offset, magic)
+    (handle.probe)(reader, offset, magic)
 }
 
 pub fn probe_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     filter: PtFilter,
 ) -> Result<PtInfo, Error<IO::Error>> {
@@ -175,7 +205,7 @@ pub fn probe_part_table<IO: BlockIo>(
             None => Magic::EMPTY_MAGIC,
         };
 
-        match (handle.probe)(reader, flags, offset, magic) {
+        match (handle.probe)(reader, offset, magic) {
             Ok(t) => return Ok(t),
             Err(e) => {
                 if let Error::Io(_) = e {
@@ -189,7 +219,6 @@ pub fn probe_part_table<IO: BlockIo>(
 
 pub fn search_for_part_table<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     part_table: PtType,
 ) -> Result<PtInfo, Error<IO::Error>> {
@@ -221,14 +250,13 @@ pub fn search_for_part_table<IO: BlockIo>(
         None => Magic::EMPTY_MAGIC,
     };
 
-    (handle.probe)(reader, flags, offset, magic)
+    (handle.probe)(reader, offset, magic)
 }
 
 /// Probe for detecting filesystems and partition tables on a block device.
 #[derive(Debug)]
 pub struct Probe<IO: BlockIo> {
     reader: Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
 }
 
@@ -239,39 +267,34 @@ impl<IO: BlockIo> Probe<IO> {
     /// # Parameters
     ///
     /// - `reader`: The underlying `IO` source to probe.
-    /// - `flags`: Changes the behavior of the probe. See [`ProbeFlags`].
     /// - `offset`: Byte offset into the device at which probing begins.
     ///
-    pub fn new(reader: IO, flags: ProbeFlags, offset: u64) -> Result<Probe<IO>, Error<IO::Error>> {
+    pub fn new(reader: IO, offset: u64) -> Result<Probe<IO>, Error<IO::Error>> {
         let mut io = Reader::new(reader);
 
         if offset >= io.seek(crate::io::SeekFrom::End(0))? {
             return Err(Error::OffsetExceedsDeviceSize);
         }
 
-        Ok(Probe {
-            reader: io,
-            flags,
-            offset,
-        })
+        Ok(Probe { reader: io, offset })
     }
 
     #[inline]
-    pub fn probe_filesystem(&mut self, filter: BlockFilter) -> Result<BlockInfo, Error<IO::Error>> {
-        probe_filesystem(&mut self.reader, self.flags, self.offset, filter)
+    pub fn probe_filesystem(&mut self, filter: FsFilter) -> Result<FsInfo, Error<IO::Error>> {
+        probe_filesystem(&mut self.reader, self.offset, filter)
     }
 
     #[inline]
     pub fn search_for_filesystem(
         &mut self,
         filesystem: FsType,
-    ) -> Result<BlockInfo, Error<IO::Error>> {
-        search_for_filesystem(&mut self.reader, self.flags, self.offset, filesystem)
+    ) -> Result<FsInfo, Error<IO::Error>> {
+        search_for_filesystem(&mut self.reader, self.offset, filesystem)
     }
 
     #[inline]
     pub fn probe_part_table(&mut self, filter: PtFilter) -> Result<PtInfo, Error<IO::Error>> {
-        probe_part_table(&mut self.reader, self.flags, self.offset, filter)
+        probe_part_table(&mut self.reader, self.offset, filter)
     }
 
     #[inline]
@@ -279,7 +302,7 @@ impl<IO: BlockIo> Probe<IO> {
         &mut self,
         part_table: PtType,
     ) -> Result<PtInfo, Error<IO::Error>> {
-        search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
+        search_for_part_table(&mut self.reader, self.offset, part_table)
     }
 }
 
@@ -289,7 +312,6 @@ impl Probe<crate::io::File> {
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn from_file(
         file: crate::io::File,
-        flags: ProbeFlags,
         offset: u64,
     ) -> Result<Probe<crate::io::File>, Error<crate::io::IoError>> {
         let reader = Reader::new(file);
@@ -298,30 +320,24 @@ impl Probe<crate::io::File> {
             return Err(Error::OffsetExceedsDeviceSize);
         }
 
-        Ok(Self {
-            reader,
-            flags,
-            offset,
-        })
+        Ok(Self { reader, offset })
     }
 
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn open<P: AsRef<std::path::Path>>(
         path: P,
-        flags: ProbeFlags,
         offset: u64,
     ) -> Result<Probe<crate::io::File>, Error<crate::io::IoError>> {
         let file = std::fs::File::open(path)?;
 
-        Self::from_file(file, flags, offset)
+        Self::from_file(file, offset)
     }
 
     #[cfg(feature = "no_std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
     pub fn from_fd(
         fd: rustix::fd::OwnedFd,
-        flags: ProbeFlags,
         offset: u64,
     ) -> Result<Probe<crate::io::File>, Error<crate::io::IoError>> {
         let reader = Reader::new(fd.into());
@@ -330,23 +346,18 @@ impl Probe<crate::io::File> {
             return Err(Error::OffsetExceedsDeviceSize);
         }
 
-        Ok(Self {
-            reader,
-            flags,
-            offset,
-        })
+        Ok(Self { reader, offset })
     }
 
     #[cfg(feature = "no_std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "no_std")))]
     pub fn open<P: rustix::path::Arg>(
         path: P,
-        flags: ProbeFlags,
         offset: u64,
     ) -> Result<Probe<crate::io::File>, Error<crate::io::IoError>> {
         let fd = rustix::fs::open(path, rustix::fs::OFlags::RDONLY, rustix::fs::Mode::empty())?;
 
-        Self::from_fd(fd, flags, offset)
+        Self::from_fd(fd, offset)
     }
 
     #[inline]
@@ -354,7 +365,7 @@ impl Probe<crate::io::File> {
         &mut self,
         filter: FsFilter,
     ) -> Result<FsInfo, Error<crate::io::IoError>> {
-        probe_filesystem(&mut self.reader, self.flags, self.offset, filter)
+        probe_filesystem(&mut self.reader, self.offset, filter)
     }
 
     #[inline]
@@ -362,7 +373,7 @@ impl Probe<crate::io::File> {
         &mut self,
         filesystem: FsType,
     ) -> Result<FsInfo, Error<crate::io::IoError>> {
-        search_for_filesystem(&mut self.reader, self.flags, self.offset, filesystem)
+        search_for_filesystem(&mut self.reader, self.offset, filesystem)
     }
 
     #[inline]
@@ -370,7 +381,7 @@ impl Probe<crate::io::File> {
         &mut self,
         filter: PtFilter,
     ) -> Result<PtInfo, Error<crate::io::IoError>> {
-        probe_part_table(&mut self.reader, self.flags, self.offset, filter)
+        probe_part_table(&mut self.reader, self.offset, filter)
     }
 
     #[inline]
@@ -378,7 +389,7 @@ impl Probe<crate::io::File> {
         &mut self,
         part_table: PtType,
     ) -> Result<PtInfo, Error<crate::io::IoError>> {
-        search_for_part_table(&mut self.reader, self.flags, self.offset, part_table)
+        search_for_part_table(&mut self.reader, self.offset, part_table)
     }
 
     #[inline]

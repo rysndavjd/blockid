@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Magic, ProbeFlags},
+    probe::Magic,
     std::{
         fmt,
         str::{FromStr, Utf8Error},
@@ -144,7 +144,6 @@ impl Luks2Header {
 
 pub fn probe_luks1<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    _: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -171,7 +170,6 @@ pub fn probe_luks1<IO: BlockIo>(
 
 pub fn probe_luks2<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    _: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -198,7 +196,6 @@ pub fn probe_luks2<IO: BlockIo>(
 
 pub fn probe_luks_opal<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    _: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {

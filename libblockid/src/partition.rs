@@ -14,7 +14,7 @@ use crate::{
         gpt::{GPT_MAGICS, GPT_MINSZ, GptAttributes, probe_gpt},
         mbr::{MBR_MAGICS, MBR_MINSZ, MbrAttributes, MbrPartitionType, probe_mbr},
     },
-    probe::{Magic, ProbeFlags},
+    probe::{Label, Magic},
     std::fmt,
 };
 
@@ -34,8 +34,7 @@ pub(crate) struct PtHandler<IO: BlockIo> {
     pub magics: Option<&'static [Magic]>,
     /// Probes the partition table, returning its info on success.
     #[allow(clippy::type_complexity)]
-    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
-    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
+    pub probe: fn(&mut Reader<IO>, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
 }
 
 /// The type of partition tables supported.
@@ -178,8 +177,8 @@ pub enum PartitionAttributes {
 }
 
 /// Parsed partition infomation.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone)]
 pub struct Partition {
     /// Partition number, starting from 1
     pub part_no: u64,
@@ -192,14 +191,14 @@ pub struct Partition {
     /// The partition type of a specified partition table.
     pub partition_type: PartitionType,
     /// Partition label
-    pub partition_name: Option<String>,
+    pub partition_name: Option<Label>,
     /// The partition attributes of a specified partition table.
     pub attributes: PartitionAttributes,
 }
 
 #[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone)]
 pub enum PtTag {
     /// Partition table type.
     PtType(PtType),

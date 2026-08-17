@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use crc::{CRC_32_ISO_HDLC, Crc};
 use uuid::Uuid;
-use widestring::error::Utf16Error;
+use widestring::U16String;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, TryFromBytes, U16, U32, U64,
     Unaligned,
@@ -13,14 +13,12 @@ use crate::{
     partition::{
         BlockIo, Partition, PartitionAttributes, PartitionId, PartitionType, PtInfo, PtType,
     },
-    probe::{Endianness, Magic, ProbeFlags},
+    probe::Magic,
     std::mem::offset_of,
-    util::{decode_utf16_from, decode_utf16_lossy_from},
 };
 
 #[derive(Debug, Clone)]
 pub enum GptError {
-    Utf16Error { error: Utf16Error, part_no: u64 },
     UnableToMapHeaderStruct,
     UnableToMapPartitionStruct { part_no: u64 },
     UnableToGetSectorSize,
@@ -36,12 +34,6 @@ pub enum GptError {
 impl core::fmt::Display for GptError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            GptError::Utf16Error { error, part_no } => {
-                write!(
-                    f,
-                    "Partition {part_no} label contains invalid UTF-16: {error}"
-                )
-            }
             GptError::UnableToMapHeaderStruct => {
                 write!(f, "Unable to map bytes to `GptTable` struct")
             }
@@ -274,7 +266,6 @@ impl GptTable {
 /// disk.
 pub fn probe_gpt<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     _: Magic,
 ) -> Result<PtInfo, Error<IO::Error>> {
@@ -399,23 +390,15 @@ pub fn probe_gpt<IO: BlockIo>(
         }
 
         let name = if partition.partition_name != [0u8; 72] {
-            if flags.contains(ProbeFlags::FailOnInvalidUTF) {
-                match decode_utf16_from(&partition.partition_name, Endianness::Little) {
-                    Ok(t) => Some(t.to_string()),
-                    Err(e) => {
-                        return Err(GptError::Utf16Error {
-                            error: e,
-                            part_no: i + 1,
-                        }
-                        .into());
-                    }
-                }
-            } else {
-                Some(
-                    decode_utf16_lossy_from(&partition.partition_name, Endianness::Little)
-                        .to_string(),
-                )
-            }
+            let units: Vec<u16> = partition
+                .partition_name
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+
+            Some(U16String::from_vec(units).into())
         } else {
             None
         };

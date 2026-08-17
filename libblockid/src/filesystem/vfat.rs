@@ -1,4 +1,5 @@
 use bitflags::bitflags;
+use bstr::BString;
 use fat_volume_id::id32::VolumeId32;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, byteorder::LittleEndian,
@@ -9,14 +10,12 @@ use crate::{
     error::Error,
     filesystem::{FsInfo, FsType, SubType},
     io::{BlockIo, Reader},
-    probe::{ Magic, ProbeFlags},
-    std::{fmt, str::Utf8Error},
-    util::{decode_utf8_from, decode_utf8_lossy_from},
+    probe::{ Magic},
+    std::{fmt},
 };
 
 #[derive(Debug, Clone)]
 pub enum VFatError {
-    Utf8Error(Utf8Error),
     InvalidVFat,
     InvalidFatSignature,
     ProbablyDOS,
@@ -37,9 +36,6 @@ pub enum VFatError {
 impl fmt::Display for VFatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VFatError::Utf8Error(e) => {
-                write!(f, "Filesystem label contains invalid UTF-8: {e}")
-            }
             VFatError::InvalidVFat => write!(f, "Filesystem not FAT12/16 or FAT32"),
             VFatError::InvalidFatSignature => write!(f, "Invalid VFAT signature"),
             VFatError::ProbablyDOS => write!(f, "Filesystem looks like DOS/MBR"),
@@ -342,10 +338,9 @@ pub fn probe_is_vfat<IO: BlockIo>(
 
 pub fn search_fat_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     root_start: u64,
     root_dir_entries: u64,
-) -> Result<Option<String>, Error<IO::Error>> {
+) -> Result<Option<BString>, Error<IO::Error>> {
     let mut buf = [0u8; size_of::<VfatDirEntry>()];
 
     for i in 0..root_dir_entries {
@@ -373,13 +368,7 @@ pub fn search_fat_label<IO: BlockIo>(
                 label_bytes[0] = 0xE5;
             }
 
-            let label = if flags.contains(ProbeFlags::FailOnInvalidUTF) {
-                decode_utf8_from(&label_bytes).map_err(VFatError::Utf8Error)?
-            } else {
-                decode_utf8_lossy_from(&label_bytes)
-            };
-
-            return Ok(Some(label));
+            return Ok(Some(BString::from(label_bytes)));
         }
     }
 
@@ -389,16 +378,15 @@ pub fn search_fat_label<IO: BlockIo>(
 // This fn works for both fat12 and fat16
 fn probe_fat16<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
-) -> Result<(Option<String>, VolumeId32), Error<IO::Error>> {
+) -> Result<(Option<BString>, VolumeId32), Error<IO::Error>> {
     let reserved: u32 = ms.ms_reserved.into();
 
     let root_start: u32 = (reserved + fat_size) * u32::from(ms.ms_sector_size);
 
-    let vol_label = search_fat_label(reader, flags, root_start.into(), vs.vs_dir_entries.into())?;
+    let vol_label = search_fat_label(reader, root_start.into(), vs.vs_dir_entries.into())?;
 
     let vol_serno = if ms.ms_ext_boot_sign == 0x28 || ms.ms_ext_boot_sign == 0x29 {
         VolumeId32::from_bytes(ms.ms_serno)
@@ -411,11 +399,10 @@ fn probe_fat16<IO: BlockIo>(
 
 fn probe_fat32<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     ms: &MsDosSuperBlock,
     vs: &VFatSuperBlock,
     fat_size: u32,
-) -> Result<(Option<String>, VolumeId32), Error<IO::Error>> {
+) -> Result<(Option<BString>, VolumeId32), Error<IO::Error>> {
     let reserved: u32 = ms.ms_reserved.into();
 
     let buf_size: u64 = vs.vs_cluster_size as u64 * u64::from(ms.ms_sector_size);
@@ -425,7 +412,7 @@ fn probe_fat32<IO: BlockIo>(
     let mut next: u32 = u32::from(vs.vs_root_cluster);
     let mut maxloop = 100;
 
-    let vol_label: Option<String> = loop {
+    let vol_label: Option<BString> = loop {
         if next == 0 || next >= entries || maxloop == 0 {
             break None;
         }
@@ -436,7 +423,7 @@ fn probe_fat32<IO: BlockIo>(
         let next_off: u64 = (start_data_sect as u64 + next_sect_off) * u64::from(ms.ms_sector_size);
         let count: u64 = buf_size / 32;
 
-        match search_fat_label(reader, flags, next_off, count)? {
+        match search_fat_label(reader, next_off, count)? {
             Some(label) => {
                 break Some(label);
             }
@@ -480,7 +467,6 @@ fn probe_fat32<IO: BlockIo>(
 
 pub fn probe_vfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -494,9 +480,9 @@ pub fn probe_vfat<IO: BlockIo>(
     let fat_size = get_fat_size(ms, vs).ok_or(VFatError::Overflow)?;
 
     let (label, serno) = if ms.ms_fat_length != 0 {
-        probe_fat16(reader, flags, ms, vs, fat_size)?
+        probe_fat16(reader, ms, vs, fat_size)?
     } else if vs.vs_fat32_length != 0 {
-        probe_fat32(reader, flags, ms, vs, fat_size)?
+        probe_fat32(reader, ms, vs, fat_size)?
     } else {
         return Err(VFatError::InvalidVFat.into());
     };
@@ -507,7 +493,7 @@ pub fn probe_vfat<IO: BlockIo>(
     info.set_sub_type(sub_type);
     info.set_fs_id(serno.into());
     if let Some(l) = label {
-        info.set_label(l);
+        info.set_label(l.into());
     }
     info.set_magic(
         magic.bytes.to_vec(),

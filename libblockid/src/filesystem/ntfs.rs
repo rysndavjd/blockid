@@ -1,5 +1,5 @@
 use fat_volume_id::id64::VolumeId64;
-use widestring::error::Utf16Error;
+use widestring::{U16String, error::Utf16Error};
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
     byteorder::{LittleEndian, U16, U32, U64},
@@ -10,9 +10,8 @@ use crate::{
     error::Error,
     filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Endianness, Magic, ProbeFlags},
+    probe::Magic,
     std::fmt,
-    util::{decode_utf16_from, decode_utf16_lossy_from},
 };
 
 #[derive(Debug, Clone)]
@@ -178,10 +177,9 @@ impl NtfsSuperBlock {
     fn find_label<IO: BlockIo>(
         &self,
         reader: &mut Reader<IO>,
-        flags: ProbeFlags,
         sector_size: u64,
         sectors_per_cluster: u64,
-    ) -> Result<Option<String>, Error<IO::Error>> {
+    ) -> Result<Option<U16String>, Error<IO::Error>> {
         let mft_record_size = if self.clusters_per_mft_record > 0 {
             self.clusters_per_mft_record as u64 * sectors_per_cluster * sector_size
         } else {
@@ -257,15 +255,14 @@ impl NtfsSuperBlock {
                         return Ok(None);
                     }
 
-                    let label = if flags.contains(ProbeFlags::FailOnInvalidUTF) {
-                        decode_utf16_from(val, Endianness::Little)
-                            .map_err(NtfsError::Utf16Error)?
-                            .to_string()
-                    } else {
-                        decode_utf16_lossy_from(val, Endianness::Little).to_string()
-                    };
+                    let units: Vec<u16> = val
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                        .collect();
 
-                    return Ok(Some(label));
+                    return Ok(Some(U16String::from_vec(units)));
                 }
             }
             attr_off += attr_len;
@@ -297,7 +294,6 @@ pub fn probe_is_ntfs<IO: BlockIo>(
 
 pub fn probe_ntfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -306,13 +302,13 @@ pub fn probe_ntfs<IO: BlockIo>(
 
     let (sector_size, sectors_per_cluster) = sb.check_ntfs()?;
 
-    let label = sb.find_label(reader, flags, sector_size, sectors_per_cluster)?;
+    let label = sb.find_label(reader, sector_size, sectors_per_cluster)?;
 
     let mut info = FsInfo::empty();
 
     info.set_fs_type(FsType::Ntfs);
     if let Some(label) = label {
-        info.set_label(label);
+        info.set_label(label.into());
     }
     info.set_fs_id(VolumeId64::from_bytes(sb.volume_serial).into());
     info.set_magic(magic.bytes.to_vec(), magic.offset);

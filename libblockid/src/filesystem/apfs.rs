@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     filesystem::{FsId, FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Magic, ProbeFlags},
+    probe::Magic,
     std::{fmt, mem::offset_of},
 };
 
@@ -104,7 +104,6 @@ fn fletcher64(buf: &[u8]) -> u64 {
 
 pub fn probe_apfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    _: ProbeFlags,
     offset: u64,
     _: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {

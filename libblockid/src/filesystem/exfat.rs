@@ -1,3 +1,4 @@
+use bstr::BString;
 use fat_volume_id::id32::VolumeId32;
 use widestring::error::Utf16Error;
 use zerocopy::{
@@ -9,9 +10,8 @@ use crate::{
     error::Error,
     filesystem::{FsId, FsInfo, FsType},
     io::{BlockIo, Reader},
-    probe::{Endianness, Magic, ProbeFlags},
+    probe::Magic,
     std::fmt,
-    util::{decode_utf16_from, decode_utf16_lossy_from},
 };
 
 #[derive(Debug, Clone)]
@@ -306,9 +306,8 @@ pub fn probe_is_exfat<IO: BlockIo>(
 
 fn find_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     sb: &ExFatSuperBlock,
-) -> Result<Option<String>, Error<IO::Error>> {
+) -> Result<Option<BString>, Error<IO::Error>> {
     let mut cluster = u32::from(sb.first_clustor_of_root);
     let mut offset = sb.cluster_to_offset(cluster);
 
@@ -329,15 +328,7 @@ fn find_label<IO: BlockIo>(
                 return Ok(None);
             }
 
-            let label = if flags.contains(ProbeFlags::FailOnInvalidUTF) {
-                decode_utf16_from(&entry.name, Endianness::Little)
-                    .map_err(ExFatError::Utf16Error)?
-                    .to_string()
-            } else {
-                decode_utf16_lossy_from(&entry.name, Endianness::Little).to_string()
-            };
-
-            return Ok(Some(label));
+            return Ok(Some(BString::from(entry.name)));
         }
 
         offset += EXFAT_ENTRY_SIZE as u64;
@@ -360,7 +351,6 @@ fn find_label<IO: BlockIo>(
 
 pub fn probe_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
-    flags: ProbeFlags,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
@@ -374,8 +364,8 @@ pub fn probe_exfat<IO: BlockIo>(
 
     info.set_fs_type(FsType::Exfat);
     info.set_fs_id(FsId::VolumeId32(VolumeId32::from_bytes(sb.volume_serial)));
-    if let Some(l) = find_label(reader, flags, sb)? {
-        info.set_label(l);
+    if let Some(l) = find_label(reader, sb)? {
+        info.set_label(l.into());
     }
     info.set_fs_size(sb.block_size() as u64 * u64::from(sb.volume_length));
     info.set_fs_block_size(sb.block_size() as u64);
