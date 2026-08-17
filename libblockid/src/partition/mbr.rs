@@ -87,8 +87,8 @@ pub struct MbrTable {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct MbrPartitionEntry {
-    pub boot_ind: u8,   /* 0x80 - active */
-    pub begin_head: u8, /* begin CHS */
+    pub boot_ind: MbrAttributes,   /* 0x80 - active */
+    pub begin_head: u8,            /* begin CHS */
     pub begin_sector: u8,
     pub begin_cylinder: u8,
     pub sys_ind: MbrPartitionType, /* https://en.wikipedia.org/wiki/Partition_type */
@@ -108,10 +108,6 @@ impl MbrPartitionEntry {
         self.sys_ind == MbrPartitionType::DOS_EXTENDED
             || self.sys_ind == MbrPartitionType::W95_EXTENDED
             || self.sys_ind == MbrPartitionType::LINUX_EXTENDED
-    }
-
-    fn flags(&self) -> MbrAttributes {
-        MbrAttributes::from_bits_truncate(self.boot_ind)
     }
 }
 
@@ -133,125 +129,135 @@ impl MbrPartitionEntry {
 )]
 pub struct MbrPartitionType(u8);
 
-#[allow(dead_code)]
-impl MbrPartitionType {
-    pub const EMPTY: Self = Self(0x00);
-    pub const FAT12: Self = Self(0x01);
-    pub const XENIX_ROOT: Self = Self(0x02);
-    pub const XENIX_USR: Self = Self(0x03);
-    pub const FAT16_LESS32M: Self = Self(0x04);
-    pub const DOS_EXTENDED: Self = Self(0x05);
-    pub const FAT16: Self = Self(0x06);
-    pub const HPFS_NTFS: Self = Self(0x07);
-    pub const AIX: Self = Self(0x08);
-    pub const AIX_BOOTABLE: Self = Self(0x09);
-    pub const OS2_BOOTMNGR: Self = Self(0x0a);
-    pub const W95_FAT32: Self = Self(0x0b);
-    pub const W95_FAT32_LBA: Self = Self(0x0c);
-    pub const W95_FAT16_LBA: Self = Self(0x0e);
-    pub const W95_EXTENDED: Self = Self(0x0f);
-    pub const OPUS: Self = Self(0x10);
-    pub const HIDDEN_FAT12: Self = Self(0x11);
-    pub const COMPAQ_DIAGNOSTICS: Self = Self(0x12);
-    pub const HIDDEN_FAT16_L32M: Self = Self(0x14);
-    pub const HIDDEN_FAT16: Self = Self(0x16);
-    pub const HIDDEN_HPFS_NTFS: Self = Self(0x17);
-    pub const AST_SMARTSLEEP: Self = Self(0x18);
-    pub const HIDDEN_W95_FAT32: Self = Self(0x1b);
-    pub const HIDDEN_W95_FAT32LBA: Self = Self(0x1c);
-    pub const HIDDEN_W95_FAT16LBA: Self = Self(0x1e);
-    pub const NEC_DOS: Self = Self(0x24);
-    pub const PLAN9: Self = Self(0x39);
-    pub const PARTITIONMAGIC: Self = Self(0x3c);
-    pub const VENIX80286: Self = Self(0x40);
-    pub const PPC_PREP_BOOT: Self = Self(0x41);
-    pub const SFS: Self = Self(0x42);
-    pub const QNX_4X: Self = Self(0x4d);
-    pub const QNX_4X_2ND: Self = Self(0x4e);
-    pub const QNX_4X_3RD: Self = Self(0x4f);
-    pub const DM: Self = Self(0x50);
-    pub const DM6_AUX1: Self = Self(0x51);
-    pub const CPM: Self = Self(0x52);
-    pub const DM6_AUX3: Self = Self(0x53);
-    pub const DM6: Self = Self(0x54);
-    pub const EZ_DRIVE: Self = Self(0x55);
-    pub const GOLDEN_BOW: Self = Self(0x56);
-    pub const PRIAM_EDISK: Self = Self(0x5c);
-    pub const SPEEDSTOR: Self = Self(0x61);
-    pub const GNU_HURD: Self = Self(0x63);
-    pub const UNIXWARE: Self = Self(0x63);
-    pub const NETWARE_286: Self = Self(0x64);
-    pub const NETWARE_386: Self = Self(0x65);
-    pub const DISKSECURE_MULTIBOOT: Self = Self(0x70);
-    pub const PC_IX: Self = Self(0x75);
-    pub const OLD_MINIX: Self = Self(0x80);
-    pub const MINIX: Self = Self(0x81);
-    pub const LINUX_SWAP: Self = Self(0x82);
-    pub const SOLARIS_X86: Self = Self(0x82);
-    pub const LINUX_DATA: Self = Self(0x83);
-    pub const OS2_HIDDEN_DRIVE: Self = Self(0x84);
-    pub const INTEL_HIBERNATION: Self = Self(0x84);
-    pub const LINUX_EXTENDED: Self = Self(0x85);
-    pub const NTFS_VOL_SET1: Self = Self(0x86);
-    pub const NTFS_VOL_SET2: Self = Self(0x87);
-    pub const LINUX_PLAINTEXT: Self = Self(0x88);
-    pub const LINUX_LVM: Self = Self(0x8e);
-    pub const AMOEBA: Self = Self(0x93);
-    pub const AMOEBA_BBT: Self = Self(0x94);
-    pub const BSD_OS: Self = Self(0x9f);
-    pub const THINKPAD_HIBERNATION: Self = Self(0xa0);
-    pub const FREEBSD: Self = Self(0xa5);
-    pub const OPENBSD: Self = Self(0xa6);
-    pub const NEXTSTEP: Self = Self(0xa7);
-    pub const DARWIN_UFS: Self = Self(0xa8);
-    pub const NETBSD: Self = Self(0xa9);
-    pub const DARWIN_BOOT: Self = Self(0xab);
-    pub const HFS_HFS: Self = Self(0xaf);
-    pub const BSDI_FS: Self = Self(0xb7);
-    pub const BSDI_SWAP: Self = Self(0xb8);
-    pub const BOOTWIZARD_HIDDEN: Self = Self(0xbb);
-    pub const ACRONIS_FAT32LBA: Self = Self(0xbc);
-    pub const SOLARIS_BOOT: Self = Self(0xbe);
-    pub const SOLARIS: Self = Self(0xbf);
-    pub const DRDOS_FAT12: Self = Self(0xc1);
-    pub const DRDOS_FAT16_L32M: Self = Self(0xc4);
-    pub const DRDOS_FAT16: Self = Self(0xc6);
-    pub const SYRINX: Self = Self(0xc7);
-    pub const NONFS_DATA: Self = Self(0xda);
-    pub const CPM_CTOS: Self = Self(0xdb);
-    pub const DELL_UTILITY: Self = Self(0xde);
-    pub const BOOTIT: Self = Self(0xdf);
-    pub const DOS_ACCESS: Self = Self(0xe1);
-    pub const DOS_RO: Self = Self(0xe3);
-    pub const SPEEDSTOR_EXTENDED: Self = Self(0xe4);
-    pub const RUFUS_EXTRA: Self = Self(0xea);
-    pub const BEOS_FS: Self = Self(0xeb);
-    pub const GPT: Self = Self(0xee);
-    pub const EFI_SYSTEM: Self = Self(0xef);
-    pub const LINUX_PARISC_BOOT: Self = Self(0xf0);
-    pub const SPEEDSTOR1: Self = Self(0xf1);
-    pub const SPEEDSTOR2: Self = Self(0xf4);
-    pub const DOS_SECONDARY: Self = Self(0xf2);
-    pub const EBBR_PROTECTIVE: Self = Self(0xf8);
-    pub const VMWARE_VMFS: Self = Self(0xfb);
-    pub const VMWARE_VMKCORE: Self = Self(0xfc);
-    pub const LINUX_RAID: Self = Self(0xfd);
-    pub const LANSTEP: Self = Self(0xfe);
-    pub const XENIX_BBT: Self = Self(0xff);
-
-    pub fn from_byte(byte: u8) -> Self {
-        Self(byte)
-    }
-
-    pub fn as_byte(&self) -> u8 {
-        self.0
+bitflags! {
+    impl MbrPartitionType: u8 {
+    const EMPTY = 0x00;
+    const FAT12 = 0x01;
+    const XENIX_ROOT = 0x02;
+    const XENIX_USR = 0x03;
+    const FAT16_LESS32M = 0x04;
+    const DOS_EXTENDED = 0x05;
+    const FAT16 = 0x06;
+    const HPFS_NTFS = 0x07;
+    const AIX = 0x08;
+    const AIX_BOOTABLE = 0x09;
+    const OS2_BOOTMNGR = 0x0a;
+    const W95_FAT32 = 0x0b;
+    const W95_FAT32_LBA = 0x0c;
+    const W95_FAT16_LBA = 0x0e;
+    const W95_EXTENDED = 0x0f;
+    const OPUS = 0x10;
+    const HIDDEN_FAT12 = 0x11;
+    const COMPAQ_DIAGNOSTICS = 0x12;
+    const HIDDEN_FAT16_L32M = 0x14;
+    const HIDDEN_FAT16 = 0x16;
+    const HIDDEN_HPFS_NTFS = 0x17;
+    const AST_SMARTSLEEP = 0x18;
+    const HIDDEN_W95_FAT32 = 0x1b;
+    const HIDDEN_W95_FAT32LBA = 0x1c;
+    const HIDDEN_W95_FAT16LBA = 0x1e;
+    const NEC_DOS = 0x24;
+    const PLAN9 = 0x39;
+    const PARTITIONMAGIC = 0x3c;
+    const VENIX80286 = 0x40;
+    const PPC_PREP_BOOT = 0x41;
+    const SFS = 0x42;
+    const QNX_4X = 0x4d;
+    const QNX_4X_2ND = 0x4e;
+    const QNX_4X_3RD = 0x4f;
+    const DM = 0x50;
+    const DM6_AUX1 = 0x51;
+    const CPM = 0x52;
+    const DM6_AUX3 = 0x53;
+    const DM6 = 0x54;
+    const EZ_DRIVE = 0x55;
+    const GOLDEN_BOW = 0x56;
+    const PRIAM_EDISK = 0x5c;
+    const SPEEDSTOR = 0x61;
+    const GNU_HURD = 0x63;
+    const UNIXWARE = 0x63;
+    const NETWARE_286 = 0x64;
+    const NETWARE_386 = 0x65;
+    const DISKSECURE_MULTIBOOT = 0x70;
+    const PC_IX = 0x75;
+    const OLD_MINIX = 0x80;
+    const MINIX = 0x81;
+    const LINUX_SWAP = 0x82;
+    const SOLARIS_X86 = 0x82;
+    const LINUX_DATA = 0x83;
+    const OS2_HIDDEN_DRIVE = 0x84;
+    const INTEL_HIBERNATION = 0x84;
+    const LINUX_EXTENDED = 0x85;
+    const NTFS_VOL_SET1 = 0x86;
+    const NTFS_VOL_SET2 = 0x87;
+    const LINUX_PLAINTEXT = 0x88;
+    const LINUX_LVM = 0x8e;
+    const AMOEBA = 0x93;
+    const AMOEBA_BBT = 0x94;
+    const BSD_OS = 0x9f;
+    const THINKPAD_HIBERNATION = 0xa0;
+    const FREEBSD = 0xa5;
+    const OPENBSD = 0xa6;
+    const NEXTSTEP = 0xa7;
+    const DARWIN_UFS = 0xa8;
+    const NETBSD = 0xa9;
+    const DARWIN_BOOT = 0xab;
+    const HFS_HFS = 0xaf;
+    const BSDI_FS = 0xb7;
+    const BSDI_SWAP = 0xb8;
+    const BOOTWIZARD_HIDDEN = 0xbb;
+    const ACRONIS_FAT32LBA = 0xbc;
+    const SOLARIS_BOOT = 0xbe;
+    const SOLARIS = 0xbf;
+    const DRDOS_FAT12 = 0xc1;
+    const DRDOS_FAT16_L32M = 0xc4;
+    const DRDOS_FAT16 = 0xc6;
+    const SYRINX = 0xc7;
+    const NONFS_DATA = 0xda;
+    const CPM_CTOS = 0xdb;
+    const DELL_UTILITY = 0xde;
+    const BOOTIT = 0xdf;
+    const DOS_ACCESS = 0xe1;
+    const DOS_RO = 0xe3;
+    const SPEEDSTOR_EXTENDED = 0xe4;
+    const RUFUS_EXTRA = 0xea;
+    const BEOS_FS = 0xeb;
+    const GPT = 0xee;
+    const EFI_SYSTEM = 0xef;
+    const LINUX_PARISC_BOOT = 0xf0;
+    const SPEEDSTOR1 = 0xf1;
+    const SPEEDSTOR2 = 0xf4;
+    const DOS_SECONDARY = 0xf2;
+    const EBBR_PROTECTIVE = 0xf8;
+    const VMWARE_VMFS = 0xfb;
+    const VMWARE_VMKCORE = 0xfc;
+    const LINUX_RAID = 0xfd;
+    const LANSTEP = 0xfe;
+    const XENIX_BBT = 0xff;
     }
 }
 
+#[repr(transparent)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    FromBytes,
+    IntoBytes,
+    Unaligned,
+    Immutable,
+    KnownLayout,
+)]
+pub struct MbrAttributes(u8);
+
 bitflags! {
-    #[repr(transparent)]
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    pub struct MbrAttributes: u8 {
+    impl MbrAttributes: u8 {
         const ACTIVE = 0x80;
         const INACTIVE = 0x00;
     }
@@ -263,8 +269,9 @@ fn is_valid_mbr<IO: BlockIo>(
     pt: &MbrTable,
 ) -> Result<(), Error<IO::Error>> {
     for entry in pt.partition_entries {
-        let boot_ind = entry.flags();
-        if !boot_ind.contains(MbrAttributes::INACTIVE) && !boot_ind.contains(MbrAttributes::ACTIVE)
+        if !entry
+            .boot_ind
+            .contains(MbrAttributes::INACTIVE | MbrAttributes::ACTIVE)
         {
             return Err(MbrError::MissingBootIndicator.into());
         }

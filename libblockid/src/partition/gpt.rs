@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use crc::{CRC_32_ISO_HDLC, Crc};
 use uuid::Uuid;
 use widestring::error::Utf16Error;
@@ -129,6 +130,25 @@ impl From<EfiGuid> for Uuid {
     }
 }
 
+#[repr(transparent)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, FromBytes, IntoBytes, Immutable,
+)]
+pub struct GptAttributes(u64);
+
+bitflags! {
+    impl GptAttributes: u64 {
+        const REQUIRED_PARTITION   = 1 << 0;
+        const NO_BLOCK_IO_PROTOCOL = 1 << 1;
+        const LEGACY_BIOS_BOOTABLE = 1 << 2;
+        const MS_READ_ONLY    = 1 << 60;
+        const MS_SHADOW_COPY  = 1 << 61;
+        const MS_HIDDEN       = 1 << 62;
+        const MS_NO_DRIVE_LETTER = 1 << 63;
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, TryFromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 pub struct GptTable {
@@ -153,14 +173,14 @@ pub struct GptTable {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout)]
 pub struct GptEntry {
     partition_type_guid: EfiGuid,
     unique_partition_guid: EfiGuid,
     starting_lba: U64<LittleEndian>,
     ending_lba: U64<LittleEndian>,
 
-    attributes: U64<LittleEndian>,
+    attributes: GptAttributes,
     partition_name: [u8; 72],
 }
 
@@ -407,7 +427,7 @@ pub fn probe_gpt<IO: BlockIo>(
             partition_type: PartitionType::Uuid(partition.partition_type_guid.into()),
             part_no: i + 1,
             partition_name: name,
-            attributes: PartitionAttributes::Gpt(u64::from(partition.attributes)),
+            attributes: PartitionAttributes::Gpt(partition.attributes),
         });
     }
 

@@ -11,8 +11,8 @@ use crate::{
     io::{BlockIo, Reader},
     partition::{
         aix::{AIX_MAGICS, AIX_MINSZ, probe_aix},
-        gpt::{GPT_MAGICS, GPT_MINSZ, probe_gpt},
-        mbr::{MBR_MAGICS, MBR_MINSZ, MbrPartitionType, probe_mbr},
+        gpt::{GPT_MAGICS, GPT_MINSZ, GptAttributes, probe_gpt},
+        mbr::{MBR_MAGICS, MBR_MINSZ, MbrAttributes, MbrPartitionType, probe_mbr},
     },
     probe::{Magic, ProbeFlags},
     std::fmt,
@@ -34,6 +34,7 @@ pub(crate) struct PtHandler<IO: BlockIo> {
     pub magics: Option<&'static [Magic]>,
     /// Probes the partition table, returning its info on success.
     #[allow(clippy::type_complexity)]
+    pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
     pub probe: fn(&mut Reader<IO>, ProbeFlags, u64, Magic) -> Result<PtInfo, Error<IO::Error>>,
 }
 
@@ -156,6 +157,7 @@ impl PartitionId {
     }
 
     /// Currently we return the disk ID and the partition number, eventully I
+    /// Currently we return the disk ID and the partition number, eventully I
     /// will probally make a custom mbr type or something like fat_volume_id
     pub fn as_mbr(&self) -> Option<(u32, u8)> {
         match self {
@@ -170,9 +172,9 @@ impl PartitionId {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartitionAttributes {
     /// Used in MBR partition tables for if partition is active or inactive.
-    Mbr(u8),
+    Mbr(MbrAttributes),
     /// Used in GPT partition tables.
-    Gpt(u64),
+    Gpt(GptAttributes),
 }
 
 /// Parsed partition infomation.

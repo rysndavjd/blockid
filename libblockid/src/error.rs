@@ -7,9 +7,6 @@ pub use crate::{
     partition::{aix::AixError, gpt::GptError, mbr::MbrError},
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BuilderError {}
-
 /// Main error type returned by probing operations.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
