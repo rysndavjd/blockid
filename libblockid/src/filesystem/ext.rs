@@ -32,6 +32,7 @@ pub enum ExtError {
     InvalidExt3Features,
     InvalidExt4Features,
     Ext4DetectedAsJbd,
+    InvalidBlockSize,
 }
 
 impl fmt::Display for ExtError {
@@ -50,6 +51,7 @@ impl fmt::Display for ExtError {
             ExtError::InvalidExt3Features => write!(f, "Invalid EXT3 features"),
             ExtError::InvalidExt4Features => write!(f, "Invalid EXT4 features"),
             ExtError::Ext4DetectedAsJbd => write!(f, "EXT4 detected as JBD"),
+            ExtError::InvalidBlockSize => write!(f, "Invalid `es.s_log_block_size`"),
         }
     }
 }
@@ -418,19 +420,16 @@ fn ext_get_info(
         None
     };
 
+    // todo: replace with lexical-core
     let version = format!(
         "{}.{}",
         u32::from(es.s_rev_level),
         u16::from(es.s_minor_rev_level)
     );
 
-    let log_block_size = u32::from(es.s_log_block_size);
-
-    let block_size: u64 = if log_block_size < 32 {
-        1024u64 << log_block_size
-    } else {
-        0
-    };
+    let block_size: u64 = 1024u64
+        .checked_shl(u32::from(es.s_log_block_size))
+        .ok_or(ExtError::InvalidBlockSize)?;
 
     let fs_size: u64 = block_size * es.get_block_count();
 

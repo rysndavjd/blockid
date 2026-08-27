@@ -48,6 +48,8 @@ pub enum Error<E: fmt::Debug> {
     OffsetExceedsDeviceSize,
     /// All available probes were attempted and none succeeded.
     ProbesExhausted,
+    /// Probed object is not a block device.
+    ProbeNotBlockDevice,
 }
 
 impl<E: fmt::Debug> fmt::Display for Error<E> {
@@ -79,6 +81,9 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
             }
             Self::ProbesExhausted => {
                 write!(f, "all available probes were attempted and none succeeded")
+            }
+            Self::ProbeNotBlockDevice => {
+                write!(f, "probed object is not a block device")
             }
         }
     }

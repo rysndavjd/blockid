@@ -1,13 +1,13 @@
 use bitflags::bitflags;
 use crc::{CRC_32_ISO_HDLC, Crc};
 use uuid::Uuid;
-use widestring::U16String;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, LittleEndian, TryFromBytes, U16, U32, U64,
     Unaligned,
 };
 
 use crate::{
+    Endianness,
     error::Error,
     io::Reader,
     partition::{
@@ -15,6 +15,7 @@ use crate::{
     },
     probe::Magic,
     std::mem::offset_of,
+    util::bytes_to_u16string,
 };
 
 #[derive(Debug, Clone)]
@@ -178,14 +179,38 @@ pub struct GptEntry {
 
 impl GptTable {
     #[allow(dead_code)]
-    /// The offset used that is read off the disk to find the GPT header and its block size.
-    const GPT_DETECT_OFFSET: usize = 16384;
+    /// The offset used that is read off the disk to find logical sector size
+    /// if `os_calls` is unavilable.
+    const GPT_LSSZ_OFFSET: usize = 16384;
     const SIGNATURE: u64 = 0x5452415020494645;
     const SIGNATURE_STR: &[u8] = b"EFI PART";
     const MIN_HEADER_SIZE: u64 = 92;
     const FIRST_LBA: u64 = 1;
 
-    #[cfg(feature = "os_calls")]
+    fn get_lssz_manual<IO: BlockIo>(
+        reader: &mut Reader<IO>,
+        offset: u64,
+    ) -> Result<u64, Error<IO::Error>> {
+        let buf: [u8; GptTable::GPT_LSSZ_OFFSET] = reader.read_exact_at(offset)?;
+
+        let lssz = buf
+            .as_chunks::<{ GptTable::SIGNATURE_STR.len() }>()
+            .0
+            .iter()
+            .enumerate()
+            .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GptTable::GPT_LSSZ_OFFSET)
+            .find_map(|(i, bytes)| {
+                if bytes == GptTable::SIGNATURE_STR {
+                    Some(i * GptTable::SIGNATURE_STR.len())
+                } else {
+                    None
+                }
+            })
+            .ok_or(GptError::UnableToGetSectorSize)?;
+
+        Ok(lssz as u64)
+    }
+
     fn get_header<IO: BlockIo>(
         reader: &mut Reader<IO>,
         offset: u64,
@@ -255,103 +280,33 @@ impl GptTable {
     }
 }
 
-/// When `os_calls` is unavailable only the primary header can detected and
-/// parsed for its infomation but in unlikely case that primary header is
-/// corrupted this implementation will not be able to detect the secondary
-/// headers locations and use its contents instead.
+/// When `os_calls` is unavailable the logical sector size of the disk is
+/// found manually by scanning for the GPT signature string which is located
+/// at offset of the devices logical sector size.
 ///
-/// When `os_calls` is available then secondary header will parsed if an error
-/// is detected with the primary header, as additional infomation can be used
-/// from `os_calls` of device size to get the secondary header location on
-/// disk.
+/// When `os_calls` is available logical sectors size of the disk is found
+/// via `os_calls`.
 pub fn probe_gpt<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     _: Magic,
 ) -> Result<PtInfo, Error<IO::Error>> {
-    #[cfg(not(feature = "os_calls"))]
     let (header, entries_buf, lssz) = {
-        let buf: [u8; GptTable::GPT_DETECT_OFFSET] = reader.read_exact_at(offset)?;
+        #[cfg(feature = "os_calls")]
+        let lssz = if reader.os_calls() {
+            reader.logical_sector_size()?
+        } else {
+            GptTable::get_lssz_manual(reader, offset)?
+        };
+        #[cfg(not(feature = "os_calls"))]
+        let lssz = GptTable::get_lssz_manual(reader, offset)?;
 
-        let lssz = buf
-            .chunks_exact(GptTable::SIGNATURE_STR.len())
-            .enumerate()
-            .take_while(|(i, _)| i * GptTable::SIGNATURE_STR.len() < GptTable::GPT_DETECT_OFFSET)
-            .find_map(|(i, raw)| {
-                if raw == GptTable::SIGNATURE_STR {
-                    Some(i * GptTable::SIGNATURE_STR.len())
-                } else {
-                    None
-                }
-            })
-            .ok_or(GptError::UnableToGetSectorSize)?;
+        #[cfg(feature = "os_calls")]
+        let device_size = reader.device_size()?;
+        #[cfg(not(feature = "os_calls"))]
+        let device_size = reader.seek(crate::io::SeekFrom::End(0))?;
 
-        let header: &GptTable =
-            GptTable::try_ref_from_bytes(&buf[lssz..(lssz + size_of::<GptTable>())])
-                .map_err(|_| GptError::UnableToMapHeaderStruct)?;
-
-        if u64::from(header.signature) != GptTable::SIGNATURE {
-            return Err(GptError::InvalidSignature.into());
-        }
-
-        let hsz = u64::from(header.header_size);
-
-        if hsz < GptTable::MIN_HEADER_SIZE || hsz > lssz as u64 {
-            return Err(GptError::InvalidHeaderSize.into());
-        }
-
-        let header_crc = u32::from(header.header_crc32);
-
-        let mut hdr = header.as_bytes().to_vec();
-        hdr[offset_of!(GptTable, header_crc32)..offset_of!(GptTable, header_crc32) + 4].fill(0);
-
-        let header_calc_crc = Crc::<u32>::new(&CRC_32_ISO_HDLC).checksum(&hdr);
-
-        if header_crc != header_calc_crc {
-            return Err(GptError::InvalidHeaderChecksum.into());
-        }
-
-        if u64::from(header.my_lba) != GptTable::FIRST_LBA {
-            return Err(GptError::MismatchMyLBA.into());
-        }
-
-        let last_lba = u64::from(header.alternate_lba);
-
-        let fu = u64::from(header.first_usable_lba);
-        let lu = u64::from(header.last_usable_lba);
-
-        if lu < fu || fu > last_lba || lu > last_lba {
-            return Err(GptError::InvalidLbaUsableRegions.into());
-        }
-
-        let entry_sz = u64::from(header.sizeof_partition_entry);
-        let entries_sz = u64::from(header.num_partition_entries) * entry_sz;
-
-        if entries_sz == 0
-            || entries_sz >= u32::MAX as u64
-            || entry_sz != size_of::<GptEntry>() as u64
-        {
-            return Err(GptError::GptEntriesUndefined.into());
-        }
-
-        let entries_buf = reader.read_vec_at(
-            offset + (u64::from(header.partition_entries_lba) * lssz as u64),
-            entries_sz as usize,
-        )?;
-
-        let entries_calc_crc = Crc::<u32>::new(&CRC_32_ISO_HDLC).checksum(&entries_buf);
-
-        if u32::from(header.partition_entry_array_crc32) != entries_calc_crc {
-            return Err(GptError::InvalidGptEntriesChecksum.into());
-        }
-
-        (*header, entries_buf, lssz as u64)
-    };
-
-    #[cfg(feature = "os_calls")]
-    let (header, entries_buf, lssz) = {
-        let lssz = reader.logical_sector_size()?;
-        let last_lba = (reader.device_size()? / lssz) - 1;
+        let last_lba = (device_size / lssz) - 1;
 
         let (header, entries_buf) =
             match GptTable::get_header(reader, offset, GptTable::FIRST_LBA, last_lba, lssz) {
@@ -390,15 +345,9 @@ pub fn probe_gpt<IO: BlockIo>(
         }
 
         let name = if partition.partition_name != [0u8; 72] {
-            let units: Vec<u16> = partition
-                .partition_name
-                .as_chunks::<2>()
-                .0
-                .iter()
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                .collect();
+            let label = bytes_to_u16string(&partition.partition_name, Endianness::Little);
 
-            Some(U16String::from_vec(units).into())
+            Some(label.into())
         } else {
             None
         };

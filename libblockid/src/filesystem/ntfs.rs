@@ -7,11 +7,13 @@ use zerocopy::{
 };
 
 use crate::{
+    Endianness,
     error::Error,
     filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
     probe::Magic,
     std::fmt,
+    util::bytes_to_u16string,
 };
 
 #[derive(Debug, Clone)]
@@ -255,14 +257,7 @@ impl NtfsSuperBlock {
                         return Ok(None);
                     }
 
-                    let units: Vec<u16> = val
-                        .as_chunks::<2>()
-                        .0
-                        .iter()
-                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                        .collect();
-
-                    return Ok(Some(U16String::from_vec(units)));
+                    return Ok(Some(bytes_to_u16string(val, Endianness::Little)));
                 }
             }
             attr_off += attr_len;

@@ -376,7 +376,10 @@ impl Probe<crate::io::File> {
         file: crate::io::File,
         offset: u64,
     ) -> Result<Probe<crate::io::File>, Error<crate::io::IoError>> {
-        let reader = Reader::new(file);
+        use rustix::fs::{FileType, fstat};
+
+        let os_calls = FileType::from_raw_mode(fstat(&file)?.st_mode).is_block_device();
+        let reader = Reader::new(file, os_calls);
 
         if offset >= reader.device_size()? {
             return Err(Error::OffsetExceedsDeviceSize);
@@ -404,7 +407,10 @@ impl Probe<crate::io::File> {
         fd: rustix::fd::OwnedFd,
         offset: u64,
     ) -> Result<Probe<crate::io::File>, Error<crate::io::IoError>> {
-        let reader = Reader::new(fd.into());
+        use rustix::fs::{FileType, fstat};
+
+        let os_calls = FileType::from_raw_mode(fstat(&fd)?.st_mode).is_block_device();
+        let reader = Reader::new(fd.into(), os_calls);
 
         if offset >= reader.device_size()? {
             return Err(Error::OffsetExceedsDeviceSize);
@@ -464,19 +470,31 @@ impl Probe<crate::io::File> {
     /// Returns the total size of the device, in bytes.
     #[inline]
     pub fn device_size(&self) -> Result<u64, Error<crate::io::IoError>> {
-        self.reader.device_size()
+        if self.reader.os_calls() {
+            self.reader.device_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     /// Returns the device's logical sector size, in bytes.
     #[inline]
     pub fn logical_sector_size(&self) -> Result<u64, Error<crate::io::IoError>> {
-        self.reader.logical_sector_size()
+        if self.reader.os_calls() {
+            self.reader.logical_sector_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     /// Returns the device's physical sector size, in bytes.
     #[inline]
     pub fn physical_sector_size(&self) -> Result<u64, Error<crate::io::IoError>> {
-        self.reader.physical_sector_size()
+        if self.reader.os_calls() {
+            self.reader.physical_sector_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     /// Returns the device's minimum I/O size, in bytes.
@@ -484,7 +502,11 @@ impl Probe<crate::io::File> {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     #[cfg_attr(docsrs, doc(cfg(any(target_os = "linux", target_os = "freebsd"))))]
     pub fn minimum_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
-        self.reader.minimum_io_size()
+        if self.reader.os_calls() {
+            self.reader.minimum_io_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     /// Returns the device's optimal I/O size, in bytes.
@@ -492,7 +514,11 @@ impl Probe<crate::io::File> {
     #[cfg(target_os = "linux")]
     #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
     pub fn optimal_io_size(&self) -> Result<u64, Error<crate::io::IoError>> {
-        self.reader.optimal_io_size()
+        if self.reader.os_calls() {
+            self.reader.optimal_io_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     /// Returns the device's alignment offset.
@@ -502,6 +528,10 @@ impl Probe<crate::io::File> {
     pub fn alignment_offset(
         &self,
     ) -> Result<crate::io::ioctl::AlignmentOffset, Error<crate::io::IoError>> {
-        self.reader.alignment_offset()
+        if self.reader.os_calls() {
+            self.reader.alignment_offset()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 }

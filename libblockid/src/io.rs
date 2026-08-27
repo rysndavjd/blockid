@@ -27,33 +27,44 @@ pub trait BlockIo: crate::io::ioctl::Ioctl {}
 
 /// Reader type used to expose functions provided by [`BlockIo`]
 #[derive(Debug)]
-pub struct Reader<IO: BlockIo>(IO);
+pub struct Reader<IO: BlockIo> {
+    /// Underlying IO inteface.
+    io: IO,
+    #[cfg(feature = "os_calls")]
+    os_calls: bool,
+}
 
 #[allow(dead_code)]
 impl<IO: BlockIo> Reader<IO> {
-    pub const fn new(reader: IO) -> Self {
-        Self(reader)
+    #[cfg(feature = "os_calls")]
+    pub const fn new(io: IO, os_calls: bool) -> Self {
+        Self { io, os_calls }
+    }
+
+    #[cfg(not(feature = "os_calls"))]
+    pub const fn new(io: IO) -> Self {
+        Self { io }
     }
 
     #[inline]
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error<IO::Error>> {
-        self.0.read(buf)
+        self.io.read(buf)
     }
 
     pub fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<(), Error<IO::Error>> {
-        self.0.seek(SeekFrom::Start(offset))?;
-        self.0.read_exact(buf)?;
+        self.io.seek(SeekFrom::Start(offset))?;
+        self.io.read_exact(buf)?;
         Ok(())
     }
 
     #[inline]
     pub fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error<IO::Error>> {
-        self.0.read_exact(buf)
+        self.io.read_exact(buf)
     }
 
     #[inline]
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64, Error<IO::Error>> {
-        self.0.seek(pos)
+        self.io.seek(pos)
     }
 
     pub fn read_exact_at<const S: usize>(
@@ -61,15 +72,15 @@ impl<IO: BlockIo> Reader<IO> {
         offset: u64,
     ) -> Result<[u8; S], Error<IO::Error>> {
         let mut buf = [0u8; S];
-        self.0.seek(SeekFrom::Start(offset))?;
-        self.0.read_exact(&mut buf)?;
+        self.io.seek(SeekFrom::Start(offset))?;
+        self.io.read_exact(&mut buf)?;
         Ok(buf)
     }
 
     pub fn read_vec_at(&mut self, offset: u64, size: usize) -> Result<Vec<u8>, Error<IO::Error>> {
         let mut buf = vec![0u8; size];
-        self.0.seek(SeekFrom::Start(offset))?;
-        self.0.read_exact(&mut buf)?;
+        self.io.seek(SeekFrom::Start(offset))?;
+        self.io.read_exact(&mut buf)?;
         Ok(buf)
     }
 
@@ -112,39 +123,48 @@ impl<IO: BlockIo> Reader<IO> {
         return Ok(None);
     }
 
+    /// Returns `true` if the probed object is a block device that `os_calls`
+    /// can retrieve information on from the OS, otherwise returns `false`,
+    /// meaning the probed object is probably a regular file.
+    #[cfg(feature = "os_calls")]
+    #[inline]
+    pub(crate) fn os_calls(&self) -> bool {
+        self.os_calls
+    }
+
     #[cfg(feature = "os_calls")]
     #[inline]
     pub fn device_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.0.device_size()
+        self.io.device_size()
     }
 
     #[cfg(feature = "os_calls")]
     #[inline]
     pub fn logical_sector_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.0.logical_sector_size()
+        self.io.logical_sector_size()
     }
 
     #[cfg(feature = "os_calls")]
     #[inline]
     pub fn physical_sector_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.0.physical_sector_size()
+        self.io.physical_sector_size()
     }
 
     #[cfg(all(feature = "os_calls", any(target_os = "linux", target_os = "freebsd")))]
     #[inline]
     pub fn minimum_io_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.0.minimum_io_size()
+        self.io.minimum_io_size()
     }
 
     #[cfg(all(feature = "os_calls", target_os = "linux"))]
     #[inline]
     pub fn optimal_io_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.0.optimal_io_size()
+        self.io.optimal_io_size()
     }
 
     #[cfg(all(feature = "os_calls", any(target_os = "linux", target_os = "freebsd")))]
     #[inline]
     pub fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<IO::Error>> {
-        self.0.alignment_offset()
+        self.io.alignment_offset()
     }
 }

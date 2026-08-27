@@ -321,8 +321,13 @@ pub fn probe_mbr<IO: BlockIo>(
     is_valid_mbr(reader, offset, mbr_pt)?;
 
     #[cfg(feature = "os_calls")]
-    let ssz = reader.logical_sector_size()?;
+    let ssz = if reader.os_calls() {
+        reader.logical_sector_size()?
+    } else {
+        512
+    };
     #[cfg(not(feature = "os_calls"))]
+    #[allow(non_upper_case_globals)]
     const ssz: u64 = 512;
 
     let mut partitions: Vec<Partition> = Vec::new();

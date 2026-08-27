@@ -255,7 +255,7 @@ impl PtInfo {
         match (&self.magic, &self.magic_offset) {
             (Some(magic), Some(offset)) => Some((magic.as_slice(), *offset)),
             (None, None) => None,
-            _ => unreachable!("magic and magic_offset are only ever set together via set_magic"),
+            _ => unreachable!("magic and magic_offset are only ever set together via `set_magic`"),
         }
     }
 

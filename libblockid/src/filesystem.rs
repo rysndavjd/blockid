@@ -20,8 +20,7 @@ use crate::{
         exfat::{EXFAT_MAGICS, EXFAT_MINSZ, probe_exfat},
         ext::{EXT_MAGICS, EXT_MINSZ, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
         luks::{
-            LUKS1_MAGICS, LUKS1_MINSZ, LUKS2_MAGICS, LUKS2_MINSZ, LUKSOPAL_MAGICS, probe_luks_opal,
-            probe_luks1, probe_luks2,
+            LUKS_MAGICS, LUKS1_MINSZ, LUKS2_MINSZ, LUKSOPAL_MAGICS, probe_luks, probe_luks_opal,
         },
         ntfs::{NTFS_MAGICS, NTFS_MINSZ, probe_ntfs},
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
@@ -44,7 +43,6 @@ pub const FS_DETECT_ORDER: &[(FsFilter, FsType)] = &[
     (FsFilter::SKIP_EXT4, FsType::Ext4),
     (FsFilter::SKIP_LUKS1, FsType::LUKS1),
     (FsFilter::SKIP_LUKS2, FsType::LUKS2),
-    (FsFilter::SKIP_LUKS_OPAL, FsType::LUKSOpal),
     (FsFilter::SKIP_NTFS, FsType::Ntfs),
     (FsFilter::SKIP_VFAT, FsType::Vfat),
     (FsFilter::SKIP_VXFS, FsType::Vxfs),
@@ -150,13 +148,13 @@ impl FsType {
             },
             FsType::LUKS1 => FsHandler {
                 minsz: LUKS1_MINSZ,
-                magics: LUKS1_MAGICS,
-                probe: probe_luks1,
+                magics: LUKS_MAGICS,
+                probe: probe_luks,
             },
             FsType::LUKS2 => FsHandler {
                 minsz: LUKS2_MINSZ,
-                magics: LUKS2_MAGICS,
-                probe: probe_luks2,
+                magics: LUKS_MAGICS,
+                probe: probe_luks,
             },
             FsType::LUKSOpal => FsHandler {
                 minsz: LUKS2_MINSZ,
@@ -322,7 +320,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_fs_type(&mut self, fs_type: FsType) {
-        self.fs_type = Some(fs_type);
+        if cfg!(debug_assertions) {
+            if self.fs_type.is_none() {
+                self.fs_type = Some(fs_type);
+            } else {
+                panic!("`fs_type` set twice")
+            }
+        } else {
+            self.fs_type = Some(fs_type);
+        }
     }
 
     pub fn fs_type(&self) -> Option<FsType> {
@@ -330,7 +336,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_sub_type(&mut self, sub_type: SubType) {
-        self.sub_type = Some(sub_type);
+        if cfg!(debug_assertions) {
+            if self.sub_type.is_none() {
+                self.sub_type = Some(sub_type);
+            } else {
+                panic!("`sub_type` set twice")
+            }
+        } else {
+            self.sub_type = Some(sub_type);
+        }
     }
 
     pub fn sub_type(&self) -> Option<SubType> {
@@ -338,7 +352,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_label(&mut self, label: Label) {
-        self.label = Some(label);
+        if cfg!(debug_assertions) {
+            if self.label.is_none() {
+                self.label = Some(label);
+            } else {
+                panic!("`label` set twice")
+            }
+        } else {
+            self.label = Some(label);
+        }
     }
 
     pub fn label(&self) -> Option<&Label> {
@@ -346,7 +368,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_fs_id(&mut self, fs_id: FsId) {
-        self.fs_id = Some(fs_id);
+        if cfg!(debug_assertions) {
+            if self.fs_id.is_none() {
+                self.fs_id = Some(fs_id);
+            } else {
+                panic!("`fs_id` set twice")
+            }
+        } else {
+            self.fs_id = Some(fs_id);
+        }
     }
 
     pub fn fs_id(&self) -> Option<FsId> {
@@ -354,7 +384,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_sub_member_id(&mut self, sub_member_id: Uuid) {
-        self.sub_member_id = Some(sub_member_id);
+        if cfg!(debug_assertions) {
+            if self.sub_member_id.is_none() {
+                self.sub_member_id = Some(sub_member_id);
+            } else {
+                panic!("`sub_member_id` set twice")
+            }
+        } else {
+            self.sub_member_id = Some(sub_member_id);
+        }
     }
 
     pub fn sub_member_id(&self) -> Option<Uuid> {
@@ -362,7 +400,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_ext_log_id(&mut self, ext_log_id: Uuid) {
-        self.ext_log_id = Some(ext_log_id);
+        if cfg!(debug_assertions) {
+            if self.ext_log_id.is_none() {
+                self.ext_log_id = Some(ext_log_id);
+            } else {
+                panic!("`ext_log_id` set twice")
+            }
+        } else {
+            self.ext_log_id = Some(ext_log_id);
+        }
     }
 
     pub fn ext_log_id(&self) -> Option<Uuid> {
@@ -370,7 +416,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_ext_journal_id(&mut self, ext_journal_id: Uuid) {
-        self.ext_journal_id = Some(ext_journal_id);
+        if cfg!(debug_assertions) {
+            if self.ext_journal_id.is_none() {
+                self.ext_journal_id = Some(ext_journal_id);
+            } else {
+                panic!("`ext_journal_id` set twice")
+            }
+        } else {
+            self.ext_journal_id = Some(ext_journal_id);
+        }
     }
 
     pub fn ext_journal_id(&self) -> Option<Uuid> {
@@ -378,7 +432,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_version(&mut self, version: String) {
-        self.version = Some(version);
+        if cfg!(debug_assertions) {
+            if self.version.is_none() {
+                self.version = Some(version);
+            } else {
+                panic!("`version` set twice")
+            }
+        } else {
+            self.version = Some(version);
+        }
     }
 
     pub fn version(&self) -> Option<&String> {
@@ -386,20 +448,45 @@ impl FsInfo {
     }
 
     pub(crate) fn set_magic(&mut self, bytes: Vec<u8>, offset: u64) {
-        self.magic = Some(bytes);
-        self.magic_offset = Some(offset);
+        if cfg!(debug_assertions) {
+            if self.magic.is_none() {
+                self.magic = Some(bytes);
+            } else {
+                panic!("`magic` set twice")
+            }
+        } else {
+            self.magic = Some(bytes);
+        }
+
+        if cfg!(debug_assertions) {
+            if self.magic_offset.is_none() {
+                self.magic_offset = Some(offset);
+            } else {
+                panic!("`magic_offset` set twice")
+            }
+        } else {
+            self.magic_offset = Some(offset);
+        }
     }
 
     pub fn magic(&self) -> Option<(&[u8], u64)> {
         match (&self.magic, &self.magic_offset) {
             (Some(magic), Some(offset)) => Some((magic.as_slice(), *offset)),
             (None, None) => None,
-            _ => unreachable!("magic and magic_offset are only ever set together via set_magic"),
+            _ => unreachable!("magic and magic_offset are only ever set together via `set_magic`"),
         }
     }
 
     pub(crate) fn set_fs_size(&mut self, fs_size: u64) {
-        self.fs_size = Some(fs_size);
+        if cfg!(debug_assertions) {
+            if self.fs_size.is_none() {
+                self.fs_size = Some(fs_size);
+            } else {
+                panic!("`fs_size` set twice")
+            }
+        } else {
+            self.fs_size = Some(fs_size);
+        }
     }
 
     pub fn fs_size(&self) -> Option<u64> {
@@ -407,7 +494,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_fs_last_block(&mut self, fs_last_block: u64) {
-        self.fs_last_block = Some(fs_last_block);
+        if cfg!(debug_assertions) {
+            if self.fs_last_block.is_none() {
+                self.fs_last_block = Some(fs_last_block);
+            } else {
+                panic!("`fs_last_block` set twice")
+            }
+        } else {
+            self.fs_last_block = Some(fs_last_block);
+        }
     }
 
     pub fn fs_last_block(&self) -> Option<u64> {
@@ -415,7 +510,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_fs_block_size(&mut self, fs_block_size: u64) {
-        self.fs_block_size = Some(fs_block_size);
+        if cfg!(debug_assertions) {
+            if self.fs_block_size.is_none() {
+                self.fs_block_size = Some(fs_block_size);
+            } else {
+                panic!("`fs_block_size` set twice")
+            }
+        } else {
+            self.fs_block_size = Some(fs_block_size);
+        }
     }
 
     pub fn fs_block_size(&self) -> Option<u64> {
@@ -423,7 +526,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_block_size(&mut self, block_size: u64) {
-        self.block_size = Some(block_size);
+        if cfg!(debug_assertions) {
+            if self.block_size.is_none() {
+                self.block_size = Some(block_size);
+            } else {
+                panic!("`block_size` set twice")
+            }
+        } else {
+            self.block_size = Some(block_size);
+        }
     }
 
     pub fn block_size(&self) -> Option<u64> {
@@ -431,7 +542,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_endianness(&mut self, endianness: Endianness) {
-        self.endianness = Some(endianness);
+        if cfg!(debug_assertions) {
+            if self.endianness.is_none() {
+                self.endianness = Some(endianness);
+            } else {
+                panic!("`endianness` set twice")
+            }
+        } else {
+            self.endianness = Some(endianness);
+        }
     }
 
     pub fn endianness(&self) -> Option<Endianness> {
@@ -439,7 +558,15 @@ impl FsInfo {
     }
 
     pub(crate) fn set_creator(&mut self, creator: String) {
-        self.creator = Some(creator);
+        if cfg!(debug_assertions) {
+            if self.creator.is_none() {
+                self.creator = Some(creator);
+            } else {
+                panic!("`creator` set twice")
+            }
+        } else {
+            self.creator = Some(creator);
+        }
     }
 
     pub fn creator(&self) -> Option<&String> {

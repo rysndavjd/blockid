@@ -1,56 +1,19 @@
-use widestring::{error::Utf16Error, utfstring::Utf16String};
+use widestring::U16String;
 
-use crate::{probe::Endianness, std::str::Utf8Error};
+use crate::Endianness;
 
-pub fn decode_utf16_lossy_from(bytes: &[u8], endian: Endianness) -> Utf16String {
-    let data: Vec<u16> = bytes
-        .chunks(2)
-        .filter_map(|chunk| {
-            if chunk.len() == 2 {
-                let val = match endian {
-                    Endianness::Big => u16::from_be_bytes([chunk[0], chunk[1]]),
-                    Endianness::Little => u16::from_le_bytes([chunk[0], chunk[1]]),
-                };
-                if val == 0 { None } else { Some(val) }
-            } else {
-                None
-            }
+pub(crate) fn bytes_to_u16string(bytes: &[u8], endianness: Endianness) -> U16String {
+    let units: Vec<u16> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| match endianness {
+            Endianness::Little => u16::from_le_bytes([c[0], c[1]]),
+            Endianness::Big => u16::from_be_bytes([c[0], c[1]]),
         })
         .collect();
 
-    return Utf16String::from_slice_lossy(&data).into();
-}
-
-pub fn decode_utf8_lossy_from(bytes: &[u8]) -> String {
-    return String::from_utf8_lossy(bytes)
-        .trim_end_matches('\0')
-        .to_string();
-}
-
-pub fn decode_utf16_from(bytes: &[u8], endian: Endianness) -> Result<Utf16String, Utf16Error> {
-    let data: Vec<u16> = bytes
-        .chunks(2)
-        .filter_map(|chunk| {
-            if chunk.len() == 2 {
-                let val = match endian {
-                    Endianness::Big => u16::from_be_bytes([chunk[0], chunk[1]]),
-                    Endianness::Little => u16::from_le_bytes([chunk[0], chunk[1]]),
-                };
-                if val == 0 { None } else { Some(val) }
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    return Utf16String::from_vec(data);
-}
-
-pub fn decode_utf8_from(bytes: &[u8]) -> Result<String, Utf8Error> {
-    return Ok(String::from_utf8(bytes.to_vec())
-        .map_err(|e| e.utf8_error())?
-        .trim_end_matches('\0')
-        .to_string());
+    U16String::from_vec(units)
 }
 
 /// Gets the path of a file descriptor, returning a [`PathBuf`](crate::io::PathBuf).
