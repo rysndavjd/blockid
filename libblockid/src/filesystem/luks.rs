@@ -64,8 +64,6 @@ pub const LUKS_MAGICS: Option<&'static [Magic]> = None;
 pub const LUKS1_MINSZ: Option<u64> = Some(1048576);
 pub const LUKS2_MINSZ: Option<u64> = Some(4194304);
 
-pub const LUKSOPAL_MAGICS: Option<&'static [Magic]> = None;
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
 pub struct Luks1Header {
@@ -131,7 +129,6 @@ fn luks_info(sb: &Luks2Header, offset: u64) -> Result<FsInfo, LuksError> {
         Uuid::try_parse_ascii(&sb.uuid[..Hyphenated::LENGTH]).map_err(LuksError::InvalidUuid)?;
 
     info.set_fs_id(uuid.into());
-    //todo: use lexical-core
     info.set_version(format!("{}", version));
     info.set_magic(sb.magic.to_vec(), offset);
 
@@ -160,36 +157,4 @@ pub fn probe_luks<IO: BlockIo>(
     }
 
     Err(LuksError::UnableLocateHeader.into())
-}
-
-pub fn probe_luks_opal<IO: BlockIo>(
-    reader: &mut Reader<IO>,
-    offset: u64,
-    _: Magic,
-) -> Result<FsInfo, Error<IO::Error>> {
-    // let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset)?;
-
-    // let sb: &Luks2Header = transmute_ref!(&buf);
-
-    // if !sb.luks_valid(reader)? {
-    //     return Err(LuksError::InvalidLuks2Opal.into());
-    // }
-
-    // if sb.subsystem[0..7] != LUKS2_HW_OPAL_SUBSYSTEM {
-    //     return Err(LuksError::InvalidLuks2Opal.into());
-    // }
-
-    // let uuid = Uuid::try_parse_ascii(&sb.uuid[..uuid::fmt::Hyphenated::LENGTH])
-    //     .map_err(LuksError::UuidError)?;
-
-    // let mut info = FsInfo::empty();
-
-    // info.set_fs_type(FsType::LUKS2);
-    // info.set_fs_id(uuid.into());
-    // info.set_version(format!("{}", sb.version));
-    // info.set_magic(magic.bytes.to_vec(), magic.offset);
-
-    // return Ok(info);
-
-    todo!()
 }

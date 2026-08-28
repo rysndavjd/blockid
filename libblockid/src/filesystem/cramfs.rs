@@ -13,12 +13,16 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum CramfsError {
-    HeaderChecksumInvalid,
+    ChecksumInvalid,
+    ChecksumSizeInvalid,
 }
 
 impl fmt::Display for CramfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        match self {
+            CramfsError::ChecksumInvalid => write!(f, "cramfs header checksum invalid"),
+            CramfsError::ChecksumSizeInvalid => write!(f, "cramfs checksum has invalid size"),
+        }
     }
 }
 
@@ -51,7 +55,7 @@ struct CramfsSuperBlock {
     flags: [u8; 4],
     future: [u8; 4],
     signature: [u8; 16],
-    crc: [u8; 2],
+    crc: [u8; 4],
     edition: [u8; 4],
     blocks: [u8; 4],
     files: [u8; 4],
@@ -69,9 +73,9 @@ fn verify_csum<IO: BlockIo>(
     le: bool,
 ) -> Result<(), Error<IO::Error>> {
     let expected = if le {
-        u16::from_le_bytes(sb.crc)
+        u32::from_le_bytes(sb.crc)
     } else {
-        u16::from_be_bytes(sb.crc)
+        u32::from_be_bytes(sb.crc)
     };
 
     let csummed_size = if le {
@@ -81,22 +85,23 @@ fn verify_csum<IO: BlockIo>(
     };
 
     if csummed_size > (1 << 16) || csummed_size < (size_of::<CramfsSuperBlock>() as u32) {
-        todo!()
+        return Err(CramfsError::ChecksumSizeInvalid.into());
     }
 
     let crc_buf = reader.read_at_exclude(
         offset,
         csummed_size as usize,
-        offset_of!(CramfsSuperBlock, crc)..(offset_of!(CramfsSuperBlock, crc) + 2),
+        offset_of!(CramfsSuperBlock, crc)
+            ..(offset_of!(CramfsSuperBlock, crc) + size_of_val(&sb.crc)),
     )?;
 
     let calc_sum = Crc::<u32>::new(&CRC_32_ISO_HDLC).checksum(&crc_buf);
 
-    if calc_sum == expected.into() {
+    if calc_sum == expected {
         return Ok(());
     }
 
-    Err(CramfsError::HeaderChecksumInvalid.into())
+    Err(CramfsError::ChecksumInvalid.into())
 }
 
 pub fn probe_cramfs<IO: BlockIo>(
@@ -108,7 +113,6 @@ pub fn probe_cramfs<IO: BlockIo>(
     let sb: &CramfsSuperBlock = transmute_ref!(&buf);
 
     let le = magic.bytes == LITTLE_ENDIAN_MAGIC;
-
     let v2 = (if le {
         u32::from_le_bytes(sb.flags)
     } else {
@@ -116,8 +120,8 @@ pub fn probe_cramfs<IO: BlockIo>(
     }) & CramfsSuperBlock::FLAG_FSID_VERSION_2
         != 0;
 
-    if v2 && verify_csum(reader, offset, sb, le).is_err() {
-        todo!()
+    if v2 {
+        verify_csum(reader, offset, sb, le)?;
     }
 
     let mut info = FsInfo::empty();

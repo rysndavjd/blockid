@@ -420,7 +420,6 @@ fn ext_get_info(
         None
     };
 
-    // todo: replace with lexical-core
     let version = format!(
         "{}.{}",
         u32::from(es.s_rev_level),

@@ -150,10 +150,18 @@ fn probe_filesystem<IO: BlockIo>(
 
         #[cfg(feature = "os_calls")]
         {
-            if let Some(minsz) = handle.minsz
-                && reader.device_size()? < minsz
-            {
-                continue;
+            if reader.os_calls() {
+                if let Some(minsz) = handle.minsz
+                    && reader.device_size()? < minsz
+                {
+                    return Err(Error::DeviceTooSmall);
+                }
+            } else {
+                if let Some(minsz) = handle.minsz
+                    && reader.seek(crate::io::SeekFrom::End(0))? < minsz
+                {
+                    return Err(Error::DeviceTooSmall);
+                }
             }
         }
 
@@ -195,10 +203,18 @@ fn search_for_filesystem<IO: BlockIo>(
 
     #[cfg(feature = "os_calls")]
     {
-        if let Some(minsz) = handle.minsz
-            && reader.device_size()? < minsz
-        {
-            return Err(Error::DeviceTooSmall);
+        if reader.os_calls() {
+            if let Some(minsz) = handle.minsz
+                && reader.device_size()? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        } else {
+            if let Some(minsz) = handle.minsz
+                && reader.seek(crate::io::SeekFrom::End(0))? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
         }
     }
 
@@ -236,10 +252,18 @@ fn probe_part_table<IO: BlockIo>(
 
         #[cfg(feature = "os_calls")]
         {
-            if let Some(minsz) = handle.minsz
-                && reader.device_size()? < minsz
-            {
-                continue;
+            if reader.os_calls() {
+                if let Some(minsz) = handle.minsz
+                    && reader.device_size()? < minsz
+                {
+                    return Err(Error::DeviceTooSmall);
+                }
+            } else {
+                if let Some(minsz) = handle.minsz
+                    && reader.seek(crate::io::SeekFrom::End(0))? < minsz
+                {
+                    return Err(Error::DeviceTooSmall);
+                }
             }
         }
 
@@ -281,10 +305,18 @@ fn search_for_part_table<IO: BlockIo>(
 
     #[cfg(feature = "os_calls")]
     {
-        if let Some(minsz) = handle.minsz
-            && reader.device_size()? < minsz
-        {
-            return Err(Error::DeviceTooSmall);
+        if reader.os_calls() {
+            if let Some(minsz) = handle.minsz
+                && reader.device_size()? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        } else {
+            if let Some(minsz) = handle.minsz
+                && reader.seek(crate::io::SeekFrom::End(0))? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
         }
     }
 
@@ -381,7 +413,7 @@ impl Probe<crate::io::File> {
         let os_calls = FileType::from_raw_mode(fstat(&file)?.st_mode).is_block_device();
         let reader = Reader::new(file, os_calls);
 
-        if offset >= reader.device_size()? {
+        if os_calls && offset >= reader.device_size()? {
             return Err(Error::OffsetExceedsDeviceSize);
         }
 

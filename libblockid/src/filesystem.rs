@@ -19,9 +19,7 @@ use crate::{
         cramfs::{CRAMFS_MAGICS, CRAMFS_MINSZ, probe_cramfs},
         exfat::{EXFAT_MAGICS, EXFAT_MINSZ, probe_exfat},
         ext::{EXT_MAGICS, EXT_MINSZ, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
-        luks::{
-            LUKS_MAGICS, LUKS1_MINSZ, LUKS2_MINSZ, LUKSOPAL_MAGICS, probe_luks, probe_luks_opal,
-        },
+        luks::{LUKS_MAGICS, LUKS1_MINSZ, LUKS2_MINSZ, probe_luks},
         ntfs::{NTFS_MAGICS, NTFS_MINSZ, probe_ntfs},
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
         vxfs::{VXFS_MAGICS, VXFS_MINSZ, probe_vxfs},
@@ -36,6 +34,7 @@ use crate::{
 #[rustfmt::skip]
 pub const FS_DETECT_ORDER: &[(FsFilter, FsType)] = &[
     (FsFilter::SKIP_APFS, FsType::Apfs),
+    (FsFilter::SKIP_CRAMFS, FsType::Cramfs),
     (FsFilter::SKIP_EXFAT, FsType::Exfat),
     (FsFilter::SKIP_JBD, FsType::Jbd),
     (FsFilter::SKIP_EXT2, FsType::Ext2),
@@ -80,7 +79,6 @@ pub enum FsType {
     Ext4,
     LUKS1,
     LUKS2,
-    LUKSOpal,
     Ntfs,
     Vfat,
     Vxfs,
@@ -99,7 +97,6 @@ impl fmt::Display for FsType {
             FsType::Ext4 => write!(f, "ext4"),
             FsType::LUKS1 => write!(f, "luks1"),
             FsType::LUKS2 => write!(f, "luks2"),
-            FsType::LUKSOpal => write!(f, "luks_opal"),
             FsType::Ntfs => write!(f, "ntfs"),
             FsType::Vfat => write!(f, "vfat"),
             FsType::Vxfs => write!(f, "vxfs"),
@@ -155,11 +152,6 @@ impl FsType {
                 minsz: LUKS2_MINSZ,
                 magics: LUKS_MAGICS,
                 probe: probe_luks,
-            },
-            FsType::LUKSOpal => FsHandler {
-                minsz: LUKS2_MINSZ,
-                magics: LUKSOPAL_MAGICS,
-                probe: probe_luks_opal,
             },
             FsType::Ntfs => FsHandler {
                 minsz: NTFS_MINSZ,
@@ -613,9 +605,11 @@ impl serde::Serialize for FsInfo {
         if let Some(v) = &self.label {
             match v {
                 Label::Utf8(utf8) => {
-                    map.serialize_entry("LABEL", utf8)?;
+                    map.serialize_entry("LABEL", &utf8.to_string().trim_end_matches('\0'))?;
                 }
-                Label::Utf16(utf16) => map.serialize_entry("LABEL", &utf16.to_string_lossy())?,
+                Label::Utf16(utf16) => {
+                    map.serialize_entry("LABEL", &utf16.to_string_lossy().trim_end_matches('\0'))?
+                }
             }
         }
         if let Some(v) = &self.fs_id {
@@ -674,17 +668,18 @@ bitflags! {
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct FsFilter: u64 {
         const SKIP_APFS = 1 << 0;
-        const SKIP_EXFAT = 1 << 1;
-        const SKIP_JBD = 1 << 2;
-        const SKIP_EXT2 = 1 << 3;
-        const SKIP_EXT3 = 1 << 4;
-        const SKIP_EXT4 = 1 << 5;
-        const SKIP_LUKS1 = 1 << 6;
-        const SKIP_LUKS2 = 1 << 7;
-        const SKIP_LUKS_OPAL = 1 << 8;
-        const SKIP_NTFS = 1 << 9;
-        const SKIP_VFAT = 1 << 10;
-        const SKIP_VXFS = 1 << 11;
-        const SKIP_XFS = 1 << 12;
+        const SKIP_CRAMFS = 1 << 1;
+        const SKIP_EXFAT = 1 << 2;
+        const SKIP_JBD = 1 << 3;
+        const SKIP_EXT2 = 1 << 4;
+        const SKIP_EXT3 = 1 << 5;
+        const SKIP_EXT4 = 1 << 6;
+        const SKIP_LUKS1 = 1 << 7;
+        const SKIP_LUKS2 = 1 << 8;
+        const SKIP_LUKS_OPAL = 1 << 9;
+        const SKIP_NTFS = 1 << 10;
+        const SKIP_VFAT = 1 << 11;
+        const SKIP_VXFS = 1 << 12;
+        const SKIP_XFS = 1 << 13;
     }
 }
