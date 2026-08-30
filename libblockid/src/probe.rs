@@ -154,13 +154,13 @@ fn probe_filesystem<IO: BlockIo>(
                 if let Some(minsz) = handle.minsz
                     && reader.device_size()? < minsz
                 {
-                    return Err(Error::DeviceTooSmall);
+                    continue;
                 }
             } else {
                 if let Some(minsz) = handle.minsz
                     && reader.seek(crate::io::SeekFrom::End(0))? < minsz
                 {
-                    return Err(Error::DeviceTooSmall);
+                    continue;
                 }
             }
         }
@@ -256,13 +256,13 @@ fn probe_part_table<IO: BlockIo>(
                 if let Some(minsz) = handle.minsz
                     && reader.device_size()? < minsz
                 {
-                    return Err(Error::DeviceTooSmall);
+                    continue;
                 }
             } else {
                 if let Some(minsz) = handle.minsz
                     && reader.seek(crate::io::SeekFrom::End(0))? < minsz
                 {
-                    return Err(Error::DeviceTooSmall);
+                    continue;
                 }
             }
         }

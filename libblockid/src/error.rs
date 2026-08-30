@@ -2,7 +2,7 @@ use crate::std::fmt;
 pub use crate::{
     filesystem::{
         apfs::ApfsError, cramfs::CramfsError, exfat::ExFatError, ext::ExtError, luks::LuksError,
-        ntfs::NtfsError, vfat::VFatError, vxfs::VxfsError, xfs::XfsError,
+        ntfs::NtfsError, squashfs::SquashfsError, vfat::VFatError, vxfs::VxfsError, xfs::XfsError,
     },
     partition::{aix::AixError, gpt::GptError, mbr::MbrError},
 };
@@ -23,6 +23,7 @@ pub enum Error<E: fmt::Debug> {
     Ext(ExtError),
     /// Errors returned from NTFS (NT File System) probing logic.
     Ntfs(NtfsError),
+    Squashfs(SquashfsError),
     /// Errors returned from VFAT probing logic.
     VFat(VFatError),
     /// Errors returned from VXFS (Veritas File System) probing logic.
@@ -61,6 +62,7 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
             Self::ExFat(e) => write!(f, "exFAT Error: {}", e),
             Self::Ext(e) => write!(f, "Ext Error: {}", e),
             Self::Ntfs(e) => write!(f, "NTFS Error: {}", e),
+            Self::Squashfs(e) => write!(f, "SquashFS Error: {}", e),
             Self::VFat(e) => write!(f, "VFAT Error: {}", e),
             Self::Vxfs(_) => write!(f, "VXFS Error"),
             Self::Xfs(e) => write!(f, "XFS Error: {}", e),

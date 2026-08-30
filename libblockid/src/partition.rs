@@ -30,7 +30,7 @@ pub const PT_DETECT_ORDER: &[(PtFilter, PtType)] = &[
 pub(crate) struct PtHandler<IO: BlockIo> {
     /// Minimum disk size in bytes required for partition table, if any.
     pub minsz: Option<u64>,
-    /// Minimum disk size in bytes required for this partition table, if any.
+    /// Magic signatures used to identify filesystem, if any.
     pub magics: Option<&'static [Magic]>,
     /// Probes the partition table, returning its info on success.
     #[allow(clippy::type_complexity)]

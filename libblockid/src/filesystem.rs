@@ -4,6 +4,7 @@ pub(crate) mod exfat;
 pub(crate) mod ext;
 pub(crate) mod luks;
 pub(crate) mod ntfs;
+pub(crate) mod squashfs;
 pub(crate) mod vfat;
 pub(crate) mod vxfs;
 pub(crate) mod xfs;
@@ -21,6 +22,9 @@ use crate::{
         ext::{EXT_MAGICS, EXT_MINSZ, probe_ext2, probe_ext3, probe_ext4, probe_jbd},
         luks::{LUKS_MAGICS, LUKS1_MINSZ, LUKS2_MINSZ, probe_luks},
         ntfs::{NTFS_MAGICS, NTFS_MINSZ, probe_ntfs},
+        squashfs::{
+            SQUASHFS_MAGICS, SQUASHFS_MINSZ, SQUASHFS3_MAGICS, probe_squashfs, probe_squashfs3,
+        },
         vfat::{VFAT_MAGICS, VFAT_MINSZ, probe_vfat},
         vxfs::{VXFS_MAGICS, VXFS_MINSZ, probe_vxfs},
         xfs::{XFS_MAGICS, XFS_MINSZ, probe_xfs},
@@ -43,6 +47,8 @@ pub const FS_DETECT_ORDER: &[(FsFilter, FsType)] = &[
     (FsFilter::SKIP_LUKS1, FsType::LUKS1),
     (FsFilter::SKIP_LUKS2, FsType::LUKS2),
     (FsFilter::SKIP_NTFS, FsType::Ntfs),
+    (FsFilter::SKIP_SQUASHFS, FsType::Squashfs),
+    (FsFilter::SKIP_SQUASHFS3, FsType::Squashfs3),
     (FsFilter::SKIP_VFAT, FsType::Vfat),
     (FsFilter::SKIP_VXFS, FsType::Vxfs),
     (FsFilter::SKIP_XFS, FsType::Xfs),
@@ -53,7 +59,7 @@ pub const FS_DETECT_ORDER: &[(FsFilter, FsType)] = &[
 pub(crate) struct FsHandler<IO: BlockIo> {
     /// Minimum disk size in bytes required for filesystem, if any.
     pub minsz: Option<u64>,
-    /// Minimum disk size in bytes required for this filesystem, if any.
+    /// Magic signatures used to identify filesystem, if any.
     pub magics: Option<&'static [Magic]>,
     /// Probes the filesystem, returning its info on success.
     #[allow(clippy::type_complexity)]
@@ -80,6 +86,8 @@ pub enum FsType {
     LUKS1,
     LUKS2,
     Ntfs,
+    Squashfs,
+    Squashfs3,
     Vfat,
     Vxfs,
     Xfs,
@@ -98,6 +106,8 @@ impl fmt::Display for FsType {
             FsType::LUKS1 => write!(f, "luks1"),
             FsType::LUKS2 => write!(f, "luks2"),
             FsType::Ntfs => write!(f, "ntfs"),
+            FsType::Squashfs => write!(f, "squashfs"),
+            FsType::Squashfs3 => write!(f, "squashfs3"),
             FsType::Vfat => write!(f, "vfat"),
             FsType::Vxfs => write!(f, "vxfs"),
             FsType::Xfs => write!(f, "xfs"),
@@ -157,6 +167,16 @@ impl FsType {
                 minsz: NTFS_MINSZ,
                 magics: NTFS_MAGICS,
                 probe: probe_ntfs,
+            },
+            FsType::Squashfs => FsHandler {
+                minsz: SQUASHFS_MINSZ,
+                magics: SQUASHFS_MAGICS,
+                probe: probe_squashfs,
+            },
+            FsType::Squashfs3 => FsHandler {
+                minsz: SQUASHFS_MINSZ,
+                magics: SQUASHFS3_MAGICS,
+                probe: probe_squashfs3,
             },
             FsType::Vfat => FsHandler {
                 minsz: VFAT_MINSZ,
@@ -678,8 +698,10 @@ bitflags! {
         const SKIP_LUKS2 = 1 << 8;
         const SKIP_LUKS_OPAL = 1 << 9;
         const SKIP_NTFS = 1 << 10;
-        const SKIP_VFAT = 1 << 11;
-        const SKIP_VXFS = 1 << 12;
-        const SKIP_XFS = 1 << 13;
+        const SKIP_SQUASHFS = 1 << 11;
+        const SKIP_SQUASHFS3 = 1 << 12;
+        const SKIP_VFAT = 1 << 13;
+        const SKIP_VXFS = 1 << 14;
+        const SKIP_XFS = 1 << 15;
     }
 }
