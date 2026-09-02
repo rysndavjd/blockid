@@ -255,13 +255,14 @@ impl GptTable {
             return Err(GptError::InvalidLbaUsableRegions.into());
         }
 
-        let entry_sz = u64::from(header.sizeof_partition_entry);
-        let entries_sz = u64::from(header.num_partition_entries) * entry_sz;
+        let entry_sz = header.sizeof_partition_entry.get();
+        let entries_sz = header
+            .num_partition_entries
+            .get()
+            .checked_mul(entry_sz)
+            .ok_or(GptError::GptEntriesUndefined)?;
 
-        if entries_sz == 0
-            || entries_sz >= u32::MAX as u64
-            || entry_sz != size_of::<GptEntry>() as u64
-        {
+        if entries_sz == u32::MIN || entry_sz != size_of::<GptEntry>() as u32 {
             return Err(GptError::GptEntriesUndefined.into());
         }
 
@@ -291,37 +292,30 @@ pub fn probe_gpt<IO: BlockIo>(
     offset: u64,
     _: Magic,
 ) -> Result<PtInfo, Error<IO::Error>> {
-    let (header, entries_buf, lssz) = {
-        #[cfg(feature = "os_calls")]
-        let lssz = if reader.os_calls() {
-            reader.logical_sector_size()?
-        } else {
-            GptTable::get_lssz_manual(reader, offset)?
-        };
-        #[cfg(not(feature = "os_calls"))]
-        let lssz = GptTable::get_lssz_manual(reader, offset)?;
-
-        #[cfg(feature = "os_calls")]
-        let device_size = reader.device_size()?;
-        #[cfg(not(feature = "os_calls"))]
-        let device_size = reader.seek(crate::io::SeekFrom::End(0))?;
-
-        let last_lba = (device_size / lssz) - 1;
-
-        let (header, entries_buf) =
-            match GptTable::get_header(reader, offset, GptTable::FIRST_LBA, last_lba, lssz) {
-                Ok((header, entries_buf)) => (header, entries_buf),
-                Err(_) => match GptTable::get_header(reader, offset, last_lba, last_lba, lssz) {
-                    Ok((header, entries_buf)) => (header, entries_buf),
-                    Err(e) => return Err(e),
-                },
-            };
-
-        (header, entries_buf, lssz)
+    #[cfg(feature = "os_calls")]
+    let lssz = if reader.os_calls() {
+        reader.logical_sector_size()?
+    } else {
+        GptTable::get_lssz_manual(reader, offset)?
     };
+    #[cfg(not(feature = "os_calls"))]
+    let lssz = GptTable::get_lssz_manual(reader, offset)?;
 
-    let fu = u64::from(header.first_usable_lba);
-    let lu = u64::from(header.last_usable_lba);
+    #[cfg(feature = "os_calls")]
+    let device_size = reader.device_size()?;
+    #[cfg(not(feature = "os_calls"))]
+    let device_size = reader.seek(crate::io::SeekFrom::End(0))?;
+
+    let last_lba = (device_size / lssz) - 1;
+
+    let (header, entries_buf) =
+        match GptTable::get_header(reader, offset, GptTable::FIRST_LBA, last_lba, lssz) {
+            Ok((header, entries_buf)) => (header, entries_buf),
+            Err(_) => GptTable::get_header(reader, offset, last_lba, last_lba, lssz)?,
+        };
+
+    let fu = header.first_usable_lba.get();
+    let lu = header.last_usable_lba.get();
 
     let mut partitions: Vec<Partition> = Vec::new();
     for i in 0..u64::from(header.num_partition_entries) {
@@ -337,8 +331,8 @@ pub fn probe_gpt<IO: BlockIo>(
             continue;
         }
 
-        let start = u64::from(partition.starting_lba);
-        let end = u64::from(partition.ending_lba);
+        let start = partition.starting_lba.get();
+        let end = partition.ending_lba.get();
 
         if start < fu || end > lu {
             continue;
