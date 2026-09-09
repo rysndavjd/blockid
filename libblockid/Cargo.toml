@@ -29,7 +29,6 @@ fat_volume_id = { version = "0.3.0", default-features = false, features = [
     "id64",
     "alloc",
     "zerocopy",
-    "serde",
 ] }
 crc = { version = "3.4.0", default-features = false }
 
@@ -69,7 +68,17 @@ std = [
     "clap/std",
     "bstr/std",
 ]
+# Uses `embedded-io` instead of `std` for I/O allowing `no_std` uses of this library
 no_std = ["dep:embedded-io"]
+# Use of operating system calls for topology infomation
 os_calls = ["dep:rustix"]
-serde = ["dep:serde", "uuid/serde", "bitflags/serde", "bstr/serde"]
+# Serde support for libblockid types
+serde = [
+    "dep:serde",
+    "uuid/serde",
+    "bitflags/serde",
+    "bstr/serde",
+    "fat_volume_id/serde",
+]
+# Clap support for libblockid types
 clap = ["dep:clap"]

@@ -1,20 +1,19 @@
 mod block;
-#[cfg(feature = "os_calls")]
-pub mod ioctl;
-#[cfg(all(feature = "os_calls", feature = "no_std"))]
+#[cfg(feature = "no_std")]
 pub mod no_std;
 #[cfg(feature = "std")]
 mod std;
+#[cfg(feature = "os_calls")]
+pub mod topology;
 
-#[cfg(all(not(feature = "os_calls"), feature = "no_std"))]
-pub use embedded_io::SeekFrom;
-
+#[cfg(feature = "no_std")]
+pub use crate::io::no_std::SeekFrom;
 #[cfg(all(feature = "os_calls", feature = "no_std"))]
-pub use crate::io::no_std::{Error as IoError, File, SeekFrom, path::PathBuf};
-#[cfg(all(not(feature = "os_calls"), feature = "std"))]
+pub use crate::io::no_std::{Error as IoError, File, PathBuf};
+#[cfg(feature = "std")]
 pub use crate::io::std::SeekFrom;
 #[cfg(all(feature = "os_calls", feature = "std"))]
-pub use crate::io::std::{File, IoError, PathBuf, SeekFrom};
+pub use crate::io::std::{File, IoError, PathBuf};
 use crate::{error::Error, probe::Magic, std::ops::Range};
 
 /// Trait used to get access to underlying device.
@@ -23,7 +22,7 @@ pub trait BlockIo: crate::io::block::Io {}
 
 /// Trait used to get access to underlying device with exposed ioctl calls.
 #[cfg(feature = "os_calls")]
-pub trait BlockIo: crate::io::ioctl::Ioctl {}
+pub trait BlockIo: crate::io::topology::Topology {}
 
 /// Reader type used to expose functions provided by [`BlockIo`]
 #[derive(Debug)]
@@ -135,36 +134,62 @@ impl<IO: BlockIo> Reader<IO> {
     #[cfg(feature = "os_calls")]
     #[inline]
     pub fn device_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.io.device_size()
+        if self.os_calls {
+            self.io.device_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     #[cfg(feature = "os_calls")]
     #[inline]
     pub fn logical_sector_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.io.logical_sector_size()
+        if self.os_calls {
+            self.io.logical_sector_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     #[cfg(feature = "os_calls")]
     #[inline]
     pub fn physical_sector_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.io.physical_sector_size()
+        if self.os_calls {
+            self.io.physical_sector_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     #[cfg(all(feature = "os_calls", any(target_os = "linux", target_os = "freebsd")))]
     #[inline]
     pub fn minimum_io_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.io.minimum_io_size()
+        if self.os_calls {
+            self.io.minimum_io_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     #[cfg(all(feature = "os_calls", target_os = "linux"))]
     #[inline]
     pub fn optimal_io_size(&self) -> Result<u64, Error<IO::Error>> {
-        self.io.optimal_io_size()
+        if self.os_calls {
+            self.io.optimal_io_size()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 
     #[cfg(all(feature = "os_calls", any(target_os = "linux", target_os = "freebsd")))]
     #[inline]
-    pub fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<IO::Error>> {
-        self.io.alignment_offset()
+    pub fn alignment_offset(
+        &self,
+    ) -> Result<crate::io::topology::AlignmentOffset, Error<IO::Error>> {
+        if self.os_calls {
+            self.io.alignment_offset()
+        } else {
+            Err(Error::ProbeNotBlockDevice)
+        }
     }
 }

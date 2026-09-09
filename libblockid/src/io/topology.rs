@@ -29,7 +29,7 @@ impl From<AlignmentOffset> for Option<u64> {
 }
 
 /// Trait used to get topology infomation.
-pub trait Ioctl: Io {
+pub trait Topology: Io {
     /// Devices size in bytes.
     fn device_size(&self) -> Result<u64, Error<Self::Error>>;
 
@@ -49,24 +49,24 @@ pub trait Ioctl: Io {
 
     /// Alignment offset in bytes.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>>;
+    fn alignment_offset(&self) -> Result<crate::io::topology::AlignmentOffset, Error<Self::Error>>;
 }
 
-impl Ioctl for File {
+impl Topology for File {
     fn device_size(&self) -> Result<u64, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
 
         #[cfg(target_os = "linux")]
         {
-            let ds = crate::io::ioctl::linux::ioctl_blkgetsize64(self)?;
+            let ds = linux::ioctl_blkgetsize64(self)?;
             return Ok(ds);
         }
 
         #[cfg(target_os = "macos")]
         {
-            let ds = crate::io::ioctl::macos::ioctl_dkiocgetblockcount(self)?
-                * crate::io::ioctl::macos::ioctl_dkiocgetblocksize(self)? as u64;
+            let ds = crate::io::topology::macos::ioctl_dkiocgetblockcount(self)?
+                * crate::io::topology::macos::ioctl_dkiocgetblocksize(self)? as u64;
             return Ok(ds);
         }
     }
@@ -124,7 +124,7 @@ impl Ioctl for File {
     }
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn alignment_offset(&self) -> Result<crate::io::ioctl::AlignmentOffset, Error<Self::Error>> {
+    fn alignment_offset(&self) -> Result<crate::io::topology::AlignmentOffset, Error<Self::Error>> {
         #[cfg(target_os = "freebsd")]
         todo!();
 
