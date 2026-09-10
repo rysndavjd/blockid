@@ -1,3 +1,6 @@
+#[cfg(target_os = "macos")]
+mod macos; 
+
 use widestring::U16String;
 
 use crate::Endianness;
