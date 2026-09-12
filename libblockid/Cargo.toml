@@ -9,6 +9,7 @@ repository = "https://github.com/rysndavjd/blockid"
 keywords = ["partition", "filesystem", "superblock", "no_std"]
 categories = ["filesystem", "no-std", "parsing"]
 license = "MIT OR Apache-2.0"
+build = "build.rs"
 
 [package.metadata.docs.rs]
 all-features = false
@@ -54,6 +55,9 @@ bstr = { version = "1.13.1", default-features = false, features = ["alloc"] }
 [target.'cfg(any(target_os = "macos", target_os = "freebsd"))'.dependencies]
 libc = { version = "0.2.186", default-features = false }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = { version = "0.10.1", default-features = false, optional = true }
+
 [features]
 default = ["std", "os_calls", "serde", "clap"]
 std = [
@@ -71,7 +75,7 @@ std = [
 # Uses `embedded-io` instead of `std` for I/O allowing `no_std` uses of this library
 no_std = ["dep:embedded-io"]
 # Use of operating system calls for topology infomation
-os_calls = ["dep:rustix"]
+os_calls = ["dep:rustix", "dep:core-foundation"]
 # Serde support for libblockid types
 serde = [
     "dep:serde",
