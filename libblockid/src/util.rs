@@ -83,3 +83,23 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(
         todo!()
     }
 }
+
+#[cfg(feature = "os_calls")]
+pub fn part_to_disk<F: rustix::fd::AsFd>(
+    fd: F,
+) -> Result<crate::io::PathBuf, crate::error::Error<crate::io::IoError>> {
+    #[cfg(target_os = "linux")]
+    {
+        todo!()
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        todo!()
+    }
+
+    #[cfg(target_os = "freebsd")]
+    {
+        todo!()
+    }
+}

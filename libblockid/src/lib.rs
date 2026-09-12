@@ -20,7 +20,10 @@ mod util;
 pub use crate::io::no_std::{Path, PathBuf};
 pub use crate::probe::{Endianness, Label, Probe};
 #[cfg(feature = "os_calls")]
-pub use crate::{io::topology::AlignmentOffset, util::fd_to_path};
+pub use crate::{
+    io::topology::AlignmentOffset,
+    util::{fd_to_path, part_to_disk},
+};
 
 #[cfg(all(feature = "std", feature = "no_std"))]
 compile_error!("`std` and `no_std` are mutually exclusive");

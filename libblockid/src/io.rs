@@ -27,7 +27,7 @@ pub trait BlockIo: crate::io::topology::Topology {}
 /// Reader type used to expose functions provided by [`BlockIo`]
 #[derive(Debug)]
 pub struct Reader<IO: BlockIo> {
-    /// Underlying IO inteface.
+    /// Underlying IO interface.
     io: IO,
     #[cfg(feature = "os_calls")]
     os_calls: bool,
