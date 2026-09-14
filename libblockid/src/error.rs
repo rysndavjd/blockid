@@ -23,6 +23,7 @@ pub enum Error<E: fmt::Debug> {
     Ext(ExtError),
     /// Errors returned from NTFS (NT File System) probing logic.
     Ntfs(NtfsError),
+    /// Errors returned from SquashFS probing logic.
     Squashfs(SquashfsError),
     /// Errors returned from VFAT probing logic.
     VFat(VFatError),
@@ -88,5 +89,25 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
                 write!(f, "probed object is not a block device")
             }
         }
+    }
+}
+
+#[cfg(feature = "os_calls")]
+#[derive(Debug, Clone)]
+pub enum PartToDiskError<E: fmt::Debug> {
+    Io(E),
+    #[cfg(target_os = "macos")]
+    BSDNameMatch,
+    #[cfg(target_os = "macos")]
+    UnableToGetService,
+    #[cfg(target_os = "macos")]
+    InvalidService,
+    DiskNotFound,
+}
+
+#[cfg(feature = "os_calls")]
+impl<E: fmt::Debug> From<E> for PartToDiskError<E> {
+    fn from(e: E) -> Self {
+        PartToDiskError::Io(e)
     }
 }

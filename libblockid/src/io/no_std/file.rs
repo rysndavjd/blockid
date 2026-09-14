@@ -1,96 +1,11 @@
-use embedded_io::{
-    Error as EmbeddedError, ErrorKind, ErrorType as EmbeddedErrorType, Read, Seek, SeekFrom,
-};
+use embedded_io::{ErrorType as EmbeddedErrorType, Read, Seek, SeekFrom};
 use rustix::{
     fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd},
     fs::{SeekFrom as RustixSeekFrom, seek},
-    io::{Errno, read},
+    io::read,
 };
 
-use crate::io::BlockIo;
-
-#[derive(Debug)]
-pub struct Error(Errno);
-
-impl core::fmt::Display for Error {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "os error {}", self.0.raw_os_error())
-    }
-}
-
-impl core::error::Error for Error {}
-
-impl From<Errno> for Error {
-    fn from(e: Errno) -> Self {
-        Self(e)
-    }
-}
-
-impl From<Error> for crate::error::Error<Error> {
-    fn from(e: Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-impl From<Errno> for crate::error::Error<Error> {
-    fn from(e: Errno) -> Self {
-        Self::Io(Error(e))
-    }
-}
-
-impl From<ErrorKind> for Error {
-    fn from(e: ErrorKind) -> Self {
-        Self(match e {
-            ErrorKind::NotFound => Errno::NODEV,
-            ErrorKind::PermissionDenied => Errno::ACCESS,
-            ErrorKind::ConnectionRefused => Errno::CONNREFUSED,
-            ErrorKind::ConnectionReset => Errno::CONNRESET,
-            ErrorKind::ConnectionAborted => Errno::CONNABORTED,
-            ErrorKind::NotConnected => Errno::NOTCONN,
-            ErrorKind::AddrInUse => Errno::ADDRINUSE,
-            ErrorKind::AddrNotAvailable => Errno::ADDRNOTAVAIL,
-            ErrorKind::BrokenPipe => Errno::PIPE,
-            ErrorKind::AlreadyExists => Errno::EXIST,
-            ErrorKind::InvalidInput => Errno::INVAL,
-            ErrorKind::InvalidData => Errno::ILSEQ,
-            ErrorKind::TimedOut => Errno::TIMEDOUT,
-            ErrorKind::Interrupted => Errno::INTR,
-            ErrorKind::Unsupported => Errno::NOTSUP,
-            ErrorKind::OutOfMemory => Errno::NOMEM,
-            _ => Errno::IO,
-        })
-    }
-}
-
-impl From<Error> for embedded_io::ErrorKind {
-    fn from(e: Error) -> embedded_io::ErrorKind {
-        e.kind()
-    }
-}
-
-impl EmbeddedError for Error {
-    fn kind(&self) -> ErrorKind {
-        match self.0 {
-            Errno::NOENT | Errno::NODEV | Errno::NXIO => ErrorKind::NotFound,
-            Errno::PERM | Errno::ACCESS => ErrorKind::PermissionDenied,
-            Errno::CONNREFUSED => ErrorKind::ConnectionRefused,
-            Errno::CONNRESET => ErrorKind::ConnectionReset,
-            Errno::CONNABORTED => ErrorKind::ConnectionAborted,
-            Errno::NOTCONN => ErrorKind::NotConnected,
-            Errno::ADDRINUSE => ErrorKind::AddrInUse,
-            Errno::ADDRNOTAVAIL => ErrorKind::AddrNotAvailable,
-            Errno::PIPE | Errno::NOLINK => ErrorKind::BrokenPipe,
-            Errno::EXIST => ErrorKind::AlreadyExists,
-            Errno::INVAL | Errno::BADF | Errno::FAULT => ErrorKind::InvalidInput,
-            Errno::ILSEQ | Errno::BADMSG | Errno::PROTO => ErrorKind::InvalidData,
-            Errno::TIMEDOUT => ErrorKind::TimedOut,
-            Errno::INTR => ErrorKind::Interrupted,
-            Errno::NOSYS | Errno::NOTSUP => ErrorKind::Unsupported,
-            Errno::NOMEM => ErrorKind::OutOfMemory,
-            _ => ErrorKind::Other,
-        }
-    }
-}
+use crate::io::{BlockIo, no_std::error::IoError};
 
 #[derive(Debug)]
 pub struct File {
@@ -98,7 +13,7 @@ pub struct File {
 }
 
 impl EmbeddedErrorType for File {
-    type Error = Error;
+    type Error = IoError;
 }
 
 impl Read for File {

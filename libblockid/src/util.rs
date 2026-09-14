@@ -1,9 +1,14 @@
-#[cfg(target_os = "macos")]
-mod macos; 
+#[cfg(all(feature = "os_calls", target_os = "macos"))]
+mod macos;
 
 use widestring::U16String;
 
 use crate::Endianness;
+#[cfg(feature = "os_calls")]
+use crate::{
+    error::PartToDiskError,
+    io::{IoError, Path, PathBuf},
+};
 
 pub(crate) fn bytes_to_u16string(bytes: &[u8], endianness: Endianness) -> U16String {
     let units: Vec<u16> = bytes
@@ -34,13 +39,9 @@ pub(crate) fn bytes_to_u16string(bytes: &[u8], endianness: Endianness) -> U16Str
 ///
 /// [`fcntl`]: https://docs.rs/libc/latest/libc/fn.fcntl.html
 #[cfg(feature = "os_calls")]
-pub fn fd_to_path<F: rustix::fd::AsRawFd>(
-    fd: F,
-) -> Result<crate::io::PathBuf, crate::error::Error<crate::io::IoError>> {
+pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, IoError> {
     #[cfg(target_os = "linux")]
     {
-        use crate::io::PathBuf;
-
         let link = rustix::fs::readlink(format!("/proc/self/fd/{}", fd.as_raw_fd()), Vec::new())?;
 
         #[cfg(feature = "std")]
@@ -59,8 +60,6 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(
     {
         use libc::{__error, F_GETPATH, PATH_MAX, fcntl};
         use rustix::io::Errno;
-
-        use crate::io::PathBuf;
 
         let mut buf = [0u8; PATH_MAX as usize];
         let ret = unsafe { fcntl(fd.as_raw_fd(), F_GETPATH, buf.as_mut_ptr()) };
@@ -88,9 +87,7 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(
 }
 
 #[cfg(feature = "os_calls")]
-pub fn part_to_disk<F: rustix::fd::AsFd>(
-    fd: F,
-) -> Result<crate::io::PathBuf, crate::error::Error<crate::io::IoError>> {
+pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<IoError>> {
     #[cfg(target_os = "linux")]
     {
         todo!()
@@ -98,7 +95,10 @@ pub fn part_to_disk<F: rustix::fd::AsFd>(
 
     #[cfg(target_os = "macos")]
     {
-        todo!()
+        // I separated the macOS code into a separate module due to the
+        // ffi interfaces and other junk that would just clutter this
+        // file up.
+        macos::part_to_disk(path)
     }
 
     #[cfg(target_os = "freebsd")]

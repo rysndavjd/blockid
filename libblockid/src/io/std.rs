@@ -1,6 +1,10 @@
 pub use std::io::SeekFrom;
 #[cfg(feature = "os_calls")]
-pub use std::{fs::File, io::Error as IoError, path::PathBuf};
+pub use std::{
+    fs::File,
+    io::{Error as IoError, ErrorKind as IoErrorKind},
+    path::{Path, PathBuf},
+};
 
 #[cfg(feature = "os_calls")]
 mod file {

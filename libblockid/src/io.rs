@@ -9,11 +9,11 @@ pub mod topology;
 #[cfg(feature = "no_std")]
 pub use crate::io::no_std::SeekFrom;
 #[cfg(all(feature = "os_calls", feature = "no_std"))]
-pub use crate::io::no_std::{Error as IoError, File, PathBuf};
+pub use crate::io::no_std::{File, IoError, IoErrorKind, Path, PathBuf};
 #[cfg(feature = "std")]
 pub use crate::io::std::SeekFrom;
 #[cfg(all(feature = "os_calls", feature = "std"))]
-pub use crate::io::std::{File, IoError, PathBuf};
+pub use crate::io::std::{File, IoError, IoErrorKind, Path, PathBuf};
 use crate::{error::Error, probe::Magic, std::ops::Range};
 
 /// Trait used to get access to underlying device.

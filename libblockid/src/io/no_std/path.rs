@@ -29,6 +29,21 @@ impl Path {
         &mut self.inner
     }
 
+    pub(crate) fn file_name(&self) -> Option<&[u8]> {
+        match self.inner.last() {
+            Some(b'/') => {
+                return None;
+            }
+            None => return None,
+            _ => (),
+        }
+
+        match self.inner.iter().rposition(|&b| b == b'/') {
+            Some(idx) => Some(&self.inner[idx + 1..]),
+            None => Some(&self.inner),
+        }
+    }
+
     /// Converts this [`Path`] to an owned [`PathBuf`].
     pub fn to_path_buf(&self) -> PathBuf {
         PathBuf::from(self.inner.to_vec())
@@ -60,6 +75,13 @@ impl AsRef<Path> for Vec<u8> {
     #[inline]
     fn as_ref(&self) -> &Path {
         Path::new(self)
+    }
+}
+
+impl AsRef<Path> for &str {
+    #[inline]
+    fn as_ref(&self) -> &Path {
+        Path::new(self.as_bytes())
     }
 }
 
@@ -100,6 +122,14 @@ impl PathBuf {
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
         &mut self.inner
     }
+
+    /// This fn provides no separator handling and just joins whatever
+    /// two [`PathBuf`]s together.
+    pub(crate) fn join<P: AsRef<Path>>(&self, path: P) -> PathBuf {
+        let mut inner = self.inner.clone();
+        inner.extend_from_slice(path.as_ref().as_bytes());
+        PathBuf { inner }
+    }
 }
 
 impl Default for PathBuf {
@@ -129,6 +159,14 @@ impl From<&[u8]> for PathBuf {
         return PathBuf {
             inner: buf[..null].to_vec(),
         };
+    }
+}
+
+impl From<&str> for PathBuf {
+    fn from(value: &str) -> Self {
+        PathBuf {
+            inner: value.as_bytes().to_vec(),
+        }
     }
 }
 
