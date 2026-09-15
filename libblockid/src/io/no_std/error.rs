@@ -1,6 +1,8 @@
 use embedded_io::{Error as EmbeddedError, ErrorKind as IoErrorKind};
 use rustix::io::Errno;
 
+use crate::error::PartToDiskError;
+
 #[derive(Debug)]
 pub struct IoError(Errno);
 
@@ -80,6 +82,36 @@ impl EmbeddedError for IoError {
             Errno::NOSYS | Errno::NOTSUP => IoErrorKind::Unsupported,
             Errno::NOMEM => IoErrorKind::OutOfMemory,
             _ => IoErrorKind::Other,
+        }
+    }
+}
+
+impl From<Errno> for PartToDiskError<IoError> {
+    fn from(e: Errno) -> Self {
+        match e {
+            Errno::NOENT | Errno::NODEV | Errno::NXIO => {
+                IoError::from(IoErrorKind::NotFound).into()
+            }
+            Errno::PERM | Errno::ACCESS => IoError::from(IoErrorKind::PermissionDenied).into(),
+            Errno::CONNREFUSED => IoError::from(IoErrorKind::ConnectionRefused).into(),
+            Errno::CONNRESET => IoError::from(IoErrorKind::ConnectionReset).into(),
+            Errno::CONNABORTED => IoError::from(IoErrorKind::ConnectionAborted).into(),
+            Errno::NOTCONN => IoError::from(IoErrorKind::NotConnected).into(),
+            Errno::ADDRINUSE => IoError::from(IoErrorKind::AddrInUse).into(),
+            Errno::ADDRNOTAVAIL => IoError::from(IoErrorKind::AddrNotAvailable).into(),
+            Errno::PIPE | Errno::NOLINK => IoError::from(IoErrorKind::BrokenPipe).into(),
+            Errno::EXIST => IoError::from(IoErrorKind::AlreadyExists).into(),
+            Errno::INVAL | Errno::BADF | Errno::FAULT => {
+                IoError::from(IoErrorKind::InvalidInput).into()
+            }
+            Errno::ILSEQ | Errno::BADMSG | Errno::PROTO => {
+                IoError::from(IoErrorKind::InvalidData).into()
+            }
+            Errno::TIMEDOUT => IoError::from(IoErrorKind::TimedOut).into(),
+            Errno::INTR => IoError::from(IoErrorKind::Interrupted).into(),
+            Errno::NOSYS | Errno::NOTSUP => IoError::from(IoErrorKind::Unsupported).into(),
+            Errno::NOMEM => IoError::from(IoErrorKind::OutOfMemory).into(),
+            _ => IoError::from(IoErrorKind::Other).into(),
         }
     }
 }

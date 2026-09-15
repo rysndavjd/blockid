@@ -48,6 +48,14 @@ impl Path {
     pub fn to_path_buf(&self) -> PathBuf {
         PathBuf::from(self.inner.to_vec())
     }
+
+    /// This fn provides no separator handling and just
+    /// creates an owned PathBuf with path joined to self.
+    pub(crate) fn join<P: AsRef<Path>>(&self, path: P) -> PathBuf {
+        let mut inner = self.inner.to_vec();
+        inner.extend_from_slice(path.as_ref().as_bytes());
+        PathBuf { inner }
+    }
 }
 
 impl AsRef<[u8]> for Path {

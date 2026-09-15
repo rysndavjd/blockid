@@ -102,7 +102,9 @@ pub enum PartToDiskError<E: fmt::Debug> {
     UnableToGetService,
     #[cfg(target_os = "macos")]
     InvalidService,
+    #[cfg(target_os = "macos")]
     DiskNotFound,
+    DiskNotPartition,
 }
 
 #[cfg(feature = "os_calls")]

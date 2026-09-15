@@ -46,8 +46,7 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, IoError> {
 
         #[cfg(feature = "std")]
         {
-            use std::ffi::OsStr;
-            use std::os::unix::ffi::OsStrExt;
+            use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
             return Ok(PathBuf::from(OsStr::from_bytes(link.as_bytes())));
         }
@@ -90,7 +89,45 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, IoError> {
 pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<IoError>> {
     #[cfg(target_os = "linux")]
     {
-        todo!()
+        use rustix::fs::{Access, access, major, minor, readlink, stat};
+
+        #[cfg(feature = "std")]
+        let path = path.as_ref();
+        #[cfg(feature = "no_std")]
+        let path = path.as_ref().as_bytes();
+
+        let dev = stat(path)?.st_rdev;
+
+        let sys_path = format!("/sys/dev/block/{}:{}", major(dev), minor(dev));
+
+        if access(format!("{sys_path}/partition"), Access::EXISTS).is_ok() {
+            let link = readlink(sys_path, Vec::new())?;
+
+            let last = link
+                .as_bytes()
+                .iter()
+                .rposition(|b| b == &b'/')
+                .ok_or(PartToDiskError::DiskNotPartition)?;
+
+            let second_last = link.as_bytes()[..last]
+                .iter()
+                .rposition(|b| b == &b'/')
+                .ok_or(PartToDiskError::DiskNotPartition)?;
+
+            let disk = &link.as_bytes()[second_last.saturating_add(1)..last];
+
+            #[cfg(feature = "std")]
+            {
+                use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+                return Ok(Path::new("/dev").join(OsStr::from_bytes(disk)));
+            }
+            #[cfg(feature = "no_std")]
+            {
+                return Ok(Path::new("/dev").join(disk));
+            }
+        }
+        return Err(PartToDiskError::DiskNotPartition);
     }
 
     #[cfg(target_os = "macos")]
