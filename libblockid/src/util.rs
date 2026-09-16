@@ -124,7 +124,7 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
             }
             #[cfg(feature = "no_std")]
             {
-                return Ok(Path::new("/dev").join(disk));
+                return Ok(Path::new("/dev/").join(disk));
             }
         }
         return Err(PartToDiskError::DiskNotPartition);
