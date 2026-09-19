@@ -127,7 +127,7 @@ impl<IO: BlockIo> Reader<IO> {
     /// meaning the probed object is probably a regular file.
     #[cfg(feature = "os_calls")]
     #[inline]
-    pub(crate) fn os_calls(&self) -> bool {
+    pub(crate) const fn os_calls(&self) -> bool {
         self.os_calls
     }
 

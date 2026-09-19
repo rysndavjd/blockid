@@ -584,6 +584,11 @@ impl FsInfo {
     pub fn creator(&self) -> Option<&String> {
         self.creator.as_ref()
     }
+
+    #[cfg(feature = "serde")]
+    pub fn filtered<'a>(&'a self, fields: Fields) -> FilteredFsInfo<'a> {
+        FilteredFsInfo::new(self, fields)
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -687,21 +692,178 @@ bitflags! {
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct FsFilter: u64 {
+        #[bitflags(flag_name = "apfs")]
         const SKIP_APFS = 1 << 0;
+        #[bitflags(flag_name = "cramfs")]
         const SKIP_CRAMFS = 1 << 1;
+        #[bitflags(flag_name = "exfat")]
         const SKIP_EXFAT = 1 << 2;
+        #[bitflags(flag_name = "jbd")]
         const SKIP_JBD = 1 << 3;
+        #[bitflags(flag_name = "ext2")]
         const SKIP_EXT2 = 1 << 4;
+        #[bitflags(flag_name = "ext3")]
         const SKIP_EXT3 = 1 << 5;
+        #[bitflags(flag_name = "ext4")]
         const SKIP_EXT4 = 1 << 6;
+        #[bitflags(flag_name = "luks1")]
         const SKIP_LUKS1 = 1 << 7;
+        #[bitflags(flag_name = "luks2")]
         const SKIP_LUKS2 = 1 << 8;
+        #[bitflags(flag_name = "luks_opal")]
         const SKIP_LUKS_OPAL = 1 << 9;
+        #[bitflags(flag_name = "ntfs")]
         const SKIP_NTFS = 1 << 10;
+        #[bitflags(flag_name = "squashfs")]
         const SKIP_SQUASHFS = 1 << 11;
+        #[bitflags(flag_name = "squashfs3")]
         const SKIP_SQUASHFS3 = 1 << 12;
+        #[bitflags(flag_name = "vfat")]
         const SKIP_VFAT = 1 << 13;
+        #[bitflags(flag_name = "vxfs")]
         const SKIP_VXFS = 1 << 14;
+        #[bitflags(flag_name = "xfs")]
         const SKIP_XFS = 1 << 15;
+    }
+}
+
+#[cfg(feature = "serde")]
+bitflags! {
+    #[non_exhaustive]
+    #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct Fields: u64 {
+        const FS_TYPE = 1 << 0;
+        const SUB_TYPE = 1 << 1;
+        const LABEL = 1 << 2;
+        const FS_ID = 1 << 3;
+        const SUB_MEMBER_ID = 1 << 4;
+        const EXT_LOG_ID = 1 << 5;
+        const EXT_JOURNAL_ID = 1 << 6;
+        const VERSION = 1 << 7;
+        const MAGIC = 1 << 8;
+        const FS_SIZE = 1 << 9;
+        const FS_LAST_BLOCK = 1 << 10;
+        const FS_BLOCK_SIZE = 1 << 11;
+        const BLOCK_SIZE = 1 << 12;
+        const ENDIANNESS = 1 << 13;
+        const CREATOR = 1 << 14;
+    }
+}
+
+#[cfg(feature = "serde")]
+pub struct FilteredFsInfo<'a> {
+    fs_info: &'a FsInfo,
+    fields: Fields,
+}
+
+#[cfg(feature = "serde")]
+impl<'a> FilteredFsInfo<'a> {
+    fn new(fs_info: &'a FsInfo, fields: Fields) -> FilteredFsInfo<'a> {
+        FilteredFsInfo { fs_info, fields }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for FilteredFsInfo<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use bitflags::Flags;
+        use serde::ser::SerializeMap;
+
+        let len = self.fields.known_bits().count_ones() as usize;
+
+        let mut map = serializer.serialize_map(Some(len))?;
+
+        if self.fields.contains(Fields::FS_TYPE) {
+            map.serialize_entry("FS_TYPE", &self.fs_info.fs_type.expect("FS_TYPE NONE"))?;
+        }
+        if self.fields.contains(Fields::SUB_TYPE) {
+            map.serialize_entry("SUB_TYPE", &self.fs_info.sub_type.expect("SUB_TYPE NONE"))?;
+        }
+        if self.fields.contains(Fields::LABEL) {
+            match &self.fs_info.label.as_ref().expect("LABEL NONE") {
+                Label::Utf8(utf8) => {
+                    map.serialize_entry("LABEL", &utf8.to_string().trim_end_matches('\0'))?;
+                }
+                Label::Utf16(utf16) => {
+                    map.serialize_entry("LABEL", &utf16.to_string_lossy().trim_end_matches('\0'))?
+                }
+            }
+        }
+        if self.fields.contains(Fields::FS_ID) {
+            match &self.fs_info.fs_id.expect("FS_ID NONE") {
+                FsId::Uuid(uuid) => map.serialize_entry("FS_ID", uuid)?,
+                FsId::VolumeId32(id32) => map.serialize_entry("FS_ID", id32)?,
+                FsId::VolumeId64(id64) => map.serialize_entry("FS_ID", id64)?,
+            }
+        }
+        if self.fields.contains(Fields::SUB_MEMBER_ID) {
+            map.serialize_entry(
+                "SUB_MEMBER_ID",
+                &self.fs_info.sub_member_id.expect("SUB_MEMBER_ID NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::EXT_LOG_ID) {
+            map.serialize_entry(
+                "EXT_LOG_ID",
+                &self.fs_info.ext_log_id.expect("EXT_LOG_ID NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::EXT_JOURNAL_ID) {
+            map.serialize_entry(
+                "EXT_JOURNAL_ID",
+                &self.fs_info.ext_journal_id.expect("EXT_JOURNAL_ID NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::VERSION) {
+            map.serialize_entry(
+                "VERSION",
+                &self.fs_info.version.as_ref().expect("VERSION NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::MAGIC) {
+            map.serialize_entry("MAGIC", &self.fs_info.magic.as_ref().expect("MAGIC NONE"))?;
+            map.serialize_entry(
+                "MAGIC_OFFSET",
+                &self.fs_info.magic_offset.expect("MAGIC_OFFSET NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::FS_SIZE) {
+            map.serialize_entry("FS_SIZE", &self.fs_info.fs_size.expect("FS_SIZE NONE"))?;
+        }
+        if self.fields.contains(Fields::FS_LAST_BLOCK) {
+            map.serialize_entry(
+                "FS_LAST_BLOCK",
+                &self.fs_info.fs_last_block.expect("FS_LAST_BLOCK NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::FS_BLOCK_SIZE) {
+            map.serialize_entry(
+                "FS_BLOCK_SIZE",
+                &self.fs_info.fs_block_size.expect("FS_BLOCK_SIZE NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::BLOCK_SIZE) {
+            map.serialize_entry(
+                "BLOCK_SIZE",
+                &self.fs_info.block_size.expect("BLOCK_SIZE NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::ENDIANNESS) {
+            map.serialize_entry(
+                "ENDIANNESS",
+                &self.fs_info.endianness.expect("ENDIANNESS NONE"),
+            )?;
+        }
+        if self.fields.contains(Fields::CREATOR) {
+            map.serialize_entry(
+                "CREATOR",
+                &self.fs_info.creator.as_ref().expect("CREATOR NONE"),
+            )?;
+        }
+
+        map.end()
     }
 }

@@ -358,8 +358,11 @@ bitflags! {
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct PtFilter: u64 {
+        #[bitflags(flag_name = "aix")]
         const SKIP_AIX = 1 << 0;
+        #[bitflags(flag_name = "mbr")]
         const SKIP_MBR = 1 << 1;
+        #[bitflags(flag_name = "gpt")]
         const SKIP_GPT = 1 << 2;
     }
 }

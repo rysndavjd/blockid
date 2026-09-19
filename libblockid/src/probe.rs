@@ -136,6 +136,51 @@ impl Magic {
     };
 }
 
+#[allow(clippy::type_complexity)]
+fn probe_with<IO: BlockIo, T>(
+    reader: &mut Reader<IO>,
+    offset: u64,
+    minsz: Option<u64>,
+    magics: Option<&'static [Magic]>,
+    probe: fn(&mut Reader<IO>, u64, Magic) -> Result<T, Error<IO::Error>>,
+) -> Result<T, Error<IO::Error>> {
+    #[cfg(feature = "os_calls")]
+    {
+        if reader.os_calls() {
+            if let Some(minsz) = minsz
+                && reader.device_size()? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        } else {
+            if let Some(minsz) = minsz
+                && reader.seek(crate::io::SeekFrom::End(0))? < minsz
+            {
+                return Err(Error::DeviceTooSmall);
+            }
+        }
+    }
+
+    #[cfg(not(feature = "os_calls"))]
+    {
+        if let Some(minsz) = minsz
+            && reader.seek(crate::io::SeekFrom::End(0))? < minsz
+        {
+            return Err(Error::DeviceTooSmall);
+        }
+    }
+
+    let magic = match magics {
+        Some(magics) => match reader.get_magic(magics)? {
+            Some(magic) => magic,
+            None => return Err(Error::UnableToLocateMagicSignature),
+        },
+        None => Magic::EMPTY_MAGIC,
+    };
+
+    (probe)(reader, offset, magic)
+}
+
 fn probe_filesystem<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
@@ -146,49 +191,12 @@ fn probe_filesystem<IO: BlockIo>(
             continue;
         }
 
-        let handle = block.1.fs_handler();
+        let handle = block.1.fs_handler::<IO>();
 
-        #[cfg(feature = "os_calls")]
-        {
-            if reader.os_calls() {
-                if let Some(minsz) = handle.minsz
-                    && reader.device_size()? < minsz
-                {
-                    continue;
-                }
-            } else {
-                if let Some(minsz) = handle.minsz
-                    && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-                {
-                    continue;
-                }
-            }
-        }
-
-        #[cfg(not(feature = "os_calls"))]
-        {
-            if let Some(minsz) = handle.minsz
-                && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-            {
-                continue;
-            }
-        }
-
-        let magic = match handle.magics {
-            Some(magics) => match reader.get_magic(magics)? {
-                Some(magic) => magic,
-                None => continue,
-            },
-            None => Magic::EMPTY_MAGIC,
-        };
-
-        match (handle.probe)(reader, offset, magic) {
+        match probe_with(reader, offset, handle.minsz, handle.magics, handle.probe) {
             Ok(t) => return Ok(t),
-            Err(e) => {
-                if let Error::Io(_) = e {
-                    return Err(e);
-                }
-            }
+            Err(Error::Io(e)) => return Err(Error::Io(e)),
+            Err(_) => continue,
         };
     }
     return Err(Error::ProbesExhausted);
@@ -200,42 +208,7 @@ fn search_for_filesystem<IO: BlockIo>(
     filesystem: FsType,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let handle = filesystem.fs_handler::<IO>();
-
-    #[cfg(feature = "os_calls")]
-    {
-        if reader.os_calls() {
-            if let Some(minsz) = handle.minsz
-                && reader.device_size()? < minsz
-            {
-                return Err(Error::DeviceTooSmall);
-            }
-        } else {
-            if let Some(minsz) = handle.minsz
-                && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-            {
-                return Err(Error::DeviceTooSmall);
-            }
-        }
-    }
-
-    #[cfg(not(feature = "os_calls"))]
-    {
-        if let Some(minsz) = handle.minsz
-            && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-        {
-            return Err(Error::DeviceTooSmall);
-        }
-    }
-
-    let magic = match handle.magics {
-        Some(magics) => match reader.get_magic(magics)? {
-            Some(magic) => magic,
-            None => return Err(Error::UnableToLocateMagicSignature),
-        },
-        None => Magic::EMPTY_MAGIC,
-    };
-
-    (handle.probe)(reader, offset, magic)
+    probe_with(reader, offset, handle.minsz, handle.magics, handle.probe)
 }
 
 fn probe_part_table<IO: BlockIo>(
@@ -250,47 +223,10 @@ fn probe_part_table<IO: BlockIo>(
 
         let handle = block.1.pt_handler();
 
-        #[cfg(feature = "os_calls")]
-        {
-            if reader.os_calls() {
-                if let Some(minsz) = handle.minsz
-                    && reader.device_size()? < minsz
-                {
-                    continue;
-                }
-            } else {
-                if let Some(minsz) = handle.minsz
-                    && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-                {
-                    continue;
-                }
-            }
-        }
-
-        #[cfg(not(feature = "os_calls"))]
-        {
-            if let Some(minsz) = handle.minsz
-                && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-            {
-                continue;
-            }
-        }
-
-        let magic = match handle.magics {
-            Some(magics) => match reader.get_magic(magics)? {
-                Some(magic) => magic,
-                None => continue,
-            },
-            None => Magic::EMPTY_MAGIC,
-        };
-
-        match (handle.probe)(reader, offset, magic) {
+        match probe_with(reader, offset, handle.minsz, handle.magics, handle.probe) {
             Ok(t) => return Ok(t),
-            Err(e) => {
-                if let Error::Io(_) = e {
-                    return Err(e);
-                }
-            }
+            Err(Error::Io(e)) => return Err(Error::Io(e)),
+            Err(_) => continue,
         };
     }
     return Err(Error::ProbesExhausted);
@@ -302,42 +238,7 @@ fn search_for_part_table<IO: BlockIo>(
     part_table: PtType,
 ) -> Result<PtInfo, Error<IO::Error>> {
     let handle = part_table.pt_handler::<IO>();
-
-    #[cfg(feature = "os_calls")]
-    {
-        if reader.os_calls() {
-            if let Some(minsz) = handle.minsz
-                && reader.device_size()? < minsz
-            {
-                return Err(Error::DeviceTooSmall);
-            }
-        } else {
-            if let Some(minsz) = handle.minsz
-                && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-            {
-                return Err(Error::DeviceTooSmall);
-            }
-        }
-    }
-
-    #[cfg(not(feature = "os_calls"))]
-    {
-        if let Some(minsz) = handle.minsz
-            && reader.seek(crate::io::SeekFrom::End(0))? < minsz
-        {
-            return Err(Error::DeviceTooSmall);
-        }
-    }
-
-    let magic = match handle.magics {
-        Some(magics) => match reader.get_magic(magics)? {
-            Some(magic) => magic,
-            None => return Err(Error::UnableToLocateMagicSignature),
-        },
-        None => Magic::EMPTY_MAGIC,
-    };
-
-    (handle.probe)(reader, offset, magic)
+    probe_with(reader, offset, handle.minsz, handle.magics, handle.probe)
 }
 
 /// Probe for detecting filesystems and partition tables on a block device.

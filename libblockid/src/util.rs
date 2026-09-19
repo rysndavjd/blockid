@@ -132,9 +132,8 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
 
     #[cfg(target_os = "macos")]
     {
-        // I separated the macOS code into a separate module due to the
-        // ffi interfaces and other junk that would just clutter this
-        // file up.
+        // I separated the macOS code into a separate module due to the ffi
+        // interfaces and other junk that would just clutter this file up.
         macos::part_to_disk(path)
     }
 

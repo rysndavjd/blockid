@@ -1,14 +1,14 @@
 use std::{
-    io::{self, stdout},
+    io::{self, ErrorKind, stdout},
     path::PathBuf,
 };
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use libblockid::{
     Probe,
     error::Error,
-    filesystem::{FS_DETECT_ORDER, FsFilter, FsType},
-    partition::{PT_DETECT_ORDER, PtFilter, PtType},
+    filesystem::{FS_DETECT_ORDER, FsFilter, FsInfo},
+    partition::{PT_DETECT_ORDER, PtFilter, PtInfo},
 };
 use serde::Serialize;
 use serde_dotenv::to_writer as to_dotenv_writer;
@@ -50,13 +50,13 @@ enum Commands {
         #[arg(short = 'f', long = "format", value_enum)]
         format: Option<Format>,
 
-        /// Set filter for what filesystem type to parse for.
-        #[arg(long = "fs-filter", value_enum)]
-        filesystem: Option<Vec<FsType>>,
+        /// Set filter for what filesystems to skip.
+        #[arg(long = "fs-filter", value_parser = ["apfs", "cramfs", "exfat", "jbd", "ext2", "ext3", "ext4", "luks1", "luks2", "luks_opal", "ntfs", "squashfs", "squashfs3", "vfat", "vxfs", "xfs"], num_args = 1.., value_delimiter = ',')]
+        filesystem: Option<Vec<String>>,
 
-        /// Set filter for what partition table type to parse for.
-        #[arg(long = "pt-filter", value_enum)]
-        part_table: Option<Vec<PtType>>,
+        /// Set filter for what partition tables to skip.
+        #[arg(long = "pt-filter", value_parser = ["aix", "mbr", "gpt"], num_args = 1.., value_delimiter = ',')]
+        part_table: Option<Vec<String>>,
     },
 
     /// Display I/O topology of a device
@@ -95,6 +95,32 @@ struct Topology {
     alignment_offset: Option<u64>,
 }
 
+fn write_output<T: Serialize>(value: &T, format: Option<Format>) -> Result<(), Error<io::Error>> {
+    match format.unwrap_or_default() {
+        Format::Export => {
+            to_dotenv_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?
+        }
+        Format::Json => {
+            to_json_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?
+        }
+    }
+    Ok(())
+}
+
+enum ProbeResult {
+    PartTable(PtInfo),
+    Filesystem(FsInfo),
+}
+
+impl Serialize for ProbeResult {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ProbeResult::PartTable(p) => p.serialize(s),
+            ProbeResult::Filesystem(f) => f.serialize(s),
+        }
+    }
+}
+
 fn main() {
     if let Err(e) = _main() {
         eprintln!("{}", e)
@@ -130,47 +156,39 @@ fn _main() -> Result<(), Error<io::Error>> {
             } => {
                 let mut probe = Probe::open(device, offset.unwrap_or_default())?;
 
-                match probe.probe_part_table(PtFilter::empty()) {
-                    Ok(info) => {
-                        match format.unwrap_or_default() {
-                            Format::Export => {
-                                to_dotenv_writer(stdout(), &info).unwrap();
-                            }
-                            Format::Json => {
-                                to_json_writer(stdout(), &info).unwrap();
-                            }
+                let pt_filter = match part_table {
+                    Some(items) => {
+                        let mut filter = PtFilter::empty();
+                        for str in items {
+                            filter |= PtFilter::from_name(&str).expect("CLAP SHOULD CHECK INPUTS");
                         }
-
-                        return Ok(());
+                        filter
                     }
-                    Err(e) => {
-                        if let Error::Io(_) = e {
-                            return Err(e);
+                    None => PtFilter::empty(),
+                };
+
+                let fs_filter = match filesystem {
+                    Some(items) => {
+                        let mut filter = FsFilter::empty();
+                        for str in items {
+                            filter |= FsFilter::from_name(&str).expect("CLAP SHOULD CHECK INPUTS");
                         }
+                        filter
                     }
-                }
+                    None => FsFilter::empty(),
+                };
 
-                match probe.probe_filesystem(FsFilter::empty()) {
-                    Ok(info) => {
-                        match format.unwrap_or_default() {
-                            Format::Export => {
-                                to_dotenv_writer(stdout(), &info).unwrap();
-                            }
-                            Format::Json => {
-                                to_json_writer(stdout(), &info).unwrap();
-                            }
-                        }
+                let result = match probe.probe_part_table(pt_filter) {
+                    Ok(info) => ProbeResult::PartTable(info),
+                    Err(Error::Io(e)) => return Err(Error::Io(e)),
+                    Err(_) => match probe.probe_filesystem(fs_filter) {
+                        Ok(info) => ProbeResult::Filesystem(info),
+                        Err(Error::Io(e)) => return Err(Error::Io(e)),
+                        Err(_) => return Err(Error::ProbesExhausted),
+                    },
+                };
 
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        if let Error::Io(_) = e {
-                            return Err(e);
-                        }
-                    }
-                }
-
-                return Err(Error::ProbesExhausted);
+                write_output(&result, format)?;
             }
             Commands::Topology { device, format } => {
                 let probe = Probe::open(device, 0)?;
@@ -187,19 +205,11 @@ fn _main() -> Result<(), Error<io::Error>> {
                     alignment_offset: probe.alignment_offset()?.into(),
                 };
 
-                match format.unwrap_or_default() {
-                    Format::Export => {
-                        to_dotenv_writer(stdout(), &topology).expect("ahh, making dotenv failed.");
-                        println!();
-                    }
-                    Format::Json => {
-                        to_json_writer(stdout(), &topology)
-                            .expect("ahh, making JSON pretty failed.");
-                        println!();
-                    }
-                }
+                write_output(&topology, format)?;
             }
         }
+    } else {
+        Cli::command().print_help().unwrap();
     }
     Ok(())
 }
