@@ -14,6 +14,7 @@ use serde::Serialize;
 use serde_dotenv::to_writer as to_dotenv_writer;
 use serde_json::to_writer_pretty as to_json_writer;
 use shadow_rs::shadow;
+use toml::to_string_pretty as to_toml_pretty;
 
 shadow!(build);
 
@@ -46,15 +47,15 @@ enum Commands {
         #[arg(short = 'o', long = "offset", value_name = "BYTES")]
         offset: Option<u64>,
 
-        /// Set output format to list probed data.
+        /// Set output format to list probed data
         #[arg(short = 'f', long = "format", value_enum)]
         format: Option<Format>,
 
-        /// Set filter for what filesystems to skip.
+        /// Set filter for what filesystems to probe for
         #[arg(long = "fs-filter", value_parser = ["apfs", "cramfs", "exfat", "jbd", "ext2", "ext3", "ext4", "luks1", "luks2", "luks_opal", "ntfs", "squashfs", "squashfs3", "vfat", "vxfs", "xfs"], num_args = 1.., value_delimiter = ',')]
         filesystem: Option<Vec<String>>,
 
-        /// Set filter for what partition tables to skip.
+        /// Set filter for what partition tables to probe for
         #[arg(long = "pt-filter", value_parser = ["aix", "mbr", "gpt"], num_args = 1.., value_delimiter = ',')]
         part_table: Option<Vec<String>>,
     },
@@ -65,7 +66,7 @@ enum Commands {
         #[arg(short = 'd', long = "device", value_name = "PATH")]
         device: PathBuf,
 
-        /// Set output format to list topology infomation.
+        /// Set output format to list topology infomation
         #[arg(short = 'f', long = "format", value_enum)]
         format: Option<Format>,
     },
@@ -78,6 +79,8 @@ enum Format {
     Export,
     /// Output in JSON.
     Json,
+    /// Output in TOML.
+    Toml,
 }
 
 #[derive(Serialize)]
@@ -102,6 +105,10 @@ fn write_output<T: Serialize>(value: &T, format: Option<Format>) -> Result<(), E
         }
         Format::Json => {
             to_json_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?
+        }
+        Format::Toml => {
+            let out = to_toml_pretty(value).map_err(|_| Error::Io(ErrorKind::Other.into()))?;
+            print!("{out}")
         }
     }
     Ok(())
@@ -160,22 +167,26 @@ fn _main() -> Result<(), Error<io::Error>> {
                     Some(items) => {
                         let mut filter = PtFilter::empty();
                         for str in items {
-                            filter |= PtFilter::from_name(&str).expect("CLAP SHOULD CHECK INPUTS");
+                            filter.insert(
+                                PtFilter::from_name(&str).expect("CLAP SHOULD CHECK INPUTS"),
+                            );
                         }
                         filter
                     }
-                    None => PtFilter::empty(),
+                    None => PtFilter::all(),
                 };
 
                 let fs_filter = match filesystem {
                     Some(items) => {
                         let mut filter = FsFilter::empty();
                         for str in items {
-                            filter |= FsFilter::from_name(&str).expect("CLAP SHOULD CHECK INPUTS");
+                            filter.insert(
+                                FsFilter::from_name(&str).expect("CLAP SHOULD CHECK INPUTS"),
+                            );
                         }
                         filter
                     }
-                    None => FsFilter::empty(),
+                    None => FsFilter::all(),
                 };
 
                 let result = match probe.probe_part_table(pt_filter) {

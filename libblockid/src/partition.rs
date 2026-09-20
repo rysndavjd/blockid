@@ -21,8 +21,8 @@ use crate::{
 /// Order used to detect partition tables
 #[rustfmt::skip]
 pub const PT_DETECT_ORDER: &[(PtFilter, PtType)] = &[
-    (PtFilter::SKIP_GPT, PtType::Gpt),
-    (PtFilter::SKIP_MBR, PtType::Mbr),
+    (PtFilter::GPT, PtType::Gpt),
+    (PtFilter::MBR, PtType::Mbr),
 ];
 
 /// A generic handler for probing a partition table type.
@@ -355,14 +355,15 @@ impl serde::Serialize for PtInfo {
 }
 
 bitflags! {
+    /// Partition table types to check for in probe operations.
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct PtFilter: u64 {
         #[bitflags(flag_name = "aix")]
-        const SKIP_AIX = 1 << 0;
+        const AIX = 1 << 0;
         #[bitflags(flag_name = "mbr")]
-        const SKIP_MBR = 1 << 1;
+        const MBR = 1 << 1;
         #[bitflags(flag_name = "gpt")]
-        const SKIP_GPT = 1 << 2;
+        const GPT = 1 << 2;
     }
 }

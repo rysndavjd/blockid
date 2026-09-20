@@ -37,21 +37,21 @@ use crate::{
 /// Order used to detect filesystems
 #[rustfmt::skip]
 pub const FS_DETECT_ORDER: &[(FsFilter, FsType)] = &[
-    (FsFilter::SKIP_APFS, FsType::Apfs),
-    (FsFilter::SKIP_CRAMFS, FsType::Cramfs),
-    (FsFilter::SKIP_EXFAT, FsType::Exfat),
-    (FsFilter::SKIP_JBD, FsType::Jbd),
-    (FsFilter::SKIP_EXT2, FsType::Ext2),
-    (FsFilter::SKIP_EXT3, FsType::Ext3),
-    (FsFilter::SKIP_EXT4, FsType::Ext4),
-    (FsFilter::SKIP_LUKS1, FsType::LUKS1),
-    (FsFilter::SKIP_LUKS2, FsType::LUKS2),
-    (FsFilter::SKIP_NTFS, FsType::Ntfs),
-    (FsFilter::SKIP_SQUASHFS, FsType::Squashfs),
-    (FsFilter::SKIP_SQUASHFS3, FsType::Squashfs3),
-    (FsFilter::SKIP_VFAT, FsType::Vfat),
-    (FsFilter::SKIP_VXFS, FsType::Vxfs),
-    (FsFilter::SKIP_XFS, FsType::Xfs),
+    (FsFilter::APFS, FsType::Apfs),
+    (FsFilter::CRAMFS, FsType::Cramfs),
+    (FsFilter::EXFAT, FsType::Exfat),
+    (FsFilter::JBD, FsType::Jbd),
+    (FsFilter::EXT2, FsType::Ext2),
+    (FsFilter::EXT3, FsType::Ext3),
+    (FsFilter::EXT4, FsType::Ext4),
+    (FsFilter::LUKS1, FsType::LUKS1),
+    (FsFilter::LUKS2, FsType::LUKS2),
+    (FsFilter::NTFS, FsType::Ntfs),
+    (FsFilter::SQUASHFS, FsType::Squashfs),
+    (FsFilter::SQUASHFS3, FsType::Squashfs3),
+    (FsFilter::VFAT, FsType::Vfat),
+    (FsFilter::VXFS, FsType::Vxfs),
+    (FsFilter::XFS, FsType::Xfs),
 ];
 
 /// A generic handler for probing a filesystem type.
@@ -688,42 +688,42 @@ impl serde::Serialize for FsInfo {
 }
 
 bitflags! {
-    /// Filesystem types to skip checking for in probe operations.
+    /// Filesystem types to check for in probe operations.
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct FsFilter: u64 {
         #[bitflags(flag_name = "apfs")]
-        const SKIP_APFS = 1 << 0;
+        const APFS = 1 << 0;
         #[bitflags(flag_name = "cramfs")]
-        const SKIP_CRAMFS = 1 << 1;
+        const CRAMFS = 1 << 1;
         #[bitflags(flag_name = "exfat")]
-        const SKIP_EXFAT = 1 << 2;
+        const EXFAT = 1 << 2;
         #[bitflags(flag_name = "jbd")]
-        const SKIP_JBD = 1 << 3;
+        const JBD = 1 << 3;
         #[bitflags(flag_name = "ext2")]
-        const SKIP_EXT2 = 1 << 4;
+        const EXT2 = 1 << 4;
         #[bitflags(flag_name = "ext3")]
-        const SKIP_EXT3 = 1 << 5;
+        const EXT3 = 1 << 5;
         #[bitflags(flag_name = "ext4")]
-        const SKIP_EXT4 = 1 << 6;
+        const EXT4 = 1 << 6;
         #[bitflags(flag_name = "luks1")]
-        const SKIP_LUKS1 = 1 << 7;
+        const LUKS1 = 1 << 7;
         #[bitflags(flag_name = "luks2")]
-        const SKIP_LUKS2 = 1 << 8;
+        const LUKS2 = 1 << 8;
         #[bitflags(flag_name = "luks_opal")]
-        const SKIP_LUKS_OPAL = 1 << 9;
+        const LUKS_OPAL = 1 << 9;
         #[bitflags(flag_name = "ntfs")]
-        const SKIP_NTFS = 1 << 10;
+        const NTFS = 1 << 10;
         #[bitflags(flag_name = "squashfs")]
-        const SKIP_SQUASHFS = 1 << 11;
+        const SQUASHFS = 1 << 11;
         #[bitflags(flag_name = "squashfs3")]
-        const SKIP_SQUASHFS3 = 1 << 12;
+        const SQUASHFS3 = 1 << 12;
         #[bitflags(flag_name = "vfat")]
-        const SKIP_VFAT = 1 << 13;
+        const VFAT = 1 << 13;
         #[bitflags(flag_name = "vxfs")]
-        const SKIP_VXFS = 1 << 14;
+        const VXFS = 1 << 14;
         #[bitflags(flag_name = "xfs")]
-        const SKIP_XFS = 1 << 15;
+        const XFS = 1 << 15;
     }
 }
 

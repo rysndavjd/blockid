@@ -4,13 +4,37 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = { version = "4.5.41", default-features = false, features = ["std", "derive", "color", "cargo", "suggestions", "usage", "help"] }
+clap = { version = "4.5.41", default-features = false, features = [
+    "std",
+    "derive",
+    "color",
+    "cargo",
+    "suggestions",
+    "usage",
+    "help",
+] }
 glob = { version = "0.3.3", default-features = false }
 libblockid = { path = "../libblockid" }
-serde = { version =  "1.0.228", default-features = false, features = ["std", "derive"] }
+serde = { version = "1.0.228", default-features = false, features = [
+    "std",
+    "derive",
+] }
 serde_dotenv = { version = "0.1.0", path = "../../serde_dotenv" }
-serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
-shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "build"] }
+serde_json = { version = "1.0.150", default-features = false, features = [
+    "std",
+] }
+shadow-rs = { version = "1.7.1", default-features = false, features = [
+    "std",
+    "build",
+] }
+toml = { version = "1.1.6", default-features = false, features = [
+    "std",
+    "serde",
+    "display",
+] }
 
 [build-dependencies]
-shadow-rs = { version = "1.7.1", default-features = false, features = ["std", "build"] }
+shadow-rs = { version = "1.7.1", default-features = false, features = [
+    "std",
+    "build",
+] }

@@ -187,7 +187,7 @@ fn probe_filesystem<IO: BlockIo>(
     filter: FsFilter,
 ) -> Result<FsInfo, Error<IO::Error>> {
     for block in FS_DETECT_ORDER {
-        if filter.contains(block.0) {
+        if !filter.contains(block.0) {
             continue;
         }
 
@@ -217,7 +217,7 @@ fn probe_part_table<IO: BlockIo>(
     filter: PtFilter,
 ) -> Result<PtInfo, Error<IO::Error>> {
     for block in PT_DETECT_ORDER {
-        if filter.contains(block.0) {
+        if !filter.contains(block.0) {
             continue;
         }
 
