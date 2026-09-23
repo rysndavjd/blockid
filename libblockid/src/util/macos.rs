@@ -132,13 +132,13 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
                 {
                     #[cfg(feature = "std")]
                     {
-                        use std::ffi::{CStr, OsString};
-
+                        use std::ffi::{CStr, OsStr};
                         unsafe {
                             let c_str = CStr::from_ptr(buf.as_ptr());
-                            Some(OsString::from_encoded_bytes_unchecked(
-                                c_str.to_bytes().to_vec(),
-                            ))
+                            Some(
+                                PathBuf::from("/dev")
+                                    .join(OsStr::from_encoded_bytes_unchecked(c_str.to_bytes())),
+                            )
                         }
                     }
                     #[cfg(feature = "no_std")]
@@ -147,7 +147,7 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
 
                         unsafe {
                             let c_str = CStr::from_ptr(buf.as_ptr());
-                            Some(c_str.to_bytes().to_vec())
+                            Some(PathBuf::from("/dev/").join(c_str.to_bytes()))
                         }
                     }
                 } else {
@@ -185,7 +185,7 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
     }
 
     match result {
-        Some(s) => Ok(PathBuf::from("/dev/").join(s)),
+        Some(s) => Ok(s),
         None => Err(PartToDiskError::DiskNotFound),
     }
 }
