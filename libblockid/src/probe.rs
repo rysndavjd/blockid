@@ -372,7 +372,6 @@ impl Probe<crate::io::File> {
         Self::from_fd(fd, offset)
     }
 
-    /// Probes the device for a filesystem, skipping any types set in `filter`.
     #[inline]
     pub fn probe_filesystem(
         &mut self,
@@ -390,7 +389,6 @@ impl Probe<crate::io::File> {
         search_for_filesystem(&mut self.reader, self.offset, filesystem)
     }
 
-    /// Probes the device for a partition table, skipping any types set in `filter`.
     #[inline]
     pub fn probe_part_table(
         &mut self,

@@ -113,3 +113,19 @@ impl<E: fmt::Debug> From<E> for PartToDiskError<E> {
         PartToDiskError::Io(e)
     }
 }
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+#[derive(Debug, Clone)]
+pub enum IdToDiskError<E: fmt::Debug> {
+    Io(E),
+    InvalidPartition,
+    InvalidDevName,
+    SearchExhausted,
+}
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+impl<E: fmt::Debug> From<E> for IdToDiskError<E> {
+    fn from(e: E) -> Self {
+        IdToDiskError::Io(e)
+    }
+}

@@ -1,13 +1,15 @@
 use std::{
+    fmt::Display,
     io::{self, ErrorKind, stdout},
     path::PathBuf,
 };
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use libblockid::{
-    Probe,
-    error::Error,
+    Id, Probe,
+    error::{Error, PartToDiskError},
     filesystem::{FS_DETECT_ORDER, FsFilter, FsInfo},
+    id_to_dev, part_to_disk,
     partition::{PT_DETECT_ORDER, PtFilter, PtInfo},
 };
 use serde::Serialize;
@@ -62,11 +64,33 @@ enum Commands {
 
     /// Display I/O topology of a device
     Topology {
-        /// Block device path to probe (e.g. /dev/sda)
+        /// Block device path to get topology for (e.g. /dev/sda)
         #[arg(short = 'd', long = "device", value_name = "PATH")]
         device: PathBuf,
 
         /// Set output format to list topology infomation
+        #[arg(short = 'f', long = "format", value_enum)]
+        format: Option<Format>,
+    },
+
+    /// Finds partition (/dev/sda1) to disk (/dev/sda)
+    PartToDisk {
+        /// Block device partition path to find disk (e.g. /dev/sda1)
+        #[arg(short = 'd', long = "device", value_name = "PATH")]
+        device: PathBuf,
+
+        /// Set output format
+        #[arg(short = 'f', long = "format", value_enum)]
+        format: Option<Format>,
+    },
+
+    /// Finds given UUID or VolumeID to a filesystem or partition table
+    Uuid {
+        /// Disk UUID or VolumeID to find
+        #[arg(short = 'i', long = "id", value_name = "ID")]
+        uuid: String,
+
+        /// Set output format
         #[arg(short = 'f', long = "format", value_enum)]
         format: Option<Format>,
     },
@@ -75,9 +99,9 @@ enum Commands {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, ValueEnum, Default)]
 enum Format {
     /// Output in dotenv.
-    #[default]
     Export,
     /// Output in JSON.
+    #[default]
     Json,
     /// Output in TOML.
     Toml,
@@ -98,13 +122,21 @@ struct Topology {
     alignment_offset: Option<u64>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+struct PartToDisk {
+    disk: PathBuf,
+}
+
 fn write_output<T: Serialize>(value: &T, format: Option<Format>) -> Result<(), Error<io::Error>> {
     match format.unwrap_or_default() {
         Format::Export => {
-            to_dotenv_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?
+            to_dotenv_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?;
+            println!()
         }
         Format::Json => {
-            to_json_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?
+            to_json_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?;
+            println!()
         }
         Format::Toml => {
             let out = to_toml_pretty(value).map_err(|_| Error::Io(ErrorKind::Other.into()))?;
@@ -128,13 +160,43 @@ impl Serialize for ProbeResult {
     }
 }
 
+enum Errors {
+    ProbeErrors(Error<io::Error>),
+    PartToDisk(PartToDiskError<io::Error>),
+}
+
+impl Display for Errors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Errors::ProbeErrors(e) => {
+                write!(f, "{e:?}")
+            }
+            Errors::PartToDisk(e) => {
+                write!(f, "{e:?}")
+            }
+        }
+    }
+}
+
+impl From<Error<io::Error>> for Errors {
+    fn from(e: Error<io::Error>) -> Self {
+        Errors::ProbeErrors(e)
+    }
+}
+
+impl From<PartToDiskError<io::Error>> for Errors {
+    fn from(e: PartToDiskError<io::Error>) -> Self {
+        Errors::PartToDisk(e)
+    }
+}
+
 fn main() {
     if let Err(e) = _main() {
         eprintln!("{}", e)
     }
 }
 
-fn _main() -> Result<(), Error<io::Error>> {
+fn _main() -> Result<(), Errors> {
     let cli = Cli::parse();
 
     if cli.shadow_version {
@@ -191,11 +253,11 @@ fn _main() -> Result<(), Error<io::Error>> {
 
                 let result = match probe.probe_part_table(pt_filter) {
                     Ok(info) => ProbeResult::PartTable(info),
-                    Err(Error::Io(e)) => return Err(Error::Io(e)),
+                    Err(Error::Io(e)) => return Err(Error::Io(e).into()),
                     Err(_) => match probe.probe_filesystem(fs_filter) {
                         Ok(info) => ProbeResult::Filesystem(info),
-                        Err(Error::Io(e)) => return Err(Error::Io(e)),
-                        Err(_) => return Err(Error::ProbesExhausted),
+                        Err(Error::Io(e)) => return Err(Error::Io(e).into()),
+                        Err(_) => return Err(Error::ProbesExhausted.into()),
                     },
                 };
 
@@ -217,6 +279,16 @@ fn _main() -> Result<(), Error<io::Error>> {
                 };
 
                 write_output(&topology, format)?;
+            }
+            Commands::PartToDisk { device, format } => {
+                let disk = PartToDisk {
+                    disk: part_to_disk(device)?,
+                };
+
+                write_output(&disk, format)?;
+            }
+            Commands::Uuid { uuid, format } => {
+                todo!()
             }
         }
     } else {

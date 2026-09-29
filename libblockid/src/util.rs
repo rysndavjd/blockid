@@ -6,8 +6,11 @@ use widestring::U16String;
 use crate::Endianness;
 #[cfg(feature = "os_calls")]
 use crate::{
-    error::PartToDiskError,
+    Probe,
+    error::{Error, IdToDiskError, PartToDiskError},
+    filesystem::{FsFilter, FsId},
     io::{IoError, Path, PathBuf},
+    partition::{PartitionId, PtFilter, PtId},
 };
 
 pub(crate) fn bytes_to_u16string(bytes: &[u8], endianness: Endianness) -> U16String {
@@ -141,4 +144,169 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
     {
         todo!()
     }
+}
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum Id<'a> {
+    Uuid(&'a uuid::Uuid),
+    VolumeId32(&'a fat_volume_id::id32::VolumeId32),
+    VolumeId64(&'a fat_volume_id::id64::VolumeId64),
+    /// This will change when I make a separte crate like volumeid
+    Mbr(u32),
+}
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+impl<'a> From<&'a uuid::Uuid> for Id<'a> {
+    fn from(value: &'a uuid::Uuid) -> Self {
+        Id::Uuid(value)
+    }
+}
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+impl<'a> From<&'a fat_volume_id::id32::VolumeId32> for Id<'a> {
+    fn from(value: &'a fat_volume_id::id32::VolumeId32) -> Self {
+        Id::VolumeId32(value)
+    }
+}
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+impl<'a> From<&'a fat_volume_id::id64::VolumeId64> for Id<'a> {
+    fn from(value: &'a fat_volume_id::id64::VolumeId64) -> Self {
+        Id::VolumeId64(value)
+    }
+}
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+#[inline]
+fn find_partition(
+    sys_block: &rustix::fd::OwnedFd,
+    disk_name: &str,
+    want_no: u64,
+) -> Result<Option<String>, IdToDiskError<IoError>> {
+    use lexical_core::{FormattedSize, parse};
+    use rustix::{
+        fs::{Dir, Mode, OFlags, openat},
+        io::read,
+    };
+
+    // /sys/block/<device>/
+    let part_block = openat(
+        sys_block,
+        disk_name,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
+
+    for entry in Dir::read_from(&part_block)? {
+        let entry = entry?;
+        let part_name = entry
+            .file_name()
+            .to_str()
+            .map_err(|_| IdToDiskError::InvalidDevName)?;
+
+        if !part_name.starts_with(disk_name) {
+            continue;
+        }
+
+        // /sys/block/<device>/<partition>/partition
+        let partition = openat(
+            &part_block,
+            format!("{part_name}/partition"),
+            OFlags::RDONLY | OFlags::CLOEXEC,
+            Mode::empty(),
+        )?;
+
+        let mut buf = [0u8; u64::FORMATTED_SIZE_DECIMAL];
+        let s = read(partition, &mut buf)?;
+
+        let part_no =
+            parse::<u64>(buf[..s].trim_ascii_end()).map_err(|_| IdToDiskError::InvalidPartition)?;
+
+        if part_no == want_no {
+            return Ok(Some(part_name.to_string()));
+        }
+    }
+    Ok(None)
+}
+
+#[cfg(any(target_os = "linux", feature = "os_calls"))]
+pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<PathBuf, IdToDiskError<IoError>> {
+    use rustix::fs::{Dir, Mode, OFlags, open};
+
+    let id = id.into();
+
+    let sys_block = open(
+        "/sys/block/",
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
+
+    for entry in Dir::read_from(&sys_block)? {
+        let entry = entry?;
+        let disk_name = entry
+            .file_name()
+            .to_str()
+            .map_err(|_| IdToDiskError::InvalidDevName)?;
+
+        if disk_name == "." || disk_name == ".." {
+            continue;
+        }
+
+        let path = PathBuf::from(format!("/dev/{disk_name}"));
+
+        let mut probe = match Probe::open(&path, 0) {
+            Ok(t) => t,
+            Err(Error::Io(e)) => return Err(IdToDiskError::Io(e)),
+            _ => continue,
+        };
+
+        if let Ok(info) = probe.probe_part_table(PtFilter::all()) {
+            if let Some(pt_id) = info.pt_id() {
+                match (pt_id, id) {
+                    (PtId::Uuid(f_uuid), Id::Uuid(g_uuid)) if f_uuid == *g_uuid => {
+                        return Ok(path);
+                    }
+                    (PtId::Mbr(f_mbr), Id::Mbr(g_mbr)) if f_mbr == g_mbr => {
+                        return Ok(path);
+                    }
+                    _ => (),
+                }
+            }
+
+            if let Some(partitions) = info.partitions() {
+                for part in partitions {
+                    if let (PartitionId::Uuid(f_uuid), Id::Uuid(g_uuid)) = (part.partition_id, id)
+                        && f_uuid == *g_uuid
+                        && let Some(name) = find_partition(&sys_block, disk_name, part.part_no)?
+                    {
+                        return Ok(PathBuf::from(format!("/dev/{name}")));
+                    }
+                }
+            }
+        }
+
+        if let Ok(info) = probe.probe_filesystem(FsFilter::all())
+            && let Some(fs_id) = info.fs_id()
+        {
+            match (fs_id, id) {
+                (FsId::Uuid(f_uuid), Id::Uuid(g_uuid)) if &f_uuid == g_uuid => {
+                    return Ok(path);
+                }
+                (FsId::VolumeId32(f_volumeid32), Id::VolumeId32(g_volumeid32))
+                    if &f_volumeid32 == g_volumeid32 =>
+                {
+                    return Ok(path);
+                }
+                (FsId::VolumeId64(f_volumeid64), Id::VolumeId64(g_volumeid64))
+                    if &f_volumeid64 == g_volumeid64 =>
+                {
+                    return Ok(path);
+                }
+                _ => (),
+            }
+        }
+    }
+
+    Err(IdToDiskError::SearchExhausted)
 }

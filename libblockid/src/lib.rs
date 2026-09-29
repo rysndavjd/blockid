@@ -22,7 +22,7 @@ pub use crate::probe::{Endianness, Label, Probe};
 #[cfg(feature = "os_calls")]
 pub use crate::{
     io::topology::AlignmentOffset,
-    util::{fd_to_path, part_to_disk},
+    util::{Id, fd_to_path, id_to_dev, part_to_disk},
 };
 
 #[cfg(all(feature = "std", feature = "no_std"))]

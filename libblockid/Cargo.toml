@@ -32,6 +32,11 @@ fat_volume_id = { version = "0.3.0", default-features = false, features = [
     "zerocopy",
 ] }
 crc = { version = "3.4.0", default-features = false }
+bstr = { version = "1.13.1", default-features = false, features = ["alloc"] }
+lexical-core = { version = "1.0.6", default-features = false, features = [
+    "write-integers",
+    "parse-integers",
+] }
 
 embedded-io = { version = "0.7.1", default-features = false, features = [
     "alloc",
@@ -48,7 +53,6 @@ serde = { version = "1.0.228", default-features = false, features = [
 clap = { version = "4.6.4", default-features = false, features = [
     "derive",
 ], optional = true }
-bstr = { version = "1.13.1", default-features = false, features = ["alloc"] }
 
 # For getting path from FD we use fcntl on macOS and FreeBSD and for Linux
 # we use `/proc/self/fd/<fd>`
@@ -71,6 +75,7 @@ std = [
     "serde/std",
     "clap/std",
     "bstr/std",
+    "lexical-core/std",
 ]
 # Uses `embedded-io` instead of `std` for I/O allowing `no_std` uses of this library
 no_std = ["dep:embedded-io"]

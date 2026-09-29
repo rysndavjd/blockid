@@ -94,7 +94,7 @@ pub enum PtId {
     /// A 128-bit universally unique identifier or [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier).
     Uuid(Uuid),
     /// A 32-bit MBR disk signature.
-    Mbr { disk: u32 },
+    Mbr(u32),
 }
 
 impl PtId {
@@ -107,7 +107,7 @@ impl PtId {
 
     pub fn as_mbr(&self) -> Option<u32> {
         match self {
-            PtId::Mbr { disk } => Some(*disk),
+            PtId::Mbr(disk) => Some(*disk),
             _ => None,
         }
     }
@@ -121,7 +121,7 @@ impl From<Uuid> for PtId {
 
 impl From<u32> for PtId {
     fn from(disk: u32) -> Self {
-        PtId::Mbr { disk }
+        PtId::Mbr(disk)
     }
 }
 
@@ -294,7 +294,7 @@ impl serde::Serialize for PtInfo {
         if let Some(v) = &self.pt_id {
             match v {
                 PtId::Uuid(uuid) => map.serialize_entry("PT_ID", uuid)?,
-                PtId::Mbr { disk } => {
+                PtId::Mbr(disk) => {
                     map.serialize_entry("PT_ID", &format!("{:x}", disk))?;
                 }
             }
