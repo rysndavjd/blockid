@@ -1,5 +1,5 @@
 use fat_volume_id::id64::VolumeId64;
-use widestring::{U16String, error::Utf16Error};
+use widestring::U16String;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned,
     byteorder::{LittleEndian, U16, U32, U64},
@@ -306,7 +306,7 @@ pub fn probe_ntfs<IO: BlockIo>(
         info.set_label(label.into());
     }
     info.set_fs_id(VolumeId64::from_bytes(sb.volume_serial).into());
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_size(u64::from(sb.number_of_sectors * sector_size));
     info.set_fs_block_size(sector_size * sectors_per_cluster);
     info.set_block_size(sector_size);

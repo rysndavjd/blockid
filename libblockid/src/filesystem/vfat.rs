@@ -487,7 +487,7 @@ pub(crate) fn probe_vfat<IO: BlockIo>(
         info.set_label(l.into());
     }
     info.set_magic(
-        magic.bytes.to_vec(),
+        magic.bytes,
         magic.offset,
     );
     info.set_fs_size(

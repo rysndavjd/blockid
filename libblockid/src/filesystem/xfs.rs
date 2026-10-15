@@ -221,7 +221,7 @@ pub fn probe_xfs<IO: BlockIo>(
     if sb.fname[0] != 0 {
         info.set_label(BString::from(sb.fname).into());
     }
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_size(sb.fssize());
     info.set_fs_last_block(u64::from(sb.dblocks));
     info.set_fs_block_size(u64::from(sb.blocksize));

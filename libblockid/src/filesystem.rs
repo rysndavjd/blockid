@@ -295,7 +295,7 @@ pub struct FsInfo {
     /// Filesystem version.
     version: Option<String>,
     /// Filesystem magic bytes.
-    magic: Option<Vec<u8>>,
+    magic: Option<&'static [u8]>,
     /// Filesystem magic offset.
     magic_offset: Option<u64>,
     /// Filesystem size.
@@ -462,7 +462,7 @@ impl FsInfo {
         self.version.as_ref()
     }
 
-    pub(crate) fn set_magic(&mut self, bytes: Vec<u8>, offset: u64) {
+    pub(crate) fn set_magic(&mut self, bytes: &'static [u8], offset: u64) {
         if cfg!(debug_assertions) {
             if self.magic.is_none() {
                 self.magic = Some(bytes);
@@ -486,7 +486,7 @@ impl FsInfo {
 
     pub fn magic(&self) -> Option<(&[u8], u64)> {
         match (&self.magic, &self.magic_offset) {
-            (Some(magic), Some(offset)) => Some((magic.as_slice(), *offset)),
+            (Some(magic), Some(offset)) => Some((magic, *offset)),
             (None, None) => None,
             _ => unreachable!("magic and magic_offset are only ever set together via `set_magic`"),
         }

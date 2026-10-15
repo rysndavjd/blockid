@@ -77,7 +77,7 @@ pub struct SquashfsHeader {
 pub fn probe_squashfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
-    _: Magic,
+    magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<SquashfsHeader>()] = reader.read_exact_at(offset)?;
     let sb: &SquashfsHeader = transmute_ref!(&buf);
@@ -93,7 +93,7 @@ pub fn probe_squashfs<IO: BlockIo>(
 
     info.set_fs_type(FsType::Squashfs);
     info.set_version(format!("{}.{}", vermaj, vermin));
-    info.set_magic(sb.magic.to_vec(), offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_block_size(u32::from_le_bytes(sb.block_size).into());
     info.set_block_size(u32::from_le_bytes(sb.block_size).into());
     info.set_fs_size(u64::from_le_bytes(sb.bytes_used));
@@ -131,7 +131,7 @@ pub fn probe_squashfs3<IO: BlockIo>(
 
     info.set_fs_type(FsType::Squashfs3);
     info.set_version(format!("{}.{}", vermaj, vermin));
-    info.set_magic(sb.magic.to_vec(), offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_block_size(1024);
     info.set_block_size(1024);
     info.set_endianness(endianness);

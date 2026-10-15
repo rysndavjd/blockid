@@ -55,7 +55,7 @@ const K_IO_SERVICE_PLANE: &str = "IOService\0";
 const K_IO_MEDIA_WHOLE_KEY: &str = "Whole";
 const K_BSD_NAME_KEY: &str = "BSD Name";
 
-pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<Option<PathBuf>, IoError> {
+pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, IoError> {
     #[cfg(feature = "std")]
     let c_bsd = CString::new(
         path.as_ref()
@@ -189,5 +189,8 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<Option<PathBuf>, IoError>
         unsafe { IOObjectRelease(service) };
     }
 
-    Ok(result)
+    match result {
+        Some(t) => Ok(t),
+        None => Err(IoErrorKind::NotFound.into()),
+    }
 }

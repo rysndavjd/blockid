@@ -136,7 +136,7 @@ pub(crate) fn probe_cramfs<IO: BlockIo>(
         info.set_label(BString::from(sb.name).into());
     }
     info.set_version(if v2 { "2".to_string() } else { "1".to_string() });
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
 
     if le {
         info.set_fs_size(u32::from_le_bytes(sb.size).into());

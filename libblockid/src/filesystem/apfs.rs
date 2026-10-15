@@ -115,30 +115,30 @@ fn fletcher64(buf: &[u8]) -> u64 {
 pub(crate) fn probe_apfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
-    _: Magic,
+    magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<ApfsSuperBlock>()] = reader.read_exact_at(offset)?;
     let sb: &ApfsSuperBlock = transmute_ref!(&buf);
 
     let csum = fletcher64(&buf[offset_of!(ApfsSuperBlock, oid)..]);
 
-    if u64::from(sb.checksum) != csum {
+    if sb.checksum.get() != csum {
         return Err(ApfsError::HeaderChecksumInvalid.into());
     }
 
-    if u16::from(sb.apfs_type) != ApfsSuperBlock::CONTAINER_SUPERBLOCK_TYPE {
+    if sb.apfs_type.get() != ApfsSuperBlock::CONTAINER_SUPERBLOCK_TYPE {
         return Err(ApfsError::InvalidSuperFsType.into());
     }
 
-    if u16::from(sb.subtype) != ApfsSuperBlock::CONTAINER_SUPERBLOCK_SUBTYPE {
+    if sb.subtype.get() != ApfsSuperBlock::CONTAINER_SUPERBLOCK_SUBTYPE {
         return Err(ApfsError::InvalidSuperblockSubType.into());
     }
 
-    if u16::from(sb.pad) != 0 {
+    if sb.pad.get() != 0 {
         return Err(ApfsError::PaddingNotZero.into());
     }
 
-    if u32::from(sb.block_size) != ApfsSuperBlock::STANDARD_BLOCK_SIZE {
+    if sb.block_size.get() != ApfsSuperBlock::STANDARD_BLOCK_SIZE {
         return Err(ApfsError::InvalidBlockSize.into());
     }
 
@@ -154,7 +154,7 @@ pub(crate) fn probe_apfs<IO: BlockIo>(
     info.set_fs_id(FsId::Uuid(uuid));
     info.set_fs_block_size(u64::from(sb.block_size));
     info.set_block_size(u64::from(sb.block_size));
-    info.set_magic(ApfsSuperBlock::MAGIC.to_vec(), ApfsSuperBlock::MAGIC_OFFSET);
+    info.set_magic(magic.bytes, magic.offset);
 
     return Ok(info);
 }

@@ -362,7 +362,7 @@ pub(crate) fn probe_exfat<IO: BlockIo>(
     info.set_fs_block_size(sb.block_size() as u64);
     info.set_block_size(sb.block_size() as u64);
     info.set_version(format!("{}.{}", sb.vermaj, sb.vermin));
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
 
     return Ok(info);
 }

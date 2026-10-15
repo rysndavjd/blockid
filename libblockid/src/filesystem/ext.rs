@@ -435,7 +435,7 @@ pub fn probe_jbd<IO: BlockIo>(
         info.set_ext_journal_id(id);
     }
     info.set_version(version);
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_size(fs_size);
     info.set_fs_last_block(fs_last_block);
     info.set_fs_block_size(block_size);
@@ -484,7 +484,7 @@ pub fn probe_ext2<IO: BlockIo>(
         info.set_ext_journal_id(id);
     }
     info.set_version(version);
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_size(fs_size);
     info.set_fs_last_block(fs_last_block);
     info.set_fs_block_size(block_size);
@@ -533,7 +533,7 @@ pub fn probe_ext3<IO: BlockIo>(
         info.set_ext_journal_id(id);
     }
     info.set_version(version);
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_size(fs_size);
     info.set_fs_last_block(fs_last_block);
     info.set_fs_block_size(block_size);
@@ -586,7 +586,7 @@ pub fn probe_ext4<IO: BlockIo>(
         info.set_ext_journal_id(id);
     }
     info.set_version(version);
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
     info.set_fs_size(fs_size);
     info.set_fs_last_block(fs_last_block);
     info.set_fs_block_size(block_size);

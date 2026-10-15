@@ -54,12 +54,11 @@ pub fn probe_vxfs<IO: BlockIo>(
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<VxfsSuperBlock>()] = reader.read_exact_at(offset)?;
-
     let xvfs: &VxfsSuperBlock = transmute_ref!(&buf);
 
     let mut info = FsInfo::empty();
 
-    info.set_magic(magic.bytes.to_vec(), magic.offset);
+    info.set_magic(magic.bytes, magic.offset);
 
     if magic.bytes == LITTLE_ENDIAN_MAGIC {
         info.set_version(format!("{}", u32::from_le_bytes(xvfs.vs_version)));

@@ -53,7 +53,7 @@ impl<E: fmt::Debug> From<LuksError> for Error<E> {
 
 const LUKS1_MAGIC: [u8; 6] = *b"LUKS\xba\xbe";
 const LUKS2_MAGIC: [u8; 6] = *b"SKUL\xba\xbe";
-const LUKS2_HW_OPAL_SUBSYSTEM: [u8; 7] = *b"HW-OPAL";
+//const LUKS2_HW_OPAL_SUBSYSTEM: [u8; 7] = *b"HW-OPAL";
 
 const SECONDARY_OFFSETS: [u64; 9] = [
     0x04000, 0x008000, 0x010000, 0x020000, 0x40000, 0x080000, 0x100000, 0x200000, 0x400000,
@@ -101,11 +101,9 @@ fn luks_valid(sb: &Luks2Header, magic: [u8; 6], offset: u64) -> bool {
     if sb.magic == magic {
         return true;
     }
-
-    if u16::from(sb.version) == 2 && u64::from(sb.hdr_offset) != offset {
+    if sb.version.get() == 2 && sb.hdr_offset.get() != offset {
         return true;
     }
-
     false
 }
 
@@ -116,9 +114,12 @@ fn luks_info(sb: &Luks2Header, offset: u64) -> Result<FsInfo, LuksError> {
     match version {
         1 => {
             info.set_fs_type(FsType::LUKS1);
+            info.set_magic(&LUKS1_MAGIC, offset);
         }
         2 => {
             info.set_fs_type(FsType::LUKS2);
+            info.set_magic(&LUKS2_MAGIC, offset);
+
             if sb.label != [0u8; 48] {
                 info.set_label(BString::from(&sb.label).into());
             }
@@ -129,7 +130,6 @@ fn luks_info(sb: &Luks2Header, offset: u64) -> Result<FsInfo, LuksError> {
 
     info.set_fs_id(uuid.into());
     info.set_version(format!("{}", version));
-    info.set_magic(sb.magic.to_vec(), offset);
 
     return Ok(info);
 }
@@ -142,16 +142,16 @@ pub fn probe_luks<IO: BlockIo>(
     let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset)?;
     let sb: &Luks2Header = transmute_ref!(&buf);
 
-    if luks_valid(sb, LUKS1_MAGIC, 0) {
-        return Ok(luks_info(sb, 0)?);
+    if luks_valid(sb, LUKS1_MAGIC, offset) {
+        return Ok(luks_info(sb, offset)?);
     }
 
-    for offset in SECONDARY_OFFSETS {
-        let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(offset)?;
+    for sec_offset in SECONDARY_OFFSETS {
+        let buf: [u8; size_of::<Luks2Header>()] = reader.read_exact_at(sec_offset + offset)?;
         let sb: &Luks2Header = transmute_ref!(&buf);
 
-        if luks_valid(sb, LUKS2_MAGIC, offset) {
-            return Ok(luks_info(sb, offset)?);
+        if luks_valid(sb, LUKS2_MAGIC, sec_offset) {
+            return Ok(luks_info(sb, sec_offset)?);
         }
     }
 
