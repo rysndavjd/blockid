@@ -7,9 +7,9 @@ use crate::Endianness;
 #[cfg(feature = "os_calls")]
 use crate::{
     Probe,
-    error::{Error, IdToDiskError, PartToDiskError},
+    error::Error,
     filesystem::{FsFilter, FsId},
-    io::{IoError, Path, PathBuf},
+    io::{IoError, IoErrorKind, Path, PathBuf},
     partition::{PartitionId, PtFilter, PtId},
 };
 
@@ -29,16 +29,14 @@ pub(crate) fn bytes_to_u16string(bytes: &[u8], endianness: Endianness) -> U16Str
 
 /// Gets the path of a file descriptor, returning a [`PathBuf`](crate::io::PathBuf).
 ///
-/// # Platform-specific behavior
+/// # Platform Implementation
 ///
-/// ## Linux
-/// Uses the `/proc` filesystem via `/proc/self/fd/<fd>`, reading the symlink target.
-///
-/// ## macOS
-/// Uses [`fcntl`] with `F_GETPATH` to retrieve the path.
-///
-/// ## FreeBSD
-/// TODO!.
+/// * [Linux](https://en.wikipedia.org/wiki/Linux): Uses the
+///   [`procfs`](https://en.wikipedia.org/wiki/Procfs#Linux) filesystem via
+///   `/proc/self/fd/<fd>`, reading the symlink target.
+/// * [macOS](https://en.wikipedia.org/wiki/MacOS): Uses [`fcntl`] with
+///   `F_GETPATH` to retrieve the path.
+/// * [FreeBSD](https://en.wikipedia.org/wiki/FreeBSD): TODO!
 ///
 /// [`fcntl`]: https://docs.rs/libc/latest/libc/fn.fcntl.html
 #[cfg(feature = "os_calls")]
@@ -88,8 +86,28 @@ pub fn fd_to_path<F: rustix::fd::AsRawFd>(fd: F) -> Result<PathBuf, IoError> {
     }
 }
 
+/// Resolves a partition device path to the path of its parent disk.
+///
+/// # Examples
+///
+/// | Operating System                                 | Partition    | Disk       |
+/// |--------------------------------------------------|--------------|------------|
+/// | [Linux](https://en.wikipedia.org/wiki/Linux)     | /dev/sda1    | /dev/sda   |
+/// | [macOS](https://en.wikipedia.org/wiki/MacOS)     | /dev/disk0s1 | /dev/disk0 |
+/// | [FreeBSD](https://en.wikipedia.org/wiki/FreeBSD) | /dev/ada0p1  | /dev/ada0  |
+///
+/// # Platform Implementation
+///
+/// * [Linux](https://en.wikipedia.org/wiki/Linux): Uses
+///   [`sysfs`](https://en.wikipedia.org/wiki/Sysfs) `/sys/dev/block/<major>:<minor>`
+///   checking if `partition` entry exists parsing symlink for parent disk name by
+///   taking second to last path component.
+/// * [macOS](https://en.wikipedia.org/wiki/MacOS): Uses
+///   [`iokit`](https://en.wikipedia.org/wiki/XNU#IOKit) finding parent disk by walking
+///   up the `IOService` plane until an entry has boolean flag `Whole` set true.
+/// * [FreeBSD](https://en.wikipedia.org/wiki/FreeBSD): TODO!
 #[cfg(feature = "os_calls")]
-pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<IoError>> {
+pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, IoError> {
     #[cfg(target_os = "linux")]
     {
         use rustix::fs::{Access, access, major, minor, readlink, stat};
@@ -110,12 +128,12 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
                 .as_bytes()
                 .iter()
                 .rposition(|b| b == &b'/')
-                .ok_or(PartToDiskError::DiskNotPartition)?;
+                .ok_or(IoErrorKind::InvalidInput)?;
 
             let second_last = link.as_bytes()[..last]
                 .iter()
                 .rposition(|b| b == &b'/')
-                .ok_or(PartToDiskError::DiskNotPartition)?;
+                .ok_or(IoErrorKind::InvalidInput)?;
 
             let disk = &link.as_bytes()[second_last.saturating_add(1)..last];
 
@@ -130,7 +148,7 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
                 return Ok(Path::new("/dev/").join(disk));
             }
         }
-        return Err(PartToDiskError::DiskNotPartition);
+        return Err(IoErrorKind::InvalidInput.into());
     }
 
     #[cfg(target_os = "macos")]
@@ -177,61 +195,79 @@ impl<'a> From<&'a fat_volume_id::id64::VolumeId64> for Id<'a> {
     }
 }
 
+/// Finds the partition device for a given partition number on a whole disk.
+///
+/// # Examples
+///
+/// | Operating System                                 | Disk       | Part Number | Partition    |
+/// |--------------------------------------------------|------------|-------------|--------------|
+/// | [Linux](https://en.wikipedia.org/wiki/Linux)     | sda        | 1           | sda1         |
+/// | [macOS](https://en.wikipedia.org/wiki/MacOS)     | TODO!      | TODO!       | TODO!        |
+/// | [FreeBSD](https://en.wikipedia.org/wiki/FreeBSD) | TODO!      | TODO!       | TODO!        |
+///
+/// # Platform Implementation
+///
+/// * [Linux](https://en.wikipedia.org/wiki/Linux): Uses
+///   [`sysfs`](https://en.wikipedia.org/wiki/Sysfs) `/sys/block/<disk_name>`
+///   checking directory for partitions
+/// * [macOS](https://en.wikipedia.org/wiki/MacOS): TODO!
+/// * [FreeBSD](https://en.wikipedia.org/wiki/FreeBSD): TODO!
 #[cfg(any(target_os = "linux", feature = "os_calls"))]
-#[inline]
-fn find_partition(
-    sys_block: &rustix::fd::OwnedFd,
-    disk_name: &str,
-    want_no: u64,
-) -> Result<Option<String>, IdToDiskError<IoError>> {
+pub fn find_partition(disk_name: &str, want_no: u64) -> Result<Option<PathBuf>, IoError> {
     use lexical_core::{FormattedSize, parse};
     use rustix::{
-        fs::{Dir, Mode, OFlags, openat},
-        io::read,
+        fs::{Dir, Mode, OFlags, open, openat},
+        io::{Errno, read},
     };
 
     // /sys/block/<device>/
-    let part_block = openat(
-        sys_block,
-        disk_name,
+    let whole_disk = open(
+        format!("/sys/block/{disk_name}"),
         OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
         Mode::empty(),
     )?;
 
-    for entry in Dir::read_from(&part_block)? {
+    for entry in Dir::read_from(&whole_disk)? {
         let entry = entry?;
-        let part_name = entry
-            .file_name()
-            .to_str()
-            .map_err(|_| IdToDiskError::InvalidDevName)?;
+        let part_name = match entry.file_name().to_str() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
 
         if !part_name.starts_with(disk_name) {
             continue;
         }
 
         // /sys/block/<device>/<partition>/partition
-        let partition = openat(
-            &part_block,
+        let partition = match openat(
+            &whole_disk,
             format!("{part_name}/partition"),
             OFlags::RDONLY | OFlags::CLOEXEC,
             Mode::empty(),
-        )?;
+        ) {
+            Ok(fd) => fd,
+            Err(Errno::NOENT) => continue,
+            Err(e) => return Err(e.into()),
+        };
 
-        let mut buf = [0u8; u64::FORMATTED_SIZE_DECIMAL];
+        // Additional byte to account for `\n`
+        let mut buf = [0u8; u64::FORMATTED_SIZE_DECIMAL + 1];
         let s = read(partition, &mut buf)?;
 
-        let part_no =
-            parse::<u64>(buf[..s].trim_ascii_end()).map_err(|_| IdToDiskError::InvalidPartition)?;
+        let part_no = match parse::<u64>(buf[..s].trim_ascii_end()) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
 
         if part_no == want_no {
-            return Ok(Some(part_name.to_string()));
+            return Ok(Some(PathBuf::from(format!("/dev/{part_name}"))));
         }
     }
     Ok(None)
 }
 
 #[cfg(any(target_os = "linux", feature = "os_calls"))]
-pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<PathBuf, IdToDiskError<IoError>> {
+pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<Option<PathBuf>, IoError> {
     use rustix::fs::{Dir, Mode, OFlags, open};
 
     let id = id.into();
@@ -244,10 +280,10 @@ pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<PathBuf, IdToDiskError<Io
 
     for entry in Dir::read_from(&sys_block)? {
         let entry = entry?;
-        let disk_name = entry
-            .file_name()
-            .to_str()
-            .map_err(|_| IdToDiskError::InvalidDevName)?;
+        let disk_name = match entry.file_name().to_str() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
 
         if disk_name == "." || disk_name == ".." {
             continue;
@@ -257,7 +293,7 @@ pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<PathBuf, IdToDiskError<Io
 
         let mut probe = match Probe::open(&path, 0) {
             Ok(t) => t,
-            Err(Error::Io(e)) => return Err(IdToDiskError::Io(e)),
+            Err(Error::Io(e)) => return Err(e),
             _ => continue,
         };
 
@@ -265,10 +301,10 @@ pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<PathBuf, IdToDiskError<Io
             if let Some(pt_id) = info.pt_id() {
                 match (pt_id, id) {
                     (PtId::Uuid(f_uuid), Id::Uuid(g_uuid)) if f_uuid == *g_uuid => {
-                        return Ok(path);
+                        return Ok(Some(path));
                     }
                     (PtId::Mbr(f_mbr), Id::Mbr(g_mbr)) if f_mbr == g_mbr => {
-                        return Ok(path);
+                        return Ok(Some(path));
                     }
                     _ => (),
                 }
@@ -278,9 +314,9 @@ pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<PathBuf, IdToDiskError<Io
                 for part in partitions {
                     if let (PartitionId::Uuid(f_uuid), Id::Uuid(g_uuid)) = (part.partition_id, id)
                         && f_uuid == *g_uuid
-                        && let Some(name) = find_partition(&sys_block, disk_name, part.part_no)?
+                        && let Some(part_path) = find_partition(disk_name, part.part_no)?
                     {
-                        return Ok(PathBuf::from(format!("/dev/{name}")));
+                        return Ok(Some(part_path));
                     }
                 }
             }
@@ -291,22 +327,22 @@ pub fn id_to_dev<'a, T: Into<Id<'a>>>(id: T) -> Result<PathBuf, IdToDiskError<Io
         {
             match (fs_id, id) {
                 (FsId::Uuid(f_uuid), Id::Uuid(g_uuid)) if &f_uuid == g_uuid => {
-                    return Ok(path);
+                    return Ok(Some(path));
                 }
                 (FsId::VolumeId32(f_volumeid32), Id::VolumeId32(g_volumeid32))
                     if &f_volumeid32 == g_volumeid32 =>
                 {
-                    return Ok(path);
+                    return Ok(Some(path));
                 }
                 (FsId::VolumeId64(f_volumeid64), Id::VolumeId64(g_volumeid64))
                     if &f_volumeid64 == g_volumeid64 =>
                 {
-                    return Ok(path);
+                    return Ok(Some(path));
                 }
                 _ => (),
             }
         }
     }
 
-    Err(IdToDiskError::SearchExhausted)
+    Ok(None)
 }

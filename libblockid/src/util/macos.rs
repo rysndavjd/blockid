@@ -10,7 +10,6 @@ use core_foundation::{
 };
 
 use crate::{
-    error::PartToDiskError,
     io::{IoError, IoErrorKind, Path, PathBuf},
     std::{
         ffi::{c_char, c_int, c_uint},
@@ -56,7 +55,7 @@ const K_IO_SERVICE_PLANE: &str = "IOService\0";
 const K_IO_MEDIA_WHOLE_KEY: &str = "Whole";
 const K_BSD_NAME_KEY: &str = "BSD Name";
 
-pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<IoError>> {
+pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<Option<PathBuf>, IoError> {
     #[cfg(feature = "std")]
     let c_bsd = CString::new(
         path.as_ref()
@@ -78,14 +77,14 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
         unsafe { IOBSDNameMatching(kIOMainPortDefault, 0, c_bsd.as_ptr()) } as CFDictionaryRef;
 
     if matching.is_null() {
-        return Err(PartToDiskError::BSDNameMatch);
+        return Err(IoErrorKind::Other.into());
     }
 
     let mut service = {
         let mut iter: IoIterator = 0;
 
         if unsafe { IOServiceGetMatchingServices(kIOMainPortDefault, matching, &mut iter) } != 0 {
-            return Err(PartToDiskError::UnableToGetService);
+            return Err(IoErrorKind::Other.into());
         }
 
         let service = unsafe { IOIteratorNext(iter) };
@@ -94,14 +93,16 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
     };
 
     if service == 0 {
-        return Err(PartToDiskError::InvalidService);
+        return Err(IoErrorKind::Other.into());
     }
 
-    let whole_key = CFString::from(K_IO_MEDIA_WHOLE_KEY).as_concrete_TypeRef();
-    let bsdname_key = CFString::new(K_BSD_NAME_KEY).as_concrete_TypeRef();
+    let whole_key = CFString::new(K_IO_MEDIA_WHOLE_KEY);
+    let bsdname_key = CFString::new(K_BSD_NAME_KEY);
 
     let result = loop {
-        let whole_prop = unsafe { IORegistryEntryCreateCFProperty(service, whole_key, null(), 0) };
+        let whole_prop = unsafe {
+            IORegistryEntryCreateCFProperty(service, whole_key.as_concrete_TypeRef(), null(), 0)
+        };
 
         let is_whole = if !whole_prop.is_null()
             && unsafe { CFGetTypeID(whole_prop) } == unsafe { CFBooleanGetTypeID() }
@@ -116,8 +117,14 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
         }
 
         if is_whole {
-            let name_prop =
-                unsafe { IORegistryEntryCreateCFProperty(service, bsdname_key, null(), 0) };
+            let name_prop = unsafe {
+                IORegistryEntryCreateCFProperty(
+                    service,
+                    bsdname_key.as_concrete_TypeRef(),
+                    null(),
+                    0,
+                )
+            };
 
             if !name_prop.is_null() {
                 let mut buf = [0 as c_char; 128];
@@ -158,18 +165,19 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
                 break s;
             } else {
                 break None;
-            };
+            }
         }
 
         let mut parent: IoRegistryEntry = 0;
         let kr = unsafe {
             IORegistryEntryGetParentEntry(
                 service,
-                K_IO_SERVICE_PLANE.as_ptr() as *mut i8,
+                K_IO_SERVICE_PLANE.as_ptr().cast::<c_char>(),
                 &mut parent,
             )
         };
         unsafe { IOObjectRelease(service) };
+        service = 0;
 
         if kr != 0 as KernReturn || parent == 0 {
             break None;
@@ -177,15 +185,9 @@ pub fn part_to_disk<P: AsRef<Path>>(path: P) -> Result<PathBuf, PartToDiskError<
         service = parent;
     };
 
-    unsafe { CFRelease(whole_key as CFTypeRef) };
-    unsafe { CFRelease(bsdname_key as CFTypeRef) };
-
     if service != 0 {
         unsafe { IOObjectRelease(service) };
     }
 
-    match result {
-        Some(s) => Ok(s),
-        None => Err(PartToDiskError::DiskNotFound),
-    }
+    Ok(result)
 }

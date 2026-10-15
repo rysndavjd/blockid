@@ -1,5 +1,5 @@
-use alloc::borrow::Borrow;
-use core::ops::Deref;
+use alloc::borrow::{Borrow, Cow};
+use core::{ffi::CStr, ops::Deref};
 
 /// A slice of a path, similar to [`Path`] but for `no_std`.
 ///
@@ -162,10 +162,8 @@ impl From<Vec<u8>> for PathBuf {
 
 impl From<&[u8]> for PathBuf {
     fn from(buf: &[u8]) -> Self {
-        let null = buf.iter().position(|b| b == &0).unwrap_or(buf.len());
-
         return PathBuf {
-            inner: buf[..null].to_vec(),
+            inner: buf.to_vec(),
         };
     }
 }
@@ -174,6 +172,14 @@ impl From<&str> for PathBuf {
     fn from(value: &str) -> Self {
         PathBuf {
             inner: value.as_bytes().to_vec(),
+        }
+    }
+}
+
+impl From<String> for PathBuf {
+    fn from(value: String) -> Self {
+        PathBuf {
+            inner: value.into_bytes(),
         }
     }
 }
@@ -190,5 +196,73 @@ impl Deref for PathBuf {
     #[inline]
     fn deref(&self) -> &Path {
         Path::new(&self.inner)
+    }
+}
+
+impl rustix::path::Arg for PathBuf {
+    #[inline]
+    fn as_str(&self) -> rustix::io::Result<&str> {
+        self.inner.as_str()
+    }
+
+    #[inline]
+    fn to_string_lossy(&self) -> Cow<'_, str> {
+        self.inner.to_string_lossy()
+    }
+
+    #[inline]
+    fn as_cow_c_str(&self) -> rustix::io::Result<Cow<'_, CStr>> {
+        self.inner.as_cow_c_str()
+    }
+
+    #[inline]
+    fn into_c_str<'b>(self) -> rustix::io::Result<Cow<'b, CStr>>
+    where
+        Self: 'b,
+    {
+        self.inner.into_c_str()
+    }
+
+    #[inline]
+    fn into_with_c_str<T, F>(self, f: F) -> rustix::io::Result<T>
+    where
+        Self: Sized,
+        F: FnOnce(&CStr) -> rustix::io::Result<T>,
+    {
+        self.inner.into_with_c_str(f)
+    }
+}
+
+impl rustix::path::Arg for &PathBuf {
+    #[inline]
+    fn as_str(&self) -> rustix::io::Result<&str> {
+        self.inner.as_str()
+    }
+
+    #[inline]
+    fn to_string_lossy(&self) -> Cow<'_, str> {
+        self.inner.to_string_lossy()
+    }
+
+    #[inline]
+    fn as_cow_c_str(&self) -> rustix::io::Result<Cow<'_, CStr>> {
+        self.inner.as_cow_c_str()
+    }
+
+    #[inline]
+    fn into_c_str<'b>(self) -> rustix::io::Result<Cow<'b, CStr>>
+    where
+        Self: 'b,
+    {
+        (&self.inner).into_c_str()
+    }
+
+    #[inline]
+    fn into_with_c_str<T, F>(self, f: F) -> rustix::io::Result<T>
+    where
+        Self: Sized,
+        F: FnOnce(&CStr) -> rustix::io::Result<T>,
+    {
+        (&self.inner).into_with_c_str(f)
     }
 }

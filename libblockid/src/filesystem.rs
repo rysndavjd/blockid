@@ -1,13 +1,13 @@
-pub(crate) mod apfs;
-pub(crate) mod cramfs;
-pub(crate) mod exfat;
-pub(crate) mod ext;
-pub(crate) mod luks;
-pub(crate) mod ntfs;
-pub(crate) mod squashfs;
-pub(crate) mod vfat;
-pub(crate) mod vxfs;
-pub(crate) mod xfs;
+pub mod apfs;
+pub mod cramfs;
+pub mod exfat;
+pub mod ext;
+pub mod luks;
+pub mod ntfs;
+pub mod squashfs;
+pub mod vfat;
+pub mod vxfs;
+pub mod xfs;
 
 use bitflags::bitflags;
 use fat_volume_id::{id32::VolumeId32, id64::VolumeId64};
@@ -198,6 +198,7 @@ impl FsType {
 }
 
 /// Identifier used by a filesystem to uniquely identify them.
+#[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum FsId {
@@ -254,6 +255,7 @@ impl From<VolumeId64> for FsId {
 }
 
 /// The subtype of filesystems.
+#[non_exhaustive]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
@@ -269,6 +271,7 @@ pub enum SubType {
     Fat32,
 }
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub struct FsInfo {
     /// Block type, Eg: EXT4.
@@ -689,6 +692,7 @@ impl serde::Serialize for FsInfo {
 
 bitflags! {
     /// Filesystem types to check for in probe operations.
+    #[non_exhaustive]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct FsFilter: u64 {

@@ -1,10 +1,10 @@
-use crate::std::fmt;
-pub use crate::{
+use crate::{
     filesystem::{
         apfs::ApfsError, cramfs::CramfsError, exfat::ExFatError, ext::ExtError, luks::LuksError,
         ntfs::NtfsError, squashfs::SquashfsError, vfat::VFatError, vxfs::VxfsError, xfs::XfsError,
     },
     partition::{aix::AixError, gpt::GptError, mbr::MbrError},
+    std::fmt,
 };
 
 /// Main error type returned by probing operations.
@@ -89,43 +89,5 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
                 write!(f, "probed object is not a block device")
             }
         }
-    }
-}
-
-#[cfg(feature = "os_calls")]
-#[derive(Debug, Clone)]
-pub enum PartToDiskError<E: fmt::Debug> {
-    Io(E),
-    #[cfg(target_os = "macos")]
-    BSDNameMatch,
-    #[cfg(target_os = "macos")]
-    UnableToGetService,
-    #[cfg(target_os = "macos")]
-    InvalidService,
-    #[cfg(target_os = "macos")]
-    DiskNotFound,
-    DiskNotPartition,
-}
-
-#[cfg(feature = "os_calls")]
-impl<E: fmt::Debug> From<E> for PartToDiskError<E> {
-    fn from(e: E) -> Self {
-        PartToDiskError::Io(e)
-    }
-}
-
-#[cfg(any(target_os = "linux", feature = "os_calls"))]
-#[derive(Debug, Clone)]
-pub enum IdToDiskError<E: fmt::Debug> {
-    Io(E),
-    InvalidPartition,
-    InvalidDevName,
-    SearchExhausted,
-}
-
-#[cfg(any(target_os = "linux", feature = "os_calls"))]
-impl<E: fmt::Debug> From<E> for IdToDiskError<E> {
-    fn from(e: E) -> Self {
-        IdToDiskError::Io(e)
     }
 }

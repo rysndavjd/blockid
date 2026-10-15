@@ -1,7 +1,7 @@
-pub(crate) mod aix;
-pub(crate) mod bsd;
-pub(crate) mod gpt;
-pub(crate) mod mbr;
+pub mod aix;
+pub mod bsd;
+pub mod gpt;
+pub mod mbr;
 
 use bitflags::bitflags;
 use uuid::Uuid;
@@ -88,6 +88,7 @@ impl PtType {
 }
 
 /// Identifier used by a filesystem or partition table.
+#[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PtId {
@@ -126,6 +127,7 @@ impl From<u32> for PtId {
 }
 
 /// The partition type of a specified partition table.
+#[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartitionType {
@@ -138,6 +140,7 @@ pub enum PartitionType {
 }
 
 /// The partition identifier of a specified partition table.
+#[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartitionId {
@@ -166,6 +169,7 @@ impl PartitionId {
 }
 
 /// The partition attributes of a specified partition table.
+#[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PartitionAttributes {
@@ -174,6 +178,7 @@ pub enum PartitionAttributes {
 }
 
 /// Parsed partition infomation.
+#[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone)]
 pub struct Partition {
@@ -356,6 +361,7 @@ impl serde::Serialize for PtInfo {
 
 bitflags! {
     /// Partition table types to check for in probe operations.
+    #[non_exhaustive]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct PtFilter: u64 {

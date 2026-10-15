@@ -23,11 +23,12 @@ pub enum Endianness {
     Big,
 }
 
-/// A label as raw bytes read from disk, tagged as UTF-8 or UTF-16.
+/// A label as raw bytes read from disk.
 ///
 /// The tag reflects what the superblock declares, not a guarantee that the
 /// bytes are validly encoded. Callers may validate/convert the data to a
 /// proper encoded string or use the raw bytes directly.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum Label {
     Utf8(BString),

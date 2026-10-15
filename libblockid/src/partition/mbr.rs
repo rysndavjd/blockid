@@ -16,7 +16,7 @@ use crate::{
     std::fmt,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum MbrError {
     ProbablyAix,
     ProbablyGPT,
@@ -66,15 +66,15 @@ impl<E: fmt::Debug> From<MbrError> for Error<E> {
 const MBR_MAG: &[u8] = b"\x55\xAA";
 const MBR_MAG_OFFSET: u64 = 510;
 
-pub const MBR_MINSZ: Option<u64> = Some(512);
-pub const MBR_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
+pub(crate) const MBR_MINSZ: Option<u64> = Some(512);
+pub(crate) const MBR_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     bytes: MBR_MAG,
     offset: MBR_MAG_OFFSET,
 }]);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
-pub struct MbrTable {
+pub(crate) struct MbrTable {
     pub boot_code1: [u8; 218],
     pub disk_timestamp: [u8; 6],
     pub boot_code2: [u8; 216],
@@ -86,7 +86,7 @@ pub struct MbrTable {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
-pub struct MbrPartitionEntry {
+pub(crate) struct MbrPartitionEntry {
     pub boot_ind: MbrAttributes, /* 0x80 - active */
     pub begin_head: u8,          /* begin CHS */
     pub begin_sector: u8,
@@ -305,7 +305,7 @@ fn is_valid_mbr<IO: BlockIo>(
 ///
 /// When `os_calls` is available parsing will use the disks logical sector size
 /// for calculations.
-pub fn probe_mbr<IO: BlockIo>(
+pub(crate) fn probe_mbr<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     _: Magic,

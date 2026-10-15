@@ -1,6 +1,5 @@
 use bstr::BString;
 use fat_volume_id::id32::VolumeId32;
-use widestring::error::Utf16Error;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, Unaligned, byteorder::LittleEndian, byteorder::U16,
     byteorder::U32, byteorder::U64, transmute_ref,
@@ -8,18 +7,16 @@ use zerocopy::{
 
 use crate::{
     error::Error,
-    filesystem::{FsId, FsInfo, FsType},
+    filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
     probe::Magic,
     std::fmt,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ExFatError {
-    Utf16Error(Utf16Error),
     HeaderChecksumInvalid,
     ProbablyDOS,
-    ProbablyNotEXFAT,
     InvalidClusterSize,
     InvalidBootJump,
     InvalidFsName,
@@ -36,10 +33,8 @@ pub enum ExFatError {
 impl fmt::Display for ExFatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExFatError::Utf16Error(e) => write!(f, "Filesystem label contains invalid UTF-16: {e}"),
             ExFatError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
             ExFatError::ProbablyDOS => write!(f, "Filesystem looks like DOS/MBR"),
-            ExFatError::ProbablyNotEXFAT => write!(f, "Filesystem does not look like EXFAT"),
             ExFatError::InvalidClusterSize => write!(f, "Invalid cluster size"),
             ExFatError::InvalidBootJump => write!(f, "Invalid boot jump"),
             ExFatError::InvalidFsName => write!(f, "Invalid filesystem name"),
@@ -79,34 +74,41 @@ pub const EXFAT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
-pub struct ExFatSuperBlock {
-    pub bootjmp: [u8; 3],
-    pub fs_name: [u8; 8],
+struct ExFatSuperBlock {
+    bootjmp: [u8; 3],
+    fs_name: [u8; 8],
     must_be_zero: [u8; 53],
-    pub partition_offset: U64<LittleEndian>,
-    pub volume_length: U64<LittleEndian>,
-    pub fat_offset: U32<LittleEndian>,
-    pub fat_length: U32<LittleEndian>,
-    pub clustor_heap_offset: U32<LittleEndian>,
-    pub clustor_count: U32<LittleEndian>,
-    pub first_clustor_of_root: U32<LittleEndian>,
-    pub volume_serial: [u8; 4],
-    pub vermin: u8,
-    pub vermaj: u8,
-    pub volume_flags: U16<LittleEndian>,
-    pub bytes_per_sector_shift: u8,
-    pub sectors_per_cluster_shift: u8,
-    pub number_of_fats: u8,
-    pub drive_select: u8,
-    pub percent_in_use: u8,
+    partition_offset: U64<LittleEndian>,
+    volume_length: U64<LittleEndian>,
+    fat_offset: U32<LittleEndian>,
+    fat_length: U32<LittleEndian>,
+    clustor_heap_offset: U32<LittleEndian>,
+    clustor_count: U32<LittleEndian>,
+    first_clustor_of_root: U32<LittleEndian>,
+    volume_serial: [u8; 4],
+    vermin: u8,
+    vermaj: u8,
+    volume_flags: U16<LittleEndian>,
+    bytes_per_sector_shift: u8,
+    sectors_per_cluster_shift: u8,
+    number_of_fats: u8,
+    drive_select: u8,
+    percent_in_use: u8,
     reserved: [u8; 7],
-    pub boot_code: [u8; 390],
-    pub boot_signature: U16<LittleEndian>,
+    boot_code: [u8; 390],
+    boot_signature: U16<LittleEndian>,
 }
 
 // These functions should not overflow assuming that `valid_exfat()`
 // checks are strict enough to reject invaild headers
 impl ExFatSuperBlock {
+    const FIRST_DATA_CLUSTER: u32 = 2;
+    const LAST_DATA_CLUSTER: u32 = 0x0FFFFFF6;
+    const ENTRY_SIZE: usize = 32;
+    const ENTRY_EOD: u8 = 0x00;
+    const ENTRY_LABEL: u8 = 0x83;
+    const MAX_DIR_SIZE: u32 = 256 * 1024 * 1024;
+
     fn block_size(&self) -> usize {
         1usize << self.bytes_per_sector_shift
     }
@@ -121,7 +123,7 @@ impl ExFatSuperBlock {
 
     fn cluster_to_block(&self, cluster: u32) -> u64 {
         u64::from(self.clustor_heap_offset)
-            + ((u64::from(cluster) - u64::from(EXFAT_FIRST_DATA_CLUSTER))
+            + ((u64::from(cluster) - u64::from(Self::FIRST_DATA_CLUSTER))
                 << self.sectors_per_cluster_shift)
     }
 
@@ -139,6 +141,41 @@ impl ExFatSuperBlock {
 
         return Ok(u32::from_le_bytes(next));
     }
+
+    fn verify_checksum<IO: BlockIo>(
+        &self,
+        reader: &mut Reader<IO>,
+        offset: u64,
+    ) -> Result<(), Error<IO::Error>> {
+        let sector_size = self.block_size();
+        let sectors = reader.read_vec_at(offset, sector_size * 12)?;
+
+        let checksum = {
+            let n_bytes = sector_size * 11;
+
+            let mut checksum: u32 = 0;
+            for (i, byte) in sectors.iter().enumerate().take(n_bytes) {
+                if i == 106 || i == 107 || i == 112 {
+                    continue;
+                }
+
+                checksum = checksum.rotate_right(1).wrapping_add(*byte as u32);
+            }
+            checksum
+        };
+
+        let checksum_sector = &sectors[sector_size * 11..sector_size * 12];
+
+        for bytes in checksum_sector.as_chunks::<4>().0 {
+            let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+
+            if checksum != expected {
+                return Err(ExFatError::HeaderChecksumInvalid.into());
+            }
+        }
+
+        return Ok(());
+    }
 }
 
 #[repr(C)]
@@ -148,54 +185,6 @@ struct ExfatEntryLabel {
     length: u8,
     name: [u8; 22],
     reserved: [u8; 8],
-}
-
-const EXFAT_FIRST_DATA_CLUSTER: u32 = 2;
-const EXFAT_LAST_DATA_CLUSTER: u32 = 0x0FFFFFF6;
-
-const EXFAT_ENTRY_SIZE: usize = 32;
-const EXFAT_ENTRY_EOD: u8 = 0x00;
-const EXFAT_ENTRY_LABEL: u8 = 0x83;
-
-// 256 * 1024 * 1024
-//const EXFAT_MAX_DIR_SIZE: u32 = 268435456;
-
-pub fn get_exfatcsum(sectors: &[u8], sector_size: usize) -> u32 {
-    let n_bytes = sector_size * 11;
-
-    let mut checksum: u32 = 0;
-
-    for (i, byte) in sectors.iter().enumerate().take(n_bytes) {
-        if i == 106 || i == 107 || i == 112 {
-            continue;
-        }
-
-        checksum = checksum.rotate_right(1).wrapping_add(*byte as u32);
-    }
-
-    return checksum;
-}
-
-fn verify_exfat_checksum<IO: BlockIo>(
-    reader: &mut Reader<IO>,
-    offset: u64,
-    sb: &ExFatSuperBlock,
-) -> Result<(), Error<IO::Error>> {
-    let sector_size = sb.block_size();
-    let data = reader.read_vec_at(offset, sector_size * 12)?;
-    let checksum = get_exfatcsum(&data, sector_size);
-
-    let checksum_sector = &data[sector_size * 11..sector_size * 12];
-
-    for bytes in checksum_sector.as_chunks::<4>().0 {
-        let expected = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-
-        if checksum != expected {
-            return Err(ExFatError::HeaderChecksumInvalid.into());
-        }
-    }
-
-    return Ok(());
 }
 
 #[inline]
@@ -241,14 +230,17 @@ fn valid_exfat<IO: BlockIo>(
         return Err(ExFatError::InvalidRangeOfSectorsPerClusterShift.into());
     }
 
-    let total_fat_sectors = u32::from(sb.fat_length)
+    let total_fat_sectors = sb
+        .fat_length
+        .get()
         .checked_mul(u32::from(sb.number_of_fats))
         .ok_or(ExFatError::Overflow)?;
 
     if !in_range_inclusive(
-        u32::from(sb.fat_offset),
+        sb.fat_offset.get(),
         24,
-        u32::from(sb.clustor_heap_offset)
+        sb.clustor_heap_offset
+            .get()
             .checked_sub(total_fat_sectors)
             .ok_or(ExFatError::Overflow)?,
     ) {
@@ -256,8 +248,9 @@ fn valid_exfat<IO: BlockIo>(
     }
 
     if !in_range_inclusive(
-        u32::from(sb.clustor_heap_offset),
-        u32::from(sb.fat_offset)
+        sb.clustor_heap_offset.get(),
+        sb.fat_offset
+            .get()
             .checked_add(total_fat_sectors)
             .ok_or(ExFatError::Overflow)?,
         u32::MAX,
@@ -266,9 +259,10 @@ fn valid_exfat<IO: BlockIo>(
     }
 
     if !in_range_inclusive(
-        u32::from(sb.first_clustor_of_root),
+        sb.first_clustor_of_root.get(),
         2,
-        u32::from(sb.clustor_count)
+        sb.clustor_count
+            .get()
             .checked_add(1)
             .ok_or(ExFatError::Overflow)?,
     ) {
@@ -279,12 +273,12 @@ fn valid_exfat<IO: BlockIo>(
         return Err(ExFatError::InvalidClusterSize.into());
     }
 
-    verify_exfat_checksum(reader, offset, sb)?;
+    sb.verify_checksum(reader, offset)?;
 
     return Ok(());
 }
 
-pub fn probe_is_exfat<IO: BlockIo>(
+pub(crate) fn probe_is_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
 ) -> Result<bool, Error<IO::Error>> {
@@ -308,22 +302,20 @@ fn find_label<IO: BlockIo>(
     reader: &mut Reader<IO>,
     sb: &ExFatSuperBlock,
 ) -> Result<Option<BString>, Error<IO::Error>> {
-    let mut cluster = u32::from(sb.first_clustor_of_root);
+    let mut cluster = sb.first_clustor_of_root.get();
     let mut offset = sb.cluster_to_offset(cluster);
 
     let mut i = 0;
-    let mut buf: [u8; EXFAT_ENTRY_SIZE] = [0u8; 32];
+    let mut buf: [u8; ExFatSuperBlock::ENTRY_SIZE] = [0u8; 32];
 
-    while i < 8388608 {
-        // EXFAT_MAX_DIR_SIZE / EXFAT_ENTRY_SIZE
+    while i < (ExFatSuperBlock::MAX_DIR_SIZE / (ExFatSuperBlock::ENTRY_SIZE as u32)) {
         reader.read_at(offset, &mut buf)?;
-
         let entry: &ExfatEntryLabel = transmute_ref!(&buf);
 
-        if entry.label_type == EXFAT_ENTRY_EOD {
+        if entry.label_type == ExFatSuperBlock::ENTRY_EOD {
             return Ok(None);
         }
-        if entry.label_type == EXFAT_ENTRY_LABEL {
+        if entry.label_type == ExFatSuperBlock::ENTRY_LABEL {
             if entry.name == [0u8; 22] {
                 return Ok(None);
             }
@@ -331,14 +323,14 @@ fn find_label<IO: BlockIo>(
             return Ok(Some(BString::from(entry.name)));
         }
 
-        offset += EXFAT_ENTRY_SIZE as u64;
+        offset += ExFatSuperBlock::ENTRY_SIZE as u64;
 
         if sb.cluster_size() != 0 && offset.is_multiple_of(sb.cluster_size() as u64) {
             cluster = sb.next_cluster(reader, cluster)?;
-            if cluster < EXFAT_FIRST_DATA_CLUSTER {
+            if cluster < ExFatSuperBlock::FIRST_DATA_CLUSTER {
                 return Ok(None);
             }
-            if cluster > EXFAT_LAST_DATA_CLUSTER {
+            if cluster > ExFatSuperBlock::LAST_DATA_CLUSTER {
                 return Ok(None);
             }
             offset = sb.cluster_to_offset(cluster);
@@ -349,13 +341,12 @@ fn find_label<IO: BlockIo>(
     Ok(None)
 }
 
-pub fn probe_exfat<IO: BlockIo>(
+pub(crate) fn probe_exfat<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<ExFatSuperBlock>()] = reader.read_exact_at(offset)?;
-
     let sb: &ExFatSuperBlock = transmute_ref!(&buf);
 
     valid_exfat(reader, offset, sb)?;
@@ -363,7 +354,7 @@ pub fn probe_exfat<IO: BlockIo>(
     let mut info = FsInfo::empty();
 
     info.set_fs_type(FsType::Exfat);
-    info.set_fs_id(FsId::VolumeId32(VolumeId32::from_bytes(sb.volume_serial)));
+    info.set_fs_id(VolumeId32::from_bytes(sb.volume_serial).into());
     if let Some(l) = find_label(reader, sb)? {
         info.set_label(l.into());
     }

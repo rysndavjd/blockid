@@ -9,7 +9,7 @@ use crate::{
     std::fmt,
 };
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum SquashfsError {
     InvalidVersion,
     InvalidVersionSqsh3,

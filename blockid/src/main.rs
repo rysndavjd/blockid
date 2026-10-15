@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     io::{self, ErrorKind, stdout},
     path::PathBuf,
 };
@@ -7,13 +6,13 @@ use std::{
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use libblockid::{
     Id, Probe,
-    error::{Error, PartToDiskError},
+    error::Error,
     filesystem::{FS_DETECT_ORDER, FsFilter, FsInfo},
     id_to_dev, part_to_disk,
     partition::{PT_DETECT_ORDER, PtFilter, PtInfo},
 };
 use serde::Serialize;
-use serde_dotenv::to_writer as to_dotenv_writer;
+use serde_dotenv::{PosixPrettyFormatter, to_writer as to_dotenv_writer};
 use serde_json::to_writer_pretty as to_json_writer;
 use shadow_rs::shadow;
 use toml::to_string_pretty as to_toml_pretty;
@@ -98,10 +97,10 @@ enum Commands {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, ValueEnum, Default)]
 enum Format {
+    #[default]
     /// Output in dotenv.
     Export,
     /// Output in JSON.
-    #[default]
     Json,
     /// Output in TOML.
     Toml,
@@ -131,7 +130,8 @@ struct PartToDisk {
 fn write_output<T: Serialize>(value: &T, format: Option<Format>) -> Result<(), Error<io::Error>> {
     match format.unwrap_or_default() {
         Format::Export => {
-            to_dotenv_writer(stdout(), value).map_err(|_| Error::Io(ErrorKind::Other.into()))?;
+            to_dotenv_writer(stdout(), PosixPrettyFormatter, value)
+                .map_err(|_| Error::Io(ErrorKind::Other.into()))?;
             println!()
         }
         Format::Json => {
@@ -160,43 +160,13 @@ impl Serialize for ProbeResult {
     }
 }
 
-enum Errors {
-    ProbeErrors(Error<io::Error>),
-    PartToDisk(PartToDiskError<io::Error>),
-}
-
-impl Display for Errors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Errors::ProbeErrors(e) => {
-                write!(f, "{e:?}")
-            }
-            Errors::PartToDisk(e) => {
-                write!(f, "{e:?}")
-            }
-        }
-    }
-}
-
-impl From<Error<io::Error>> for Errors {
-    fn from(e: Error<io::Error>) -> Self {
-        Errors::ProbeErrors(e)
-    }
-}
-
-impl From<PartToDiskError<io::Error>> for Errors {
-    fn from(e: PartToDiskError<io::Error>) -> Self {
-        Errors::PartToDisk(e)
-    }
-}
-
 fn main() {
     if let Err(e) = _main() {
-        eprintln!("{}", e)
+        eprintln!("{:?}", e)
     }
 }
 
-fn _main() -> Result<(), Errors> {
+fn _main() -> Result<(), Error<io::Error>> {
     let cli = Cli::parse();
 
     if cli.shadow_version {
@@ -253,11 +223,11 @@ fn _main() -> Result<(), Errors> {
 
                 let result = match probe.probe_part_table(pt_filter) {
                     Ok(info) => ProbeResult::PartTable(info),
-                    Err(Error::Io(e)) => return Err(Error::Io(e).into()),
+                    Err(Error::Io(e)) => return Err(Error::Io(e)),
                     Err(_) => match probe.probe_filesystem(fs_filter) {
                         Ok(info) => ProbeResult::Filesystem(info),
-                        Err(Error::Io(e)) => return Err(Error::Io(e).into()),
-                        Err(_) => return Err(Error::ProbesExhausted.into()),
+                        Err(Error::Io(e)) => return Err(Error::Io(e)),
+                        Err(_) => return Err(Error::ProbesExhausted),
                     },
                 };
 

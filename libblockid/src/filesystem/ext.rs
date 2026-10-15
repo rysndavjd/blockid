@@ -12,16 +12,15 @@ use crate::{
     filesystem::{FsInfo, FsType},
     io::{BlockIo, Reader},
     probe::Magic,
-    std::{fmt, mem::offset_of, str::Utf8Error},
+    std::{fmt, mem::offset_of},
 };
 
 /*
 https://www.kernel.org/doc/html/latest/filesystems/ext4/globals.html
 */
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ExtError {
-    Utf8Error(Utf8Error),
     ProbablyLegacyExt,
     ProbablyExt4Dev,
     HeaderChecksumInvalid,
@@ -33,25 +32,26 @@ pub enum ExtError {
     InvalidExt4Features,
     Ext4DetectedAsJbd,
     InvalidBlockSize,
+    FsSizeOverflow,
 }
 
 impl fmt::Display for ExtError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExtError::Utf8Error(e) => write!(f, "Filesystem label contains invalid UTF-8: {e}"),
-            ExtError::ProbablyLegacyExt => write!(f, "Filesystem detected as legacy EXT"),
-            ExtError::ProbablyExt4Dev => write!(f, "Filesystem detected as EXT4dev"),
-            ExtError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
+            ExtError::ProbablyLegacyExt => write!(f, "filesystem detected as legacy EXT"),
+            ExtError::ProbablyExt4Dev => write!(f, "filesystem detected as EXT4dev"),
+            ExtError::HeaderChecksumInvalid => write!(f, "invalid header checksum"),
             ExtError::Ext2BlockHasJournal => writeln!(f, "EXT2 does not have a journal"),
             ExtError::Ext3BlockMissingJournal => write!(f, "EXT3 requires to have a journal"),
             ExtError::MissingExt3FeatureIncompatJournalDev => {
-                write!(f, "Missing EXT3 Feature Incompat Journal Dev")
+                write!(f, "missing EXT3 feature incompat journal dev")
             }
-            ExtError::InvalidExt2Features => write!(f, "Invalid EXT2 features"),
-            ExtError::InvalidExt3Features => write!(f, "Invalid EXT3 features"),
-            ExtError::InvalidExt4Features => write!(f, "Invalid EXT4 features"),
+            ExtError::InvalidExt2Features => write!(f, "invalid EXT2 features"),
+            ExtError::InvalidExt3Features => write!(f, "invalid EXT3 features"),
+            ExtError::InvalidExt4Features => write!(f, "invalid EXT4 features"),
             ExtError::Ext4DetectedAsJbd => write!(f, "EXT4 detected as JBD"),
-            ExtError::InvalidBlockSize => write!(f, "Invalid `es.s_log_block_size`"),
+            ExtError::InvalidBlockSize => write!(f, "invalid `es.s_log_block_size`"),
+            ExtError::FsSizeOverflow => write!(f, "calculating filesystem size overflowed"),
         }
     }
 }
@@ -62,15 +62,15 @@ impl<E: fmt::Debug> From<ExtError> for Error<E> {
     }
 }
 
-pub const EXT_MINSZ: Option<u64> = Some(1048576);
-pub const EXT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
+pub(crate) const EXT_MINSZ: Option<u64> = Some(1048576);
+pub(crate) const EXT_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     bytes: &[0x53, 0xEF],
     offset: 0x438,
 }]);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
-pub struct Ext2SuperBlock {
+struct Ext2SuperBlock {
     pub s_inodes_count: U32<LittleEndian>,
     pub s_blocks_count_lo: U32<LittleEndian>,
     pub s_r_blocks_count_lo: U32<LittleEndian>,
@@ -203,37 +203,36 @@ pub struct Ext2SuperBlock {
 
 impl Ext2SuperBlock {
     const OFFSET: u64 = 1024;
+    const EXT_ALGO: Algorithm<u32> = Algorithm {
+        width: 32,
+        poly: 0x1edc6f41,
+        init: 0xffffffff,
+        refin: true,
+        refout: true,
+        xorout: 0,
+        check: 0xe3069283,
+        residue: 0xb798b438,
+    };
+    const EXT_CRC: Crc<u32> = Crc::<u32>::new(&Self::EXT_ALGO);
 
-    /*
-    fn ext_state(
-            &self
-        ) -> ExtState
-    {
-        ExtState::from_bits_truncate(u16::from(self.s_state))
-    }
-
-    fn ext_errors(
-            &self
-        ) -> ExtErrors
-    {
-        ExtErrors::from_bits_truncate(u16::from(self.s_errors))
-    }
-    */
-
+    #[inline]
     fn feature_compat(&self) -> ExtFeatureCompat {
-        ExtFeatureCompat::from_bits_truncate(u32::from(self.s_feature_compat))
+        ExtFeatureCompat::from_bits_truncate(self.s_feature_compat.get())
     }
 
+    #[inline]
     fn feature_incompat(&self) -> ExtFeatureIncompat {
-        ExtFeatureIncompat::from_bits_truncate(u32::from(self.s_feature_incompat))
+        ExtFeatureIncompat::from_bits_truncate(self.s_feature_incompat.get())
     }
 
+    #[inline]
     fn feature_rocompat(&self) -> ExtFeatureRoCompat {
-        ExtFeatureRoCompat::from_bits_truncate(u32::from(self.s_feature_ro_compat))
+        ExtFeatureRoCompat::from_bits_truncate(self.s_feature_ro_compat.get())
     }
 
+    #[inline]
     fn ext_flags(&self) -> ExtFlags {
-        ExtFlags::from_bits_truncate(u32::from(self.s_flags))
+        ExtFlags::from_bits_truncate(self.s_flags.get())
     }
 
     fn get_block_count(&self) -> u64 {
@@ -247,35 +246,100 @@ impl Ext2SuperBlock {
                 0
             }
     }
+
+    fn ext_checksum(&self) -> Result<(), ExtError> {
+        let ro_compat = self.feature_rocompat();
+
+        if ro_compat.contains(ExtFeatureRoCompat::METADATA_CSUM) {
+            let calc_sum =
+                Self::EXT_CRC.checksum(&self.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
+
+            if self.s_checksum.get() != calc_sum {
+                return Err(ExtError::HeaderChecksumInvalid);
+            }
+        } else if self.s_log_block_size.get() >= 256 {
+            return Err(ExtError::ProbablyLegacyExt);
+        }
+
+        return Ok(());
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn ext_get_info(
+        &self,
+    ) -> Result<
+        (
+            Option<BString>,
+            Uuid,
+            Option<Uuid>,
+            String,
+            u64,
+            u64,
+            u64,
+            String,
+        ),
+        ExtError,
+    > {
+        let fc = self.feature_compat();
+
+        let label: Option<BString> = if self.s_volume_name[0] != 0 {
+            Some(BString::from(self.s_volume_name))
+        } else {
+            None
+        };
+
+        let uuid = Uuid::from_bytes(self.s_uuid);
+
+        let journal_uuid: Option<Uuid> = if fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
+            if self.s_journal_uuid == [0; 16] {
+                None //Journal is internal to the filesystem   
+            } else {
+                Some(Uuid::from_bytes(self.s_journal_uuid))
+            }
+        } else {
+            None
+        };
+
+        let version = format!(
+            "{}.{}",
+            self.s_rev_level.get(),
+            self.s_minor_rev_level.get()
+        );
+
+        let block_size: u64 = 1024u64
+            .checked_shl(self.s_log_block_size.get())
+            .ok_or(ExtError::InvalidBlockSize)?;
+
+        let fs_size: u64 = block_size
+            .checked_mul(self.get_block_count())
+            .ok_or(ExtError::FsSizeOverflow)?;
+
+        let fslastblock: u64 = self.get_block_count();
+
+        Ok((
+            label,
+            uuid,
+            journal_uuid,
+            version,
+            block_size,
+            fslastblock,
+            fs_size,
+            self.s_creator_os.to_string(),
+        ))
+    }
 }
 
 bitflags! {
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub struct ExtState: u16 {
-        const CleanlyUmounted = 0x0001;
-        const ErrorsDetected = 0x0002;
-        const OrphansbeingRecovered = 0x0004;
-    }
-
-    #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub struct ExtErrors: u16 {
-        const Continue = 1;
-        const RemountRO = 2;
-        const Panic = 3;
-    }
-
-    #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub struct ExtFeatureCompat: u32 {
+    pub(crate) struct ExtFeatureCompat: u32 {
         const HAS_JOURNAL = 0x0004;
         const SPARSE_SUPER2 = 0x200;
     }
 
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub struct ExtFeatureIncompat: u32 {
+    pub(crate) struct ExtFeatureIncompat: u32 {
         const FILETYPE         = 0x0002;
         const RECOVER          = 0x0004;
         const JOURNAL_DEV      = 0x0008;
@@ -288,7 +352,7 @@ bitflags! {
 
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub struct ExtFeatureRoCompat: u32 {
+    pub(crate) struct ExtFeatureRoCompat: u32 {
         const SPARSE_SUPER     = 0x0001;
         const LARGE_FILE       = 0x0002;
         const BTREE_DIR        = 0x0004;
@@ -302,18 +366,18 @@ bitflags! {
 
     #[repr(transparent)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub struct ExtFlags: u32 {
+    pub(crate) struct ExtFlags: u32 {
         const EXT2_FLAGS_TEST_FILESYS = 0x0004;
     }
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Unaligned, Immutable)]
-pub struct ExtCreator(U32<LittleEndian>);
+pub(crate) struct ExtCreator(U32<LittleEndian>);
 
 impl fmt::Display for ExtCreator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match u32::from(self.0) {
+        match self.0.get() {
             0 => write!(f, "linux"),
             1 => write!(f, "hurd"),
             2 => write!(f, "masix"),
@@ -324,127 +388,23 @@ impl fmt::Display for ExtCreator {
     }
 }
 
-// This is abit janky but works without nightly rust
-const EXT2_FEATURE_INCOMPAT_UNSUPPORTED: ExtFeatureIncompat =
-    ExtFeatureIncompat::from_bits_truncate(
-        !(ExtFeatureIncompat::FILETYPE.bits() | ExtFeatureIncompat::META_BG.bits()),
-    );
+const EXT2_FEATURE_INCOMPAT_UNSUPPORTED: ExtFeatureIncompat = ExtFeatureIncompat::FILETYPE
+    .union(ExtFeatureIncompat::META_BG)
+    .complement();
 
-const EXT2_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat =
-    ExtFeatureRoCompat::from_bits_truncate(
-        !(ExtFeatureRoCompat::SPARSE_SUPER.bits()
-            | ExtFeatureRoCompat::LARGE_FILE.bits()
-            | ExtFeatureRoCompat::BTREE_DIR.bits()),
-    );
+const EXT2_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat = ExtFeatureRoCompat::SPARSE_SUPER
+    .union(ExtFeatureRoCompat::LARGE_FILE)
+    .union(ExtFeatureRoCompat::BTREE_DIR)
+    .complement();
 
-const EXT3_FEATURE_INCOMPAT_UNSUPPORTED: ExtFeatureIncompat =
-    ExtFeatureIncompat::from_bits_truncate(
-        !(ExtFeatureIncompat::FILETYPE.bits() | ExtFeatureIncompat::RECOVER.bits()),
-    );
+const EXT3_FEATURE_INCOMPAT_UNSUPPORTED: ExtFeatureIncompat = ExtFeatureIncompat::FILETYPE
+    .union(ExtFeatureIncompat::RECOVER)
+    .complement();
 
-const EXT3_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat =
-    ExtFeatureRoCompat::from_bits_truncate(
-        !(ExtFeatureRoCompat::SPARSE_SUPER.bits()
-            | ExtFeatureRoCompat::LARGE_FILE.bits()
-            | ExtFeatureRoCompat::BTREE_DIR.bits()),
-    );
-
-/*
- * reads superblock and returns:
- *	fc = feature_compat
- *	fi = feature_incompat
- *	frc = feature_ro_compat
- */
-
-fn ext_checksum(es: &Ext2SuperBlock) -> Result<(), ExtError> {
-    let ro_compat = es.feature_rocompat();
-
-    if ro_compat.contains(ExtFeatureRoCompat::METADATA_CSUM) {
-        const EXT_CRC: Algorithm<u32> = Algorithm {
-            width: 32,
-            poly: 0x1edc6f41,
-            init: 0xffffffff,
-            refin: true,
-            refout: true,
-            xorout: 0,
-            check: 0xe3069283,
-            residue: 0xb798b438,
-        };
-
-        let calc_sum = Crc::<u32>::new(&EXT_CRC)
-            .checksum(&es.as_bytes()[..offset_of!(Ext2SuperBlock, s_checksum)]);
-
-        if es.s_checksum.get() != calc_sum {
-            return Err(ExtError::HeaderChecksumInvalid);
-        }
-    } else if u32::from(es.s_log_block_size) >= 256 {
-        return Err(ExtError::ProbablyLegacyExt);
-    }
-
-    return Ok(());
-}
-
-#[allow(clippy::type_complexity)]
-fn ext_get_info(
-    es: &Ext2SuperBlock,
-) -> Result<
-    (
-        Option<BString>,
-        Uuid,
-        Option<Uuid>,
-        String,
-        u64,
-        u64,
-        u64,
-        String,
-    ),
-    ExtError,
-> {
-    let fc = es.feature_compat();
-
-    let label: Option<BString> = if es.s_volume_name[0] != 0 {
-        Some(BString::from(es.s_volume_name))
-    } else {
-        None
-    };
-
-    let uuid = Uuid::from_bytes(es.s_uuid);
-
-    let journal_uuid: Option<Uuid> = if fc.contains(ExtFeatureCompat::HAS_JOURNAL) {
-        if es.s_journal_uuid == [0; 16] {
-            None //Journal is internal to the filesystem   
-        } else {
-            Some(Uuid::from_bytes(es.s_journal_uuid))
-        }
-    } else {
-        None
-    };
-
-    let version = format!(
-        "{}.{}",
-        u32::from(es.s_rev_level),
-        u16::from(es.s_minor_rev_level)
-    );
-
-    let block_size: u64 = 1024u64
-        .checked_shl(u32::from(es.s_log_block_size))
-        .ok_or(ExtError::InvalidBlockSize)?;
-
-    let fs_size: u64 = block_size * es.get_block_count();
-
-    let fslastblock: u64 = es.get_block_count();
-
-    Ok((
-        label,
-        uuid,
-        journal_uuid,
-        version,
-        block_size,
-        fslastblock,
-        fs_size,
-        es.s_creator_os.to_string(),
-    ))
-}
+const EXT3_FEATURE_RO_COMPAT_UNSUPPORTED: ExtFeatureRoCompat = ExtFeatureRoCompat::SPARSE_SUPER
+    .union(ExtFeatureRoCompat::LARGE_FILE)
+    .union(ExtFeatureRoCompat::BTREE_DIR)
+    .complement();
 
 pub fn probe_jbd<IO: BlockIo>(
     reader: &mut Reader<IO>,
@@ -453,7 +413,6 @@ pub fn probe_jbd<IO: BlockIo>(
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
-
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
     let fi = es.feature_incompat();
@@ -463,7 +422,7 @@ pub fn probe_jbd<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        es.ext_get_info()?;
 
     let mut info = FsInfo::empty();
 
@@ -493,10 +452,9 @@ pub fn probe_ext2<IO: BlockIo>(
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
-
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
-    ext_checksum(es)?;
+    es.ext_checksum()?;
 
     let fc = es.feature_compat();
     let fi = es.feature_incompat();
@@ -513,7 +471,7 @@ pub fn probe_ext2<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        es.ext_get_info()?;
 
     let mut info = FsInfo::empty();
 
@@ -543,10 +501,9 @@ pub fn probe_ext3<IO: BlockIo>(
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
-
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
-    ext_checksum(es)?;
+    es.ext_checksum()?;
 
     let fc = es.feature_compat();
     let fi = es.feature_incompat();
@@ -563,7 +520,7 @@ pub fn probe_ext3<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        es.ext_get_info()?;
 
     let mut info = FsInfo::empty();
 
@@ -593,10 +550,9 @@ pub fn probe_ext4<IO: BlockIo>(
 ) -> Result<FsInfo, Error<IO::Error>> {
     let buf: [u8; size_of::<Ext2SuperBlock>()] =
         reader.read_exact_at(offset + Ext2SuperBlock::OFFSET)?;
-
     let es: &Ext2SuperBlock = transmute_ref!(&buf);
 
-    ext_checksum(es)?;
+    es.ext_checksum()?;
 
     let fi = es.feature_incompat();
     let frc = es.feature_rocompat();
@@ -617,7 +573,7 @@ pub fn probe_ext4<IO: BlockIo>(
     }
 
     let (label, uuid, journal_uuid, version, block_size, fs_last_block, fs_size, creator) =
-        ext_get_info(es)?;
+        es.ext_get_info()?;
 
     let mut info = FsInfo::empty();
 

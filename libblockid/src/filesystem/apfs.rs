@@ -13,27 +13,37 @@ use crate::{
     std::{fmt, mem::offset_of},
 };
 
-#[derive(Debug, Clone)]
+/// Errors that may occur when parsing APFS (Apple File System).
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ApfsError {
+    /// Stored header checksum does not match checksum calculated from
+    /// header contents.
     HeaderChecksumInvalid,
+    /// Invalid APFS container superblock filesystem type.
     InvalidSuperFsType,
+    /// Invalid APFS container superblock subtype.
     InvalidSuperblockSubType,
+    /// Padding within header not zeroed.
     PaddingNotZero,
+    /// Block size is not 4096 bytes.
     InvalidBlockSize,
-    UuidEmpty,
+    /// Header UUID is [nil](https://en.wikipedia.org/wiki/Universally_unique_identifier#Special_values).
+    UuidNil,
 }
 
 impl fmt::Display for ApfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ApfsError::HeaderChecksumInvalid => write!(f, "Invalid header checksum"),
-            ApfsError::InvalidSuperFsType => write!(f, "Invalid APFS container superblock type"),
-            ApfsError::InvalidSuperblockSubType => {
-                write!(f, "Invalid APFS container superblock subtype")
+            ApfsError::HeaderChecksumInvalid => write!(f, "invalid header checksum"),
+            ApfsError::InvalidSuperFsType => {
+                write!(f, "invalid APFS container superblock filesystem type")
             }
-            ApfsError::PaddingNotZero => write!(f, "Padding not zero"),
-            ApfsError::InvalidBlockSize => write!(f, "Invalid standard block size"),
-            ApfsError::UuidEmpty => write!(f, "UUID entry is empty"),
+            ApfsError::InvalidSuperblockSubType => {
+                write!(f, "invalid APFS container superblock subtype")
+            }
+            ApfsError::PaddingNotZero => write!(f, "padding within header not zeroed"),
+            ApfsError::InvalidBlockSize => write!(f, "block size is not 4096 bytes"),
+            ApfsError::UuidNil => write!(f, "UUID is nil"),
         }
     }
 }
@@ -44,31 +54,31 @@ impl<E: fmt::Debug> From<ApfsError> for Error<E> {
     }
 }
 
-pub const APFS_MINSZ: Option<u64> = None;
-pub const APFS_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
+pub(crate) const APFS_MINSZ: Option<u64> = None;
+pub(crate) const APFS_MAGICS: Option<&'static [Magic]> = Some(&[Magic {
     bytes: ApfsSuperBlock::MAGIC,
     offset: ApfsSuperBlock::MAGIC_OFFSET,
 }]);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable)]
-pub struct ApfsSuperBlock {
-    pub checksum: U64<LittleEndian>,
-    pub oid: U64<LittleEndian>,
-    pub xid: U64<LittleEndian>,
-    pub apfs_type: U16<LittleEndian>,
-    pub flags: U16<LittleEndian>,
-    pub subtype: U16<LittleEndian>,
-    pub pad: U16<LittleEndian>,
+struct ApfsSuperBlock {
+    checksum: U64<LittleEndian>,
+    oid: U64<LittleEndian>,
+    xid: U64<LittleEndian>,
+    apfs_type: U16<LittleEndian>,
+    flags: U16<LittleEndian>,
+    subtype: U16<LittleEndian>,
+    pad: U16<LittleEndian>,
 
-    pub magic: [u8; 4],
-    pub block_size: U32<LittleEndian>,
-    pub block_count: U64<LittleEndian>,
-    pub features: U64<LittleEndian>,
-    pub read_only_features: U64<LittleEndian>,
-    pub incompatible_features: U64<LittleEndian>,
-    pub uuid: [u8; 16],
-    pub padding: [u8; 4008],
+    magic: [u8; 4],
+    block_size: U32<LittleEndian>,
+    block_count: U64<LittleEndian>,
+    features: U64<LittleEndian>,
+    read_only_features: U64<LittleEndian>,
+    incompatible_features: U64<LittleEndian>,
+    uuid: [u8; 16],
+    padding: [u8; 4008],
 }
 
 impl ApfsSuperBlock {
@@ -102,7 +112,7 @@ fn fletcher64(buf: &[u8]) -> u64 {
     return ((csum_hi as u64) << 32) | (csum_lo as u64);
 }
 
-pub fn probe_apfs<IO: BlockIo>(
+pub(crate) fn probe_apfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     _: Magic,
@@ -135,7 +145,7 @@ pub fn probe_apfs<IO: BlockIo>(
     let uuid = if sb.uuid != [0u8; 16] {
         Uuid::from_bytes(sb.uuid)
     } else {
-        return Err(ApfsError::UuidEmpty.into());
+        return Err(ApfsError::UuidNil.into());
     };
 
     let mut info = FsInfo::empty();

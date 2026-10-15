@@ -15,7 +15,7 @@ use crate::{
     std::{fmt, mem::offset_of},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum XfsError {
     InvalidHeaderRanges,
     InvalidHeaderVersion,

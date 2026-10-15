@@ -16,9 +16,9 @@ use crate::{
     util::bytes_to_u16string,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum NtfsError {
-    Utf16Error(Utf16Error),
+    Utf16Error,
     InvalidSectorSize,
     InvalidSectorPerCluster,
     ClusterSizeGreaterThanMax,
@@ -37,7 +37,7 @@ pub enum NtfsError {
 impl fmt::Display for NtfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NtfsError::Utf16Error(e) => write!(f, "Filesystem label contains invalid UTF-16: {e}"),
+            NtfsError::Utf16Error => write!(f, "Filesystem label contains invalid UTF-16"),
             NtfsError::InvalidSectorSize => write!(f, "Invalid sector size"),
             NtfsError::InvalidSectorPerCluster => write!(f, "Invalid sector per cluster"),
             NtfsError::ClusterSizeGreaterThanMax => write!(f, "Cluster size greater than max"),

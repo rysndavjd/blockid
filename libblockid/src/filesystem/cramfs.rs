@@ -11,17 +11,22 @@ use crate::{
     std::{fmt, mem::offset_of},
 };
 
-#[derive(Debug, Clone)]
+/// Errors that may occur when parsing cramfs.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum CramfsError {
-    ChecksumInvalid,
-    ChecksumSizeInvalid,
+    /// Version 2 header contains invalid checksum.
+    HeaderChecksumInvalid,
+    /// Header size less than 64 or greater than 65536 bytes.
+    HeaderSizeInvalid,
 }
 
 impl fmt::Display for CramfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CramfsError::ChecksumInvalid => write!(f, "cramfs header checksum invalid"),
-            CramfsError::ChecksumSizeInvalid => write!(f, "cramfs checksum has invalid size"),
+            CramfsError::HeaderChecksumInvalid => write!(f, "invalid v2 header checksum"),
+            CramfsError::HeaderSizeInvalid => {
+                write!(f, "header size less than 64 or greater than 65536 bytes")
+            }
         }
     }
 }
@@ -35,8 +40,8 @@ impl<E: fmt::Debug> From<CramfsError> for Error<E> {
 const LITTLE_ENDIAN_MAGIC: &[u8; 4] = b"\x45\x3d\xcd\x28";
 const BIG_ENDIAN_MAGIC: &[u8; 4] = b"\x28\xcd\x3d\x45";
 
-pub const CRAMFS_MINSZ: Option<u64> = None;
-pub const CRAMFS_MAGICS: Option<&'static [Magic]> = Some(&[
+pub(crate) const CRAMFS_MINSZ: Option<u64> = None;
+pub(crate) const CRAMFS_MAGICS: Option<&'static [Magic]> = Some(&[
     Magic {
         bytes: LITTLE_ENDIAN_MAGIC,
         offset: 0,
@@ -78,19 +83,19 @@ fn verify_csum<IO: BlockIo>(
         u32::from_be_bytes(sb.crc)
     };
 
-    let csummed_size = if le {
+    let sb_size = if le {
         u32::from_le_bytes(sb.size)
     } else {
         u32::from_be_bytes(sb.size)
     };
 
-    if csummed_size > (1 << 16) || csummed_size < (size_of::<CramfsSuperBlock>() as u32) {
-        return Err(CramfsError::ChecksumSizeInvalid.into());
+    if sb_size > (1 << 16) || sb_size < (size_of::<CramfsSuperBlock>() as u32) {
+        return Err(CramfsError::HeaderSizeInvalid.into());
     }
 
     let crc_buf = reader.read_at_exclude(
         offset,
-        csummed_size as usize,
+        sb_size as usize,
         offset_of!(CramfsSuperBlock, crc)
             ..(offset_of!(CramfsSuperBlock, crc) + size_of_val(&sb.crc)),
     )?;
@@ -101,10 +106,10 @@ fn verify_csum<IO: BlockIo>(
         return Ok(());
     }
 
-    Err(CramfsError::ChecksumInvalid.into())
+    Err(CramfsError::HeaderChecksumInvalid.into())
 }
 
-pub fn probe_cramfs<IO: BlockIo>(
+pub(crate) fn probe_cramfs<IO: BlockIo>(
     reader: &mut Reader<IO>,
     offset: u64,
     magic: Magic,

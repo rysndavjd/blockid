@@ -18,11 +18,11 @@ use crate::{
  * https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup#LUKS2
  * https://cdn.kernel.org/pub/linux/utils/cryptsetup/LUKS_docs/on-disk-format.pdf
  * https://gitlab.com/cryptsetup/LUKS2-docs
-*/
+ */
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum LuksError {
-    InvalidUuid(uuid::Error),
+    InvalidUuid,
     UnableLocateHeader,
     InvalidLuks2Opal,
     InvalidVersion,
@@ -31,7 +31,7 @@ pub enum LuksError {
 impl fmt::Display for LuksError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LuksError::InvalidUuid(e) => write!(f, "UUID parsing faild: {e}"),
+            LuksError::InvalidUuid => write!(f, "UUID parsing faild"),
             LuksError::UnableLocateHeader => write!(f, "Unable to locate valid LUKS header"),
             LuksError::InvalidLuks2Opal => write!(f, "Invalid LUKS2 Opal header"),
             LuksError::InvalidVersion => write!(f, "Invalid LUKS version"),
@@ -40,8 +40,8 @@ impl fmt::Display for LuksError {
 }
 
 impl From<uuid::Error> for LuksError {
-    fn from(e: uuid::Error) -> Self {
-        Self::InvalidUuid(e)
+    fn from(_: uuid::Error) -> Self {
+        Self::InvalidUuid
     }
 }
 
@@ -125,8 +125,7 @@ fn luks_info(sb: &Luks2Header, offset: u64) -> Result<FsInfo, LuksError> {
         }
         _ => return Err(LuksError::InvalidVersion),
     };
-    let uuid =
-        Uuid::try_parse_ascii(&sb.uuid[..Hyphenated::LENGTH]).map_err(LuksError::InvalidUuid)?;
+    let uuid = Uuid::try_parse_ascii(&sb.uuid[..Hyphenated::LENGTH])?;
 
     info.set_fs_id(uuid.into());
     info.set_version(format!("{}", version));

@@ -8,7 +8,7 @@ use crate::{
     std::fmt,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum VxfsError {}
 
 impl<E: fmt::Debug> From<VxfsError> for Error<E> {
